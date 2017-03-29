@@ -30,7 +30,9 @@
 
 using namespace std;
 
-bool const CHECK = true;
+bool const CHECK = false;
+bool const VERBOSE = false;
+bool const SLIDES = false;
 
 int const X_MAX = 16;
 int const Y_MAX = 16;
@@ -45,7 +47,19 @@ bool const PASS = false;
 uint64_t SEED = 123456789;
 
 using Norm = uint8_t;
+inline Norm mask(Norm value) {
+    return value & (static_cast<Norm>(-1) << 1);
+}
+using Nbits = uint;
+int const NBITS = std::numeric_limits<Nbits>::digits;
+Nbits const NLEFT = static_cast<Nbits>(1) << (NBITS-1);
 enum Color : uint8_t { EMPTY, BLUE, RED, COLORS };
+Color operator+(Color from, int value) {
+    return static_cast<Color>(static_cast<int>(from) + value);
+}
+Color operator-(Color from, int value) {
+    return static_cast<Color>(static_cast<int>(from) - value);
+}
 
 class Coord;
 using Diff = Coord;
@@ -73,6 +87,12 @@ class Coord {
         if (y_ < 0) throw(logic_error("y negative at line " + to_string(line)));
         if (y_ >= Y) throw(logic_error("y too large at line " + to_string(line)));
     }
+    Coord mirror() const {
+        Coord result;
+        result.pos_ = MAX - pos_;
+        return result;
+    }
+    static Coord const INVALID;
   private:
     static uint const OFFSET = ROW+1;
     int16_t pos_;
@@ -97,6 +117,14 @@ class Coord {
         return l.pos_ != r.pos_;
     }
 };
+Coord const Coord::INVALID{-1, -1};
+struct Move {
+    Coord from, to;
+    Move mirror() const {
+        return Move{from.mirror(), to.mirror()};
+    }
+};
+
 class ArmyE;
 // Army as a set of Coord
 class Army: public array<Coord, ARMY> {
@@ -106,7 +134,7 @@ class Army: public array<Coord, ARMY> {
         return XXHash64::hash(reinterpret_cast<void const*>(this), sizeof(Army), SEED);
     }
     void invalidate() {
-        (*this)[0] = Coord{-1, -1};
+        (*this)[0] = Coord::INVALID;
     }
     bool valid() const {
         return (*this)[0] >= Coord{0, 0};
@@ -169,13 +197,49 @@ void Army::check(int line) const {
         }
 }
 
-class BoardSet;
+template <class T>
+class Set {
+  public:
+    Set(uint64_t size = 2);
+    ~Set();
+    void clear(uint64_t size = 2);
+    uint64_t size() const {
+        return limit_ - left_;
+    }
+    uint64_t max_size() const {
+        return size_;
+    }
+    T* insert(T const& value, uint64_t hash, bool is_new = false);
+    T* insert(T const& value, bool is_new = false) {
+        return insert(value, value.hash(), is_new);
+    }
+    bool find(T const& value, uint64_t hash) const;
+    bool find(T const& value) {
+        return find(value, value.hash());
+    }
+    T const* begin() const { return &values_[0]; }
+    T const* end()   const { return &values_[size_]; }
+  private:
+    static uint64_t constexpr FACTOR(uint64_t factor=1) { return static_cast<uint64_t>(0.7*factor); }
+    void resize();
+
+    uint64_t size_;
+    uint64_t mask_;
+    uint64_t left_;
+    uint64_t limit_;
+    T* values_;
+};
+
+class Board;
+using BoardSet = Set<Board>;
 // Board as two Armies
 class Board {
   public:
     Board() {}
     Board(Army const& blue, Army const& red): blue_{blue}, red_{red} {}
-    void make_moves(BoardSet& set, bool red_to_move = false) const;
+    uint make_moves(BoardSet& set, int available_moves) const;
+    void move(Move const& move_);
+    void move(Move const& move_, bool blue_to_move);
     Army& blue() { return blue_; }
     Army& red()  { return red_; }
     Army const& blue() const { return blue_; }
@@ -251,19 +315,42 @@ inline ostream& operator<<(ostream& os, Image const& image) {
     return os;
 }
 
-using Moves = array<Diff, MOVES>;
+inline ostream& operator<<(ostream& os, Board const& board) {
+    Image{board}.print(os);
+    return os;
+}
 
+using Moves = array<Diff, MOVES>;
+using TypeCount = array<int, 4>;
 class Tables {
   public:
     Tables();
-    inline Norm norm (Coord const&left, Coord const&right) const {
+    inline Norm norm(Coord const&left, Coord const&right) const {
         return norm_[right.pos() - left.pos() + Coord::MAX];
     }
-    inline Norm distance (Coord const& left, Coord const& right) const {
+    inline Norm distance(Coord const& left, Coord const& right) const {
         return distance_[right.pos() - left.pos() + Coord::MAX];
     }
     inline Norm distance_base_red(Coord const& pos) const {
         return distance_base_red_[pos.pos()];
+    }
+    inline Nbits Ndistance(Coord const& left, Coord const& right) const {
+        return NLEFT >> distance(left, right);
+    }
+    inline Nbits Ndistance_base_red(Coord const& pos) const {
+        return NLEFT >> distance_base_red(pos);
+    }
+    inline uint8_t base_red(Coord const& pos) const {
+        return base_red_[pos.pos()];
+    }
+    inline uint8_t edge_red(Coord const& pos) const {
+        return edge_red_[pos.pos()];
+    }
+    inline uint8_t type(Coord const& pos) const {
+        return type_[pos.pos()];
+    }
+    inline TypeCount const& type_count() const {
+        return type_count_;
     }
     Norm infinity() const { return infinity_; }
     Moves const& moves() const { return moves_; }
@@ -277,12 +364,32 @@ class Tables {
     inline void print_distance_base_red() const {
         print_distance_base_red(cout);
     }
+    void print_base_red(ostream& os) const;
+    void print_base_red() const {
+        print_base_red(cout);
+    }
+    void print_edge_red(ostream& os) const;
+    void print_edge_red() const {
+        print_edge_red(cout);
+    }
+    void print_type(ostream& os) const;
+    void print_type() const {
+        print_type(cout);
+    }
+    void print_type_count(ostream& os) const;
+    void print_type_count() const {
+        print_type_count(cout);
+    }
   private:
+    TypeCount type_count_;
+    Moves moves_;
     Norm infinity_;
     array<Norm, 2*Coord::MAX+1> norm_;
     array<Norm, 2*Coord::MAX+1> distance_;
     array<Norm, Coord::MAX+1> distance_base_red_;
-    Moves moves_;
+    array<uint8_t, Coord::MAX+1> base_red_;
+    array<uint8_t, Coord::MAX+1> edge_red_;
+    array<uint8_t, Coord::MAX+1> type_;
     Board start_;
     Image start_image_;
 };
@@ -312,9 +419,12 @@ Tables::Tables() {
     }
     if (move < MOVES) throw(logic_error("too few moves"));
     sort(moves_.begin(), moves_.end());
+    if (infinity_ >= NBITS)
+        throw(logic_error("Max distance does not fit in Nbits"));
     ++infinity_;
 
     // Fill base
+    fill(base_red_.begin(), base_red_.end(), 0);
     auto& red  = start_.red();
     auto& blue = start_.blue();
     int d = 0;
@@ -329,6 +439,7 @@ Tables::Tables() {
         while (n--) {
             blue[i] = Coord{x, y};
             red[i]  = Coord{X-1-x, Y-1-y};
+            base_red_[red[i].pos()] = 1;
             ++i;
             --x;
             ++y;
@@ -342,20 +453,27 @@ Tables::Tables() {
         start_image_.set(-1, y, COLORS);
         start_image_.set( X, y, COLORS);
         Norm d = infinity_;
+        uint8_t y_type = y%2*2;
         for (int x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             start_image_.set(pos, EMPTY);
             for (int i=0; i<ARMY; ++i) {
-                Norm d1 = distance(pos, red[i]);
+                Norm d1 = norm(pos, red[i]);
                 if (d1 < d) d = d1;
             }
-            distance_base_red_[pos.pos()] = d;
+            distance_base_red_[pos.pos()] = d > 2 ? d-2 : 0;
+            edge_red_[pos.pos()] = d == 1;
+            type_[pos.pos()] = y_type + x % 2;
         }
     }
     for (int x=-1; x <= X; ++x) {
         start_image_.set(x, -1, COLORS);
         start_image_.set(x,  Y, COLORS);
     }
+
+    fill(type_count_.begin(), type_count_.end(), 0);
+    for (auto const& r: red)
+        ++type_count_[type(r)];
 }
 
 void Tables::print_moves(ostream& os) const {
@@ -373,63 +491,82 @@ void Tables::print_distance_base_red(ostream& os) const {
     }
 }
 
+void Tables::print_base_red(ostream& os) const {
+    for (int y=0; y < Y; ++y) {
+        for (int x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(base_red(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_edge_red(ostream& os) const {
+    for (int y=0; y < Y; ++y) {
+        for (int x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(edge_red(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_type(ostream& os) const {
+    for (int y=0; y < Y; ++y) {
+        for (int x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(type(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_type_count(ostream& os) const {
+    for (auto c: type_count_)
+        os << " " << c;
+    os << "\n";
+}
+
 STATIC Tables const tables;
 
-class BoardSet {
-  public:
-    BoardSet(uint64_t size = 2);
-    ~BoardSet();
-    uint64_t size() const {
-        return limit_ - left_;
-    }
-    uint64_t max_size() const {
-        return size_;
-    }
-    Board* insert(Board const& board, uint64_t hash, bool is_new = false);
-    Board* insert(Board const& board, bool is_new = false) {
-        return insert(board, board.hash(), is_new);
-    }
-    bool find(Board const& board, uint64_t hash) const;
-    bool find(Board const& board) {
-        return find(board, board.hash());
-    }
-    Board const* begin() const { return &boards_[0]; }
-    Board const* end()   const { return &boards_[size_]; }
-  private:
-    static uint64_t constexpr FACTOR(uint64_t factor=1) { return static_cast<uint64_t>(0.7*factor); }
-    void resize();
-
-    uint64_t size_;
-    uint64_t mask_;
-    uint64_t left_;
-    uint64_t limit_;
-    Board* boards_;
-};
-
-BoardSet::BoardSet(uint64_t size) : size_{size}, mask_{size-1}, left_{FACTOR(size)}, limit_{FACTOR(size)} {
-    boards_ = new Board[size];
-    for (uint64_t i=0; i<size; ++i) boards_[i].invalidate();
+template <class T>
+Set<T>::Set(uint64_t size) : size_{size}, mask_{size-1}, left_{FACTOR(size)}, limit_{FACTOR(size)} {
+    values_ = new T[size];
+    for (uint64_t i=0; i<size; ++i) values_[i].invalidate();
 }
 
-BoardSet::~BoardSet() {
-    delete [] boards_;
+template <class T>
+Set<T>::~Set() {
+    delete [] values_;
 }
 
-Board* BoardSet::insert(Board const& board, uint64_t hash, bool is_new) {
+template <class T>
+void Set<T>::clear(uint64_t size) {
+    auto old_values = values_;
+    values_ = new Board[size];
+    delete [] old_values;
+    for (uint64_t i=0; i<size; ++i) values_[i].invalidate();
+    size_ = size;
+    mask_ = size-1;
+    limit_ = left_ = FACTOR(size);
+}
+
+template <class T>
+T* Set<T>::insert(T const& value, uint64_t hash, bool is_new) {
     // cout << "Insert\n";
     if (left_ == 0) resize();
     uint64_t pos = hash & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
-        Board& b = boards_[pos];
-        if (!b.valid()) {
-            b = board;
+        T& v = values_[pos];
+        if (!v.valid()) {
+            v = value;
             --left_;
             // cout << "Found empty\n";
-            return &b;
+            return &v;
         }
-        if (!is_new && b == board) {
+        if (!is_new && v == value) {
             // cout << "Found duplicate " << hash << "\n";
             return nullptr;
         }
@@ -438,12 +575,13 @@ Board* BoardSet::insert(Board const& board, uint64_t hash, bool is_new) {
     }
 }
 
-bool BoardSet::find(Board const& board, uint64_t hash) const {
+template <class T>
+bool Set<T>::find(T const& board, uint64_t hash) const {
     uint64_t pos = hash & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
-        Board& b = boards_[pos];
+        T& b = values_[pos];
         if (!b.valid()) return false;
         if (b == board) return true;
         ++offset;
@@ -451,47 +589,129 @@ bool BoardSet::find(Board const& board, uint64_t hash) const {
     }
 }
 
-void BoardSet::resize() {
-    auto old_boards = boards_;
+template <class T>
+void Set<T>::resize() {
+    auto old_values = values_;
     auto old_size = size_;
-    boards_ = new Board[2*size_];
+    values_ = new T[2*size_];
     size_ *= 2;
-    cout << "Resize: " << size_ << "\n";
+    // cout << "Resize: " << size_ << "\n";
     mask_ = size_-1;
     left_ = limit_ = FACTOR(size_);
-    for (uint64_t i = 0; i < size_; ++i) boards_[i].invalidate();
+    for (uint64_t i = 0; i < size_; ++i) values_[i].invalidate();
     for (uint64_t i = 0; i < old_size; ++i) {
-        if (!old_boards[i].valid()) continue;
-        insert(old_boards[i], true);
+        if (!old_values[i].valid()) continue;
+        insert(old_values[i], true);
     }
-    delete [] old_boards;
+    delete [] old_values;
 }
 
 void Image::clear() {
     board_ = tables.start_image().board_;
 }
 
-void Board::make_moves(BoardSet& set, bool red_to_move) const {
-    Color color = red_to_move ? RED : BLUE;
-    auto& army  = red_to_move ? red() : blue();
-    auto& opponent_army  = red_to_move ? blue() : red();
+uint Board::make_moves(BoardSet& set, int available_moves) const {
+    if (VERBOSE) cout << "From: " << available_moves << "\n" << *this;
+
+    uint8_t blue_to_move = available_moves & 1;
+    auto& army  = blue_to_move ? blue() : red();
+    auto& opponent_army  = blue_to_move ? red() : blue();
     Board board;
-    auto& board_army = red_to_move ? board.red() : board.blue();
-    if (red_to_move)
-        board.blue() = opponent_army;
-    else
+    auto& board_army = blue_to_move ? board.blue() : board.red();
+    Norm distance_red;
+    Coord critical_red  = Coord::INVALID;
+    Coord critical_army = Coord::INVALID;
+    Nbits Ndistance_army = 0;
+    int off_base_from = ARMY;
+    if (blue_to_move) {
+        distance_red = tables.infinity();
+        for (auto const& b: blue()) {
+            if (tables.base_red(b)) 
+                --off_base_from;
+            else {
+                auto d = tables.distance_base_red(b);
+                if (d < distance_red) {
+                    distance_red = d;
+                    critical_red = b;
+                }
+            }
+            Nbits Ndistance = 0;
+            for (auto const& r: red())
+                Ndistance |= tables.Ndistance(b, r);
+            if (Ndistance > Ndistance_army) {
+                Ndistance_army = Ndistance;
+                critical_army = b;
+            }
+        }
+    } else {
+        for (auto const& r: red()) {
+            Nbits Ndistance = 0;
+            for (auto const& b: blue())
+                Ndistance |= tables.Ndistance(r, b);
+            if (Ndistance > Ndistance_army) {
+                Ndistance_army = Ndistance;
+                critical_army = r;
+            }
+        }
+
+        Nbits Ndistance_red = NLEFT >> tables.infinity();
+        for (auto& b: blue()) {
+            if (tables.base_red(b))
+                --off_base_from;
+            else
+                Ndistance_red |= tables.Ndistance_base_red(b);
+        }
+        distance_red = __builtin_clz(Ndistance_red);
+    }
+    Norm distance_army = __builtin_clz(Ndistance_army);
+
+    if (blue_to_move)
         board.red() = opponent_army;
+    else
+        board.blue() = opponent_army;
     auto opponent_hash = opponent_army.hash();
+
+    TypeCount type_count = tables.type_count();
+    int edge_count = 0;
+    int slides = 0;
+    if (SLIDES) {
+        for (auto const& b: blue()) {
+            --type_count[tables.type(b)];
+            edge_count += tables.edge_red(b);
+        }
+        for (auto tc: type_count)
+            slides += max(tc, 0);
+    }
+    
+    if (VERBOSE) {
+        if (SLIDES) 
+            cout << "Slides >= " << slides << ", red edge count " << edge_count << "\n";
+        cout << "Distance army=" << static_cast<int>(distance_army) << ", critical=" << critical_army << "\n";
+        cout << "Distance red =" << static_cast<int>(distance_red)  << ", critical=" << critical_red  << "\n";
+        cout << "Off base=" << static_cast<uint>(off_base_from) << "\n";
+        distance_red *= 2;
+    }
+    int needed_moves = min(distance_red, mask(distance_army+blue_to_move))+2*off_base_from-blue_to_move;
+    if (VERBOSE)
+        cout << "Needed moves=" << static_cast<int>(needed_moves) << "\n";
+    if (needed_moves > available_moves) {
+        if (VERBOSE)
+            cout << "Late prune " << needed_moves << " > " << available_moves << "\n";
+        return 1;
+    }
+    --available_moves;
 
     Image image{*this};
     ArmyE armyE;
+    int off_base = off_base_from;
 
     for (int a=0; a<ARMY; ++a) {
         armyE.copy(army);
         int pos = a;
 
-        auto soldier = army[a];
+        auto const soldier = army[a];
         image.set(soldier, EMPTY);
+        if (blue_to_move) off_base = off_base_from + tables.base_red(soldier);
 
         // Jumps
         array<Coord, ARMY*2*MOVES+(1+MOVES)> reachable;
@@ -500,7 +720,7 @@ void Board::make_moves(BoardSet& set, bool red_to_move) const {
         if (!CLOSED_LOOP) image.set(soldier, COLORS);
         for (int i=0; i < nr_reachable; ++i) {
             for (auto move: tables.moves()) {
-                Coord jumpee{soldier, move};
+                Coord jumpee{reachable[i], move};
                 if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
                 Coord target{jumpee, move};
                 if (image.get(target) != EMPTY) continue;
@@ -521,11 +741,34 @@ void Board::make_moves(BoardSet& set, bool red_to_move) const {
         for (int i=1; i < nr_reachable; ++i) {
             // armyZ[a] = CoordZ{reachable[i]};
             if (false) {
-                image.set(reachable[i], color);
+                image.set(reachable[i], RED - blue_to_move);
                 cout << image;
                 image.set(reachable[i], EMPTY);
             }
             auto val = reachable[i];
+            Nbits Ndistance = Ndistance_army;
+            for (auto const&o: opponent_army)
+                Ndistance |= tables.Ndistance(val, o);
+            Norm d_army = __builtin_clz(Ndistance);
+            if (blue_to_move) {
+                if (tables.base_red(val)) {
+                    int off = off_base - 1;
+                    if (off == 0) throw(logic_error("Solution!"));
+                    needed_moves = min(distance_red, mask(d_army))+2*off;
+                } else {
+                    needed_moves = min(min(distance_red, static_cast<Norm>(2*tables.distance_base_red(val))), mask(d_army))+2*off_base;
+                }
+            } else {
+                needed_moves = min(distance_red, mask(d_army+1))+2*off_base-1;
+            }
+            if (needed_moves > available_moves) {
+                if (VERBOSE) {
+                    cout << "Move " << soldier << " to " << val << "\n";
+                    cout << "Prune " << needed_moves << " > " << available_moves << "\n";
+                }
+                continue;
+            }
+
             if (val > armyE.at(pos+1)) {
                 do {
                     armyE.at(pos) = armyE.at(pos+1);
@@ -549,40 +792,133 @@ void Board::make_moves(BoardSet& set, bool red_to_move) const {
             if (CHECK) board.check(__LINE__);
             auto hash = board_army.hash() ^ opponent_hash;
             // cout << "Hash: " << hash << "\n";
-            if (set.insert(board, hash))
-                cout << Image{board};
+            if (set.insert(board, hash)) {
+                if (VERBOSE) cout << board;
+            }
         }
 
-        image.set(soldier, color);
+        image.set(soldier, RED - blue_to_move);
+    }
+    return 0;
+}
+
+void Board::move(Move const& move_) {
+    auto pos = equal_range(blue().begin(), blue().end(), move_.from);
+    if (pos.first != pos.second) {
+        *pos.first = move_.to;
+        sort(blue().begin(), blue().end());
+        return;
+    }
+    pos = equal_range(red().begin(), red().end(), move_.from);
+    if (pos.first != pos.second) {
+        *pos.first = move_.to;
+        sort(red().begin(), red().end());
+        return;
+    }
+    throw(logic_error("Move not found"));
+}
+
+void Board::move(Move const& move_, bool blue_to_move) {
+    auto& army = blue_to_move ? blue() : red();
+    auto pos = equal_range(army.begin(), army.end(), move_.from);
+    if (pos.first == pos.second)
+        throw(logic_error("Move not found"));
+    *pos.first = move_.to;
+    sort(army.begin(), army.end());
+}
+
+Move const game30[] = {
+    {{2,1}, {3,1}},
+    {{7,7}, {7,5}},
+    {{3,0}, {3,2}},
+    {{8,5}, {6,5}},
+    {{0,2}, {4,2}},
+    {{6,8}, {6,4}},
+    {{0,1}, {4,3}},
+    {{7,6}, {5,6}},
+    {{4,3}, {5,3}},
+    {{8,8}, {4,6}},
+    {{3,2}, {2,3}},
+    {{6,5}, {0,1}},
+    {{0,3}, {4,5}},
+    {{8,7}, {0,3}},
+    {{0,0}, {2,4}},
+    {{5,8}, {3,0}},
+    {{2,4}, {3,4}},
+    {{4,6}, {0,0}},
+    {{1,1}, {7,7}},
+    {{8,6}, {0,2}},
+    {{2,0}, {6,6}},
+    {{7,5}, {1,1}},
+    {{1,2}, {1,3}},
+    {{6,7}, {2,1}},
+    {{1,0}, {5,4}},
+    {{6,4}, {2,0}},
+    {{5,4}, {5,5}},
+    {{5,6}, {1,0}},
+    {{4,5}, {8,7}},
+    {{7,8}, {1,2}},
+};
+
+void play() {
+    auto board = tables.start();
+    BoardSet set;
+    cout << board;
+    int nr_moves = 30;
+    for (auto& move: game30) {
+        board.make_moves(set, nr_moves);
+        cout << "===============================\n";
+        board.move(move.mirror());
+        if (set.find(board)) {
+            cout << "Good\n";
+        } else {
+            cout << "Bad\n";
+        }
+        // cout << board;
+        --nr_moves;
     }
 }
 
 void my_main(int argc, char const* const* argv) {
-    cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
-    tables.print_moves();
     auto start = tables.start();
-    cout << "Red:\n";
-    cout << start.red();
-    cout << "Blue:\n";
-    cout << start.blue();
-    cout << "Base red distance:\n";
-    tables.print_distance_base_red();
+    if (false) {
+        cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
+        tables.print_moves();
+        cout << "Red:\n";
+        cout << start.red();
+        cout << "Blue:\n";
+        cout << start.blue();
+        cout << "Base red distance:\n";
+        tables.print_distance_base_red();
+        cout << "Base red:\n";
+        tables.print_base_red();
+        cout << "Edge red:\n";
+        tables.print_edge_red();
+        cout << "Type:\n";
+        tables.print_type();
+        cout << "Red Base type count:\n";
+        tables.print_type_count();
+    }
 
-    BoardSet set[4];
+    if (false) {
+        play();
+        return;
+    }
+
+    BoardSet set[2];
     set[0].insert(start);
     cout << "Set 0 done\n";
-    bool red_to_move = false;
-    for (uint i=1; i<sizeof(set)/sizeof(*set); ++i) {
-        auto& from_set = set[i-1];
-        auto& to_set   = set[i];
+    for (int nr_moves = 29, i=0; nr_moves>0; --nr_moves, ++i) {
+        auto& from_set = set[ i    % (sizeof(set)/sizeof(*set))];
+        auto& to_set   = set[(i+1) % (sizeof(set)/sizeof(*set))];
+        to_set.clear();
+        uint64_t late = 0;
         for (auto& board: from_set) {
             if (!board.valid()) continue;
             if (CHECK) board.check(__LINE__);
-            // cout << "From:\n" << Image{board};
-            board.make_moves(to_set, red_to_move);
+            late += board.make_moves(to_set, nr_moves);
         }
-        red_to_move = !red_to_move;
-        cout << "Set " << i << "  done\n";
+        cout << "Set " << nr_moves << " done, size=" << to_set.size() << ", late prune=" << late << "\n";
     }
 }
 
