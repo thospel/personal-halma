@@ -47,9 +47,6 @@ bool const PASS = false;
 uint64_t SEED = 123456789;
 
 using Norm = uint8_t;
-inline Norm mask(Norm value) {
-    return value & (static_cast<Norm>(-1) << 1);
-}
 using Nbits = uint;
 int const NBITS = std::numeric_limits<Nbits>::digits;
 Nbits const NLEFT = static_cast<Nbits>(1) << (NBITS-1);
@@ -64,6 +61,7 @@ Color operator-(Color from, int value) {
 class Coord;
 using Diff = Coord;
 
+using CoordVal = int16_t;
 class Coord {
   private:
     static int const ROW  = 2*X;
@@ -72,8 +70,8 @@ class Coord {
     static int const MAX  = (Y-1)*ROW+X-1;
 
     Coord() {}
-    Coord(Coord const& from, Diff const& diff) : pos_{static_cast<int16_t>(from.pos_ + diff.pos_)} {}
-    Coord(int x, int y) : pos_{static_cast<int16_t>(y*ROW+x)} { }
+    Coord(Coord const& from, Diff const& diff) : pos_{static_cast<CoordVal>(from.pos_ + diff.pos_)} {}
+    Coord(int x, int y) : pos_{static_cast<CoordVal>(y*ROW+x)} { }
     int x() const { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
     int y() const { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
     int pos()     const { return pos_; }
@@ -95,7 +93,7 @@ class Coord {
     static Coord const INVALID;
   private:
     static uint const OFFSET = ROW+1;
-    int16_t pos_;
+    CoordVal pos_;
 
     friend inline ostream& operator<<(ostream& os, Coord const& pos) {
     os << setw(3) << static_cast<int>(pos.x()) << " " << setw(3) << static_cast<int>(pos.y());
@@ -614,84 +612,35 @@ uint Board::make_moves(BoardSet& set, int available_moves) const {
     if (VERBOSE) cout << "From: " << available_moves << "\n" << *this;
 
     uint8_t blue_to_move = available_moves & 1;
-    auto& army  = blue_to_move ? blue() : red();
-    auto& opponent_army  = blue_to_move ? red() : blue();
-    Board board;
-    auto& board_army = blue_to_move ? board.blue() : board.red();
-    Norm distance_red;
-    Coord critical_red  = Coord::INVALID;
-    Coord critical_army = Coord::INVALID;
-    Nbits Ndistance_army = 0;
-    int off_base_from = ARMY;
-    if (blue_to_move) {
-        distance_red = tables.infinity();
-        for (auto const& b: blue()) {
-            if (tables.base_red(b)) 
-                --off_base_from;
-            else {
-                auto d = tables.distance_base_red(b);
-                if (d < distance_red) {
-                    distance_red = d;
-                    critical_red = b;
-                }
-            }
-            Nbits Ndistance = 0;
-            for (auto const& r: red())
-                Ndistance |= tables.Ndistance(b, r);
-            if (Ndistance > Ndistance_army) {
-                Ndistance_army = Ndistance;
-                critical_army = b;
-            }
-        }
-    } else {
-        for (auto const& r: red()) {
-            Nbits Ndistance = 0;
-            for (auto const& b: blue())
-                Ndistance |= tables.Ndistance(r, b);
-            if (Ndistance > Ndistance_army) {
-                Ndistance_army = Ndistance;
-                critical_army = r;
-            }
-        }
-
-        Nbits Ndistance_red = NLEFT >> tables.infinity();
-        for (auto& b: blue()) {
-            if (tables.base_red(b))
-                --off_base_from;
-            else
-                Ndistance_red |= tables.Ndistance_base_red(b);
-        }
-        distance_red = __builtin_clz(Ndistance_red);
+    Nbits Ndistance_army, Ndistance_red;
+    Ndistance_army = Ndistance_red = NLEFT >> tables.infinity();
+    int off_base_from = 0;
+    TypeCount type_count_from = tables.type_count();
+    int edge_count_from = 0;
+    for (auto const& b: blue()) {
+        --type_count_from[tables.type(b)];
+        if (tables.base_red(b)) continue;
+        ++off_base_from;
+        edge_count_from += tables.edge_red(b);
+        Ndistance_red |= tables.Ndistance_base_red(b);
+        for (auto const& r: red())
+            Ndistance_army |= tables.Ndistance(r, b);
     }
-    Norm distance_army = __builtin_clz(Ndistance_army);
-
-    if (blue_to_move)
-        board.red() = opponent_army;
-    else
-        board.blue() = opponent_army;
-    auto opponent_hash = opponent_army.hash();
-
-    TypeCount type_count = tables.type_count();
-    int edge_count = 0;
     int slides = 0;
-    if (SLIDES) {
-        for (auto const& b: blue()) {
-            --type_count[tables.type(b)];
-            edge_count += tables.edge_red(b);
-        }
-        for (auto tc: type_count)
-            slides += max(tc, 0);
-    }
-    
+    for (auto tc: type_count_from)
+        slides += max(tc, 0);
+    int distance_army = __builtin_clz(Ndistance_army);
+    int distance_red  = __builtin_clz(Ndistance_red);
+
     if (VERBOSE) {
-        if (SLIDES) 
-            cout << "Slides >= " << slides << ", red edge count " << edge_count << "\n";
-        cout << "Distance army=" << static_cast<int>(distance_army) << ", critical=" << critical_army << "\n";
-        cout << "Distance red =" << static_cast<int>(distance_red)  << ", critical=" << critical_red  << "\n";
-        cout << "Off base=" << static_cast<uint>(off_base_from) << "\n";
-        distance_red *= 2;
+        cout << "Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
+        cout << "Distance army=" << distance_army << "\n";
+        cout << "Distance red =" << distance_red  << "\n";
+        cout << "Off base=" << off_base_from << "\n";
     }
-    int needed_moves = min(distance_red, mask(distance_army+blue_to_move))+2*off_base_from-blue_to_move;
+    int pre_moves = min((distance_army + blue_to_move) / 2, distance_red);
+    int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
+    int needed_moves = 2*blue_moves - blue_to_move;
     if (VERBOSE)
         cout << "Needed moves=" << static_cast<int>(needed_moves) << "\n";
     if (needed_moves > available_moves) {
@@ -701,9 +650,21 @@ uint Board::make_moves(BoardSet& set, int available_moves) const {
     }
     --available_moves;
 
+    auto& army = blue_to_move ? blue() : red();
+    auto& opponent_army  = blue_to_move ? red() : blue();
+    Board board;
+    auto& board_army = blue_to_move ? board.blue() : board.red();
+    if (blue_to_move)
+        board.red() = opponent_army;
+    else
+        board.blue() = opponent_army;
+    auto opponent_hash = opponent_army.hash();
+
     Image image{*this};
     ArmyE armyE;
-    int off_base = off_base_from;
+    auto off_base   = off_base_from;
+    auto type_count = type_count_from;
+    auto edge_count = edge_count_from;
 
     for (int a=0; a<ARMY; ++a) {
         armyE.copy(army);
@@ -711,7 +672,14 @@ uint Board::make_moves(BoardSet& set, int available_moves) const {
 
         auto const soldier = army[a];
         image.set(soldier, EMPTY);
-        if (blue_to_move) off_base = off_base_from + tables.base_red(soldier);
+        if (blue_to_move) {
+            off_base = off_base_from;
+            off_base += tables.base_red(soldier);
+            type_count = type_count_from;
+            ++type_count[tables.type(soldier)];
+            edge_count = edge_count_from;
+            edge_count -= tables.edge_red(soldier);
+        }
 
         // Jumps
         array<Coord, ARMY*2*MOVES+(1+MOVES)> reachable;
@@ -746,20 +714,43 @@ uint Board::make_moves(BoardSet& set, int available_moves) const {
                 image.set(reachable[i], EMPTY);
             }
             auto val = reachable[i];
-            Nbits Ndistance = Ndistance_army;
-            for (auto const&o: opponent_army)
-                Ndistance |= tables.Ndistance(val, o);
-            Norm d_army = __builtin_clz(Ndistance);
+
+            Nbits Ndistance_a = Ndistance_army;
             if (blue_to_move) {
+                Nbits Ndistance_r = Ndistance_red;
+                auto off    = off_base;
+                auto type_c = type_count;
+                auto edge_c = edge_count;
+
+                --type_c[tables.type(val)];
+                slides = 0;
+                for (auto tc: type_c)
+                    slides += max(tc, 0);
                 if (tables.base_red(val)) {
-                    int off = off_base - 1;
+                    --off;
                     if (off == 0) throw(logic_error("Solution!"));
-                    needed_moves = min(distance_red, mask(d_army))+2*off;
                 } else {
-                    needed_moves = min(min(distance_red, static_cast<Norm>(2*tables.distance_base_red(val))), mask(d_army))+2*off_base;
+                    edge_c += tables.edge_red(val);
+                    Ndistance_r |=  tables.Ndistance_base_red(val);
+                    for (auto const& r: red())
+                        Ndistance_a |= tables.Ndistance(val, r);
                 }
+                int distance_red  = __builtin_clz(Ndistance_red);
+                int distance_army = __builtin_clz(Ndistance_a);
+                int pre_moves = min(distance_army / 2, distance_red);
+                int blue_moves = pre_moves + max(slides-pre_moves-edge_c, 0) + off;
+                needed_moves = 2*blue_moves;
             } else {
-                needed_moves = min(distance_red, mask(d_army+1))+2*off_base-1;
+                // We won't notice an increase in army distance, but these
+                // are rare and will be discovered in the late prune
+                for (auto const& b: blue()) {
+                    if (tables.base_red(b)) continue;
+                    Ndistance_a |= tables.Ndistance(val, b);
+                }
+                int distance_army = __builtin_clz(Ndistance_a);
+                int pre_moves = min((distance_army + 1) / 2, distance_red);
+                int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
+                needed_moves = 2*blue_moves - 1;
             }
             if (needed_moves > available_moves) {
                 if (VERBOSE) {
@@ -908,7 +899,7 @@ void my_main(int argc, char const* const* argv) {
     BoardSet set[2];
     set[0].insert(start);
     cout << "Set 0 done\n";
-    for (int nr_moves = 29, i=0; nr_moves>0; --nr_moves, ++i) {
+    for (int nr_moves = 30, i=0; nr_moves>0; --nr_moves, ++i) {
         auto& from_set = set[ i    % (sizeof(set)/sizeof(*set))];
         auto& to_set   = set[(i+1) % (sizeof(set)/sizeof(*set))];
         to_set.clear();
