@@ -1,8 +1,10 @@
 #include <cstdlib>
 #include <cstdint>
+#include <cstring>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -32,7 +34,8 @@ using namespace std;
 
 bool const CHECK = false;
 bool const VERBOSE = false;
-bool const SLIDES = false;
+bool const STATISTICS = false;
+bool const SYMMETRY = true;
 
 int const X_MAX = 16;
 int const Y_MAX = 16;
@@ -41,11 +44,12 @@ int const X = 9;
 int const Y = 9;
 int const MOVES = 6;
 int const ARMY = 10;
-int const NR_MOVES = 30;
 bool const CLOSED_LOOP = false;
 bool const PASS = false;
 
 uint64_t SEED = 123456789;
+
+using Sec      = chrono::seconds;
 
 using Norm = uint8_t;
 using Nbits = uint;
@@ -86,18 +90,20 @@ class Coord {
         if (y_ < 0) throw(logic_error("y negative at line " + to_string(line)));
         if (y_ >= Y) throw(logic_error("y too large at line " + to_string(line)));
     }
+    // Mirror over SW-NE diagonal 
     Coord mirror() const {
         Coord result;
         result.pos_ = MAX - pos_;
         return result;
     }
-    static Coord const INVALID;
+    // Mirror over NW-SE diagonal 
+    inline Coord symmetric() const;
   private:
     static uint const OFFSET = ROW+1;
     CoordVal pos_;
 
     friend inline ostream& operator<<(ostream& os, Coord const& pos) {
-    os << setw(3) << static_cast<int>(pos.x()) << " " << setw(3) << static_cast<int>(pos.y());
+    os << setw(2) << static_cast<int>(pos.x()) << "," << setw(3) << static_cast<int>(pos.y());
     return os;
 }
 
@@ -116,7 +122,6 @@ class Coord {
         return l.pos_ != r.pos_;
     }
 };
-Coord const Coord::INVALID{-1, -1};
 struct Move {
     Coord from, to;
     Move mirror() const {
@@ -133,20 +138,30 @@ class Army: public array<Coord, ARMY> {
         return XXHash64::hash(reinterpret_cast<void const*>(&(*this)[0]), sizeof(Coord) * ARMY, SEED);
     }
     inline void check(int line) const;
-    inline void copy(ArmyE const army);
+    inline Army symmetric() const {
+        Army result;
+        transform(begin(), end(), result.begin(), [](Coord const&pos){ return pos.symmetric(); });
+        sort(result.begin(), result.end());
+        return result;
+    }
+    void print(ostream& os) const {
+        for (auto const& pos: *this)
+            os << pos << "\n";
+    }
+
     friend bool operator==(Army const& l, Army const& r) {
         for (int i=0; i<ARMY; ++i)
             if (l[i] != r[i]) return false;
         return true;
     }
-    void printE(ostream& os) {
-        for (int i=-1; i<=ARMY; ++i)
-            os << (*this)[i] << "\n";
-    }
-    void printE() {
-        printE(cout);
-    }
 };
+
+int cmp(Army const& left, Army const& right) {
+    if (!SYMMETRY) return 0;
+    return memcmp(reinterpret_cast<void const *>(&left[0]), 
+                  reinterpret_cast<void const *>(&right[0]), 
+                  sizeof(Coord) * ARMY);
+}
 
 // Army as a set of Coord
 class ArmyE: public array<Coord, ARMY+2> {
@@ -161,11 +176,70 @@ class ArmyE: public array<Coord, ARMY+2> {
     uint64_t hash() const {
         return XXHash64::hash(reinterpret_cast<void const*>(&at(0)), sizeof(Coord) * ARMY, SEED);
     }
-    void copy(Army const& army) {
-        for (int i=0; i<ARMY; ++i)
-            at(i) = army[i];
-    }
     inline void check(int line) const;
+    inline ArmyE symmetric() const {
+        ArmyE result;
+        transform(begin(), end(), result.begin(), [](Coord const&pos){ return pos.symmetric(); });
+        sort(result.begin(), result.end());
+        return result;
+    }
+    Coord* begin() { return &at(0); }
+    Coord* end  () { return &at(ARMY); }
+    Coord const* begin() const { return &at(0); }
+    Coord const* end  () const { return &at(ARMY); }
+    Coord const* cbegin() { return &at(0); }
+    Coord const* cend  () { return &at(ARMY); }
+    Coord const* cbegin() const { return &at(0); }
+    Coord const* cend  () const { return &at(ARMY); }
+};
+
+int cmp(ArmyE const& left, ArmyE const& right) {
+    if (!SYMMETRY) return 0;
+    return memcmp(reinterpret_cast<void const *>(&left.at(0)), 
+                  reinterpret_cast<void const *>(&right.at(0)), 
+                  sizeof(Coord) * ARMY);
+}
+
+class ArmyPos: public ArmyE {
+  public:
+    void copy(Army const& army, int pos) {
+        std::copy(army.begin(), army.end(), begin());
+        pos_ = pos;
+    }
+    void store(Coord const& val) {
+        if (val > at(pos_+1)) {
+            do {
+                at(pos_) = at(pos_+1);
+                // cout << "Set pos_ > " << pos_ << at(pos_) << "\n";
+                ++pos_;
+            } while (val > at(pos_+1));
+        } else if (val < at(pos_-1)) {
+            do {
+                at(pos_) = at(pos_-1);
+                // cout << "Set pos_ < " << pos_ << at(pos_) << "\n";
+                --pos_;
+            } while (val < at(pos_-1));
+        }
+        // if (pos_ < 0) throw(logic_error("Negative pos_"));
+        if (pos_ < 0) abort();
+        if (pos_ >= ARMY) throw(logic_error("Excessive pos_"));
+        at(pos_) = val;
+    }
+  private:
+    int pos_;
+};
+
+class ArmyMapper {
+  public:
+    ArmyMapper(Army const& army_symmetric) {
+        for (uint i=0; i<ARMY; ++i)
+            mapper_[army_symmetric[i].symmetric().pos()] = i;
+    }
+    uint8_t map(Coord const& pos) {
+        return mapper_[pos.pos()];
+    }
+  private:
+    array<uint8_t, Coord::MAX+1> mapper_;
 };
 
 bool operator==(ArmyE const& l, Army const& r) {
@@ -180,14 +254,8 @@ bool operator==(Army const& l, ArmyE const& r) {
     return true;
 }
 
-void Army::copy(ArmyE const army) {
-    for (int i=0; i<ARMY; ++i)
-        (*this)[i] = army.at(i);
-}
-
 inline ostream& operator<<(ostream& os, Army const& army) {
-    for (int i=0; i<ARMY; ++i)
-        os << army[i] << "\n";
+    army.print(os);
     return os;
 }
 
@@ -207,7 +275,7 @@ void Army::check(int line) const {
 }
 
 void ArmyE::check(int line) const {
-    for (int i=0; i<ARMY; ++i) at(i).check(line);
+    for (auto const& pos: *this) pos.check(line);
     for (int i=-1; i<ARMY; ++i)
         if (at(i) >= at(i+1)) {
             cerr << *this;
@@ -215,7 +283,43 @@ void ArmyE::check(int line) const {
         }
 }
 
-class ArmySet {
+class SetStatistics {
+  public:
+    inline void stats_update(uint64_t offset) {
+        if (!STATISTICS) return;
+        if (offset) {
+            ++hits_;
+            tries_ += offset;
+        } else
+            ++misses_;
+    }
+    void stats_reset() {
+        if (!STATISTICS) return;
+        misses_ = hits_ = tries_ = 0;
+    }
+    NOINLINE void show_stats(ostream& os) const;
+    void show_stats() const {
+        show_stats(cout);
+    }
+  private:
+    uint64_t hits_   = 0;
+    uint64_t misses_ = 0;
+    uint64_t tries_  = 0;
+};
+
+void SetStatistics::show_stats(ostream& os) const {
+    if (!STATISTICS) return;
+    if (hits_ == 0 && misses_ == 0) {
+        os << "Not used\n";
+        return;
+    }
+    os << "misses: " << misses_ << " (" << 100. * misses_ / (hits_+misses_) << "%)\n";
+    os << "hits:   " << hits_ << " (" << 100. * hits_ / (hits_+misses_) << "%)\n";
+    if (hits_)
+        os << "Average retries: " << 1. * tries_ / hits_ << "\n";
+}
+
+class ArmySet: public SetStatistics {
   public:
     using Index = uint32_t;
 
@@ -232,23 +336,16 @@ class ArmySet {
         return limit_;
     }
     Army const& at(Index i) const { return armies_[i]; }
-    Index insert(Army const& value, Index hash, bool is_new = false);
-    Index insert(Army const& value, bool is_new = false) {
-        return insert(value, value.hash(), is_new);
-    }
-    Index insert(ArmyE const& value, Index hash, bool is_new = false);
-    Index insert(ArmyE const& value, bool is_new = false) {
-        return insert(value, value.hash(), is_new);
-    }
-    Index find(Army const& value, Index hash) const;
-    Index find(Army const& value) const {
-        return find(value, value.hash());
-    }
+    inline Index insert(Army  const& value);
+    inline Index insert(ArmyE const& value);
+    Index find(Army const& value) const;
     Army const* begin() const { return &armies_[1]; }
     Army const* end()   const { return &armies_[used1_]; }
   private:
     static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(0.7*factor); }
     void resize();
+    inline Index insert(Army  const& value, bool is_resize);
+    inline Index insert(ArmyE const& value, bool is_resize);
 
     Index size_;
     Index mask_;
@@ -274,6 +371,13 @@ class Board {
         blue_.check(line);
         red_.check(line);
     }
+    int min_moves(bool blue_to_move) const;
+    int min_moves() const {
+        return min(min_moves(true), min_moves(false));
+    }
+    inline Board symmetric() const {
+        return Board{blue().symmetric(), red().symmetric()};
+    }
   private:
     Army blue_, red_;
 
@@ -282,14 +386,16 @@ class Board {
     }
 };
 
-class BoardSet {
+class BoardSet: public SetStatistics {
   public:
     using Value = uint64_t;
     using Index = uint64_t;
 
-    static void split(Value value, ArmySet::Index& moving, ArmySet::Index& opponent) {
-        moving   = value & std::numeric_limits<ArmySet::Index>::max();
-        opponent = value >> std::numeric_limits<ArmySet::Index>::digits;
+    static Value split(Value value, ArmySet::Index& moving, ArmySet::Index& opponent) {
+        moving   = value & ARMY_MASK;
+        opponent = value >> ARMY_BITS;
+        // cout << "Split: Value=" << hex << value << ", moving_index=" << moving << ", opponent=" << opponent << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
+        return value & ARMY_HIGHBIT;
     }
     BoardSet(Index size = 2);
     ~BoardSet();
@@ -303,25 +409,29 @@ class BoardSet {
     Index capacity() const {
         return limit_;
     }
-    bool insert(Value value, bool is_new = false);
-    bool insert(ArmySet::Index to_move, ArmySet::Index opponent) {
+    bool insert(Value value, bool is_resize = false);
+    bool insert(ArmySet::Index to_move, ArmySet::Index opponent, int symmetry) {
         if (CHECK) {
-            if (to_move == 0) throw(logic_error("to_move == 0"));
+            if (to_move  == 0) throw(logic_error("to_move == 0"));
             if (opponent == 0) throw(logic_error("opponent == 0"));
         }
-        Value value = static_cast<Value>(opponent) << std::numeric_limits<ArmySet::Index>::digits | to_move;
+        Value value = static_cast<Value>(opponent) << ARMY_BITS | to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0);
+        // cout << "Insert: Value=" << hex << value << ", moving_index=" << to_move << ", opponent=" << opponent << ", symmetry=" << symmetry << dec << "\n";
         return insert(value);
     }
     bool insert(Board const& board, ArmySet& army, ArmySet& opponent, int nr_moves);
     bool find(Value value) const;
-    bool find(ArmySet::Index to_move, ArmySet::Index opponent) const {
-        Value value = static_cast<Value>(opponent) << std::numeric_limits<ArmySet::Index>::digits | to_move;
+    bool find(ArmySet::Index to_move, ArmySet::Index opponent, int symmetry) const {
+        Value value = static_cast<Value>(opponent) << ARMY_BITS | to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0);
         return find(value);
     }
     bool find(Board const& board, ArmySet const& army, ArmySet const& opponent, int nr_moves) const;
     Value const* begin() const { return &values_[0]; }
     Value const* end()   const { return &values_[size_]; }
   private:
+    static const int ARMY_BITS = std::numeric_limits<ArmySet::Index>::digits;
+    static const Value ARMY_HIGHBIT = static_cast<Value>(1) << (ARMY_BITS-1);
+    static const Value ARMY_MASK = ARMY_HIGHBIT-1;
     static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(0.7*factor); }
     void resize();
 
@@ -330,6 +440,9 @@ class BoardSet {
     Index left_;
     Index limit_;
     Value* values_;
+    uint64_t hits_  = 0;
+    uint64_t misses = 0;
+    uint64_t tries  = 0;
 };
 
 class Image {
@@ -341,6 +454,8 @@ class Image {
     inline Image(ArmyE const& blue, Army const& red);
     inline Image(Army const& blue, ArmyE const& red);
     inline explicit Image(Board const& board): Image{board.blue(), board.red()} {}
+    inline explicit Image(Army const& blue);
+    inline explicit Image(ArmyE const& blue);
     void print(ostream& os) const;
     inline void clear();
     Color get(Coord const& pos) const { return board_[pos.index()]; }
@@ -359,10 +474,20 @@ Image::Image(Army const& blue, Army const& red) : Image{} {
 }
 
 Image::Image(ArmyE const& blue, Army const& red) : Image{} {
-    for (int i=0; i<ARMY; ++i)
-        set(blue.at(i), BLUE);
+    for (auto const& pos: blue)
+        set(pos, BLUE);
     for (auto const& pos: red)
         set(pos, RED);
+}
+
+Image::Image(Army const& blue) : Image{} {
+    for (auto const& pos: blue)
+        set(pos, BLUE);
+}
+
+Image::Image(ArmyE const& blue) : Image{} {
+    for (auto const& pos: blue)
+        set(pos, BLUE);
 }
 
 Image::Image(Army const& blue, ArmyE const& red) : Image{} {
@@ -433,6 +558,9 @@ class Tables {
     inline uint8_t type(Coord const& pos) const {
         return type_[pos.pos()];
     }
+    inline Coord symmetric(Coord const& pos) const {
+        return symmetric_[pos.pos()];
+    }
     inline TypeCount const& type_count() const {
         return type_count_;
     }
@@ -460,6 +588,10 @@ class Tables {
     void print_type() const {
         print_type(cout);
     }
+    void print_symmetric(ostream& os) const;
+    void print_symmetric() const {
+        print_symmetric(cout);
+    }
     void print_type_count(ostream& os) const;
     void print_type_count() const {
         print_type_count(cout);
@@ -468,6 +600,7 @@ class Tables {
     TypeCount type_count_;
     Moves moves_;
     Norm infinity_;
+    array<Coord, Coord::MAX+1> symmetric_;
     array<Norm, 2*Coord::MAX+1> norm_;
     array<Norm, 2*Coord::MAX+1> distance_;
     array<Norm, Coord::MAX+1> distance_base_red_;
@@ -548,6 +681,7 @@ Tables::Tables() {
             distance_base_red_[pos.pos()] = d > 2 ? d-2 : 0;
             edge_red_[pos.pos()] = d == 1;
             type_[pos.pos()] = y_type + x % 2;
+            symmetric_[pos.pos()] = Coord(y, x);
         }
     }
     for (int x=-1; x <= X; ++x) {
@@ -605,6 +739,16 @@ void Tables::print_type(ostream& os) const {
     }
 }
 
+void Tables::print_symmetric(ostream& os) const {
+    for (int y=0; y < Y; ++y) {
+        for (int x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << "|" << symmetric(pos);
+        }
+        os << "\n";
+    }
+}
+
 void Tables::print_type_count(ostream& os) const {
     for (auto c: type_count_)
         os << " " << c;
@@ -612,6 +756,10 @@ void Tables::print_type_count(ostream& os) const {
 }
 
 STATIC Tables const tables;
+
+Coord Coord::symmetric() const {
+    return tables.symmetric(*this);
+}
 
 ArmySet::ArmySet(Index size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
     values_ = new Index[size];
@@ -625,6 +773,7 @@ ArmySet::~ArmySet() {
 }
 
 void ArmySet::clear(Index size) {
+    stats_reset();
     auto new_values = new Index[size];
     Index new_limit = FACTOR(size);
     auto new_armies = new Army[new_limit+1];
@@ -639,15 +788,28 @@ void ArmySet::clear(Index size) {
     used1_ = 1;
 }
 
-ArmySet::Index ArmySet::insert(Army const& value, Index hash, bool is_new) {
-    // cout << "Insert\n";
+ArmySet::Index ArmySet::insert(Army  const& value) {
+    // cout << "Insert:\n" << Image{value};
+    Index i = insert(value, false);
+    // cout << "i=" << i << "\n\n";
+    return i;
+}
+ArmySet::Index ArmySet::insert(ArmyE const& value) {
+    // cout << "Insert:\n" << Image{value};
+    Index i = insert(value, false);
+    // cout << "i=" << i << "\n\n";
+    return i;
+}
+
+ArmySet::Index ArmySet::insert(Army const& value, bool is_resize) {
     if (used1_ > limit_) resize();
-    Index pos = hash & mask_;
-    uint offset = 0;
+    Index pos = value.hash() & mask_;
+    Index offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
         Index i = values_[pos];
         if (i == 0) {
+            if (!is_resize) stats_update(offset);
             values_[pos] = used1_;
             auto& v = armies_[used1_];
             v = value;
@@ -655,8 +817,9 @@ ArmySet::Index ArmySet::insert(Army const& value, Index hash, bool is_new) {
             return used1_++;
         }
         auto& v = armies_[i];
-        if (!is_new && v == value) {
+        if (!is_resize && v == value) {
             // cout << "Found duplicate " << hash << "\n";
+            if (!is_resize) stats_update(offset);
             return i;
         }
         ++offset;
@@ -664,23 +827,24 @@ ArmySet::Index ArmySet::insert(Army const& value, Index hash, bool is_new) {
     }
 }
 
-ArmySet::Index ArmySet::insert(ArmyE const& value, Index hash, bool is_new) {
-    // cout << "Insert, used1=" << used1_ << "\n";
+ArmySet::Index ArmySet::insert(ArmyE const& value, bool is_resize) {
     if (used1_ > limit_) resize();
-    Index pos = hash & mask_;
-    uint offset = 0;
+    Index pos = value.hash() & mask_;
+    Index offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
         Index i = values_[pos];
         if (i == 0) {
+            if (!is_resize) stats_update(offset);
             values_[pos] = used1_;
             auto& v = armies_[used1_];
-            v.copy(value);
+            copy(value.begin(), value.end(), v.begin());
             // cout << "Found empty\n";
             return used1_++;
         }
         auto& v = armies_[i];
-        if (!is_new && v == value) {
+        if (!is_resize && v == value) {
+            if (!is_resize) stats_update(offset);
             // cout << "Found duplicate " << hash << "\n";
             return i;
         }
@@ -689,15 +853,15 @@ ArmySet::Index ArmySet::insert(ArmyE const& value, Index hash, bool is_new) {
     }
 }
 
-ArmySet::Index ArmySet::find(Army const& army, Index hash) const {
-    Index pos = hash & mask_;
+ArmySet::Index ArmySet::find(Army const& army) const {
+    Index pos = army.hash() & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
         Index i = values_[pos];
         if (i == 0) return 0;
-        Army& v = armies_[i];
-        if (v == army) return i;
+        Army& a = armies_[i];
+        if (a == army) return i;
         ++offset;
         pos = (pos + offset) & mask_;
     }
@@ -731,6 +895,7 @@ BoardSet::~BoardSet() {
 }
 
 void BoardSet::clear(Index size) {
+    stats_reset();
     auto old_values = values_;
     values_ = new Value[size];
     delete [] old_values;
@@ -742,27 +907,35 @@ void BoardSet::clear(Index size) {
 
 uint64_t const murmur_multiplier = UINT64_C(0xc6a4a7935bd1e995);
 
-uint64_t murmur_mix(uint64_t v) {
+inline uint64_t murmur_mix(uint64_t v) {
     v *= murmur_multiplier;
     return v ^ (v >> 47);
 }
 
-bool BoardSet::insert(Value value, bool is_new) {
+inline uint64_t hash64(uint64_t v) {
+    return murmur_mix(murmur_mix(v));
+    // return murmur_mix(murmur_mix(murmur_mix(v)));
+    // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
+}
+
+bool BoardSet::insert(Value value, bool is_resize) {
     // cout << "Insert\n";
     if (left_ == 0) resize();
-    Index pos = murmur_mix(value) & mask_;
+    Index pos = hash64(value) & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
         Value& v = values_[pos];
         if (v == 0) {
+            if (!is_resize) stats_update(offset);
             v = value;
             --left_;
             // cout << "Found empty\n";
             return true;
         }
-        if (!is_new && v == value) {
+        if (!is_resize && v == value) {
             // cout << "Found duplicate " << hash << "\n";
+            if (!is_resize) stats_update(offset);
             return false;
         }
         ++offset;
@@ -772,15 +945,24 @@ bool BoardSet::insert(Value value, bool is_new) {
 
 bool BoardSet::insert(Board const& board, ArmySet& army_set, ArmySet& opponent_set, int nr_moves) {
     uint8_t blue_to_move = nr_moves & 1;
+
     Army const& army = blue_to_move ? board.blue() : board.red();
-    Army const& opponent_army = blue_to_move ? board.red() : board.blue();
-    auto moving_index = army_set.insert(army);
-    auto opponent_index = opponent_set.insert(opponent_army);
-    return insert(moving_index, opponent_index);
+    Army const& opponent = blue_to_move ? board.red() : board.blue();
+
+    auto army_symmetric = army.symmetric();
+    int army_symmetry = cmp(army, army_symmetric);
+    auto moving_index = army_set.insert(army_symmetry >= 0 ? army : army_symmetric);
+
+    auto opponent_symmetric = opponent.symmetric();
+    int opponent_symmetry = cmp(opponent, opponent_symmetric);
+    auto opponent_index = opponent_set.insert(opponent_symmetry >= 0 ? opponent : opponent_symmetric);
+
+    int symmetry = army_symmetry * opponent_symmetry;
+    return insert(moving_index, opponent_index, symmetry);
 }
 
 bool BoardSet::find(Value value) const {
-    Index pos = murmur_mix(value) & mask_;
+    Index pos = hash64(value) & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
@@ -799,14 +981,19 @@ bool BoardSet::find(Board const& board, ArmySet const& army_set, ArmySet const& 
     uint8_t blue_to_move = nr_moves & 1;
 
     Army const& army = blue_to_move ? board.blue() : board.red();
-    auto moving_index = army_set.find(army);
+    auto army_symmetric = army.symmetric();
+    int army_symmetry = cmp(army, army_symmetric);
+    auto moving_index = army_set.find(army_symmetry >= 0 ? army : army_symmetric);
     if (moving_index == 0) return false;
 
-    Army const& opponent_army = blue_to_move ? board.red() : board.blue();
-    auto opponent_index = opponent_set.find(opponent_army);
+    Army const& opponent = blue_to_move ? board.red() : board.blue();
+    auto opponent_symmetric = opponent.symmetric();
+    int opponent_symmetry = cmp(opponent, opponent_symmetric);
+    auto opponent_index = opponent_set.find(opponent_symmetry >= 0 ? opponent : opponent_symmetric);
     if (opponent_index == 0) return false;
 
-    return find(moving_index, opponent_index);
+    int symmetry = army_symmetry * opponent_symmetry;
+    return find(moving_index, opponent_index, symmetry);
 }
 
 void BoardSet::resize() {
@@ -829,8 +1016,44 @@ void Image::clear() {
     board_ = tables.start_image().board_;
 }
 
-uint make_moves(Army const& army, Army const& opponent_army, ArmySet::Index opponent_index, BoardSet& board_set, ArmySet& army_set, int available_moves) {
+int Board::min_moves(bool blue_to_move) const {
+    blue_to_move = blue_to_move ? true : false;
 
+    Nbits Ndistance_army, Ndistance_red;
+    Ndistance_army = Ndistance_red = NLEFT >> tables.infinity();
+    int off_base_from = 0;
+    TypeCount type_count_from = tables.type_count();
+    int edge_count_from = 0;
+    for (auto const& b: blue()) {
+        --type_count_from[tables.type(b)];
+        if (tables.base_red(b)) continue;
+        ++off_base_from;
+        edge_count_from += tables.edge_red(b);
+        Ndistance_red |= tables.Ndistance_base_red(b);
+        for (auto const& r: red())
+            Ndistance_army |= tables.Ndistance(r, b);
+    }
+    int slides = 0;
+    for (auto tc: type_count_from)
+        slides += max(tc, 0);
+    int distance_army = __builtin_clz(Ndistance_army);
+    int distance_red  = __builtin_clz(Ndistance_red);
+
+    if (VERBOSE) {
+        cout << "Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
+        cout << "Distance army=" << distance_army << "\n";
+        cout << "Distance red =" << distance_red  << "\n";
+        cout << "Off base=" << off_base_from << "\n";
+    }
+    int pre_moves = min((distance_army + blue_to_move) / 2, distance_red);
+    int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
+    int needed_moves = 2*blue_moves - blue_to_move;
+    return needed_moves;
+}
+
+uint make_moves(Army const& army, Army const& army_symmetric, 
+                Army const& opponent_army, ArmySet::Index opponent_index,
+                BoardSet& board_set, ArmySet& army_set, int available_moves) {
     uint8_t blue_to_move = available_moves & 1;
     Army const& blue = blue_to_move ? army : opponent_army;
     Army const& red  = blue_to_move ? opponent_army : army;
@@ -875,17 +1098,19 @@ uint make_moves(Army const& army, Army const& opponent_army, ArmySet::Index oppo
     }
     --available_moves;
 
-    ArmyE armyE;
+    ArmyPos armyE, armyESymmetric;
     auto off_base   = off_base_from;
     auto type_count = type_count_from;
     auto edge_count = edge_count_from;
+    auto const opponent_symmetric = opponent_army.symmetric();
+    int opponent_symmetry = cmp(opponent_army, opponent_symmetric);
+    ArmyMapper mapper{army_symmetric};
 
     for (int a=0; a<ARMY; ++a) {
-        armyE.copy(army);
-        int pos = a;
-
+        armyE.copy(army, a);
         auto const soldier = army[a];
         image.set(soldier, EMPTY);
+        armyESymmetric.copy(army_symmetric, mapper.map(soldier));
         if (blue_to_move) {
             off_base = off_base_from;
             off_base += tables.base_red(soldier);
@@ -936,13 +1161,17 @@ uint make_moves(Army const& army, Army const& opponent_army, ArmySet::Index oppo
                 auto type_c = type_count;
                 auto edge_c = edge_count;
 
-                --type_c[tables.type(val)];
-                slides = 0;
-                for (auto tc: type_c)
-                    slides += max(tc, 0);
                 if (tables.base_red(val)) {
                     --off;
-                    if (off == 0) throw(logic_error("Solution!"));
+                    if (off == 0) {
+                        if (board_set.size() == 0) {
+                            image.set(reachable[i], RED - blue_to_move);
+                            cout << "==================================\n";
+                            cout << image << "Solution!" << endl;
+                            image.set(reachable[i], EMPTY);
+                        }
+                        goto SOLUTION;
+                    }
                 } else {
                     edge_c += tables.edge_red(val);
                     Ndistance_r |=  tables.Ndistance_base_red(val);
@@ -952,6 +1181,10 @@ uint make_moves(Army const& army, Army const& opponent_army, ArmySet::Index oppo
                 int distance_red  = __builtin_clz(Ndistance_red);
                 int distance_army = __builtin_clz(Ndistance_a);
                 int pre_moves = min(distance_army / 2, distance_red);
+                --type_c[tables.type(val)];
+                int slides = 0;
+                for (auto tc: type_c)
+                    slides += max(tc, 0);
                 int blue_moves = pre_moves + max(slides-pre_moves-edge_c, 0) + off;
                 needed_moves = 2*blue_moves;
             } else {
@@ -974,30 +1207,19 @@ uint make_moves(Army const& army, Army const& opponent_army, ArmySet::Index oppo
                 continue;
             }
 
-            if (val > armyE.at(pos+1)) {
-                do {
-                    armyE.at(pos) = armyE.at(pos+1);
-                    // cout << "Set pos > " << pos << armyE.at(pos) << "\n";
-                    ++pos;
-                } while (val > armyE.at(pos+1));
-            } else if (val < armyE.at(pos-1)) {
-                do {
-                    armyE.at(pos) = armyE.at(pos-1);
-                    // cout << "Set pos < " << pos << armyE.at(pos) << "\n";
-                    --pos;
-                } while (val < armyE.at(pos-1));
-            }
-            // if (pos < 0) throw(logic_error("Negative pos"));
-            if (pos < 0) abort();
-            if (pos >= ARMY) throw(logic_error("Excessive pos"));
-            armyE.at(pos) = val;
+          SOLUTION:
+            armyE.store(val);
             // cout << "Final Set pos " << pos << armyE[pos] << "\n";
             // cout << armyE << "----------------\n";
             if (CHECK) armyE.check(__LINE__);
-            auto moved_index = army_set.insert(armyE);
+            armyESymmetric.store(val.symmetric());
+            if (CHECK) armyESymmetric.check(__LINE__);
+            int symmetry = cmp(armyE, armyESymmetric); 
+            auto moved_index = army_set.insert(symmetry >= 0 ? armyE : armyESymmetric);
             if (CHECK && moved_index == 0)
                 throw(logic_error("Army Insert returns 0"));
-            if (board_set.insert(opponent_index, moved_index)) {
+            symmetry *= opponent_symmetry;
+            if (board_set.insert(opponent_index, moved_index, symmetry)) {
                 if (VERBOSE) {
                     if (blue_to_move)
                         cout << Image{armyE, opponent_army};
@@ -1037,6 +1259,8 @@ void Board::move(Move const& move_, bool blue_to_move) {
     sort(army.begin(), army.end());
 }
 
+// The classic 30 solution
+// Used to check the code, especially the pruning
 Move const game30[] = {
     {{2,1}, {3,1}},
     {{7,7}, {7,5}},
@@ -1076,6 +1300,7 @@ void play() {
     int nr_moves = 30;
     for (auto& move: game30) {
         cout << board;
+        // cout << board.symmetric();
 
         BoardSet board_set[2];
         ArmySet  army_set[3];
@@ -1084,14 +1309,18 @@ void play() {
         for (auto& board_value: board_set[0]) {
             if (!board_value) continue;
             ArmySet::Index moving_index, opponent_index;
-            BoardSet::split(board_value, moving_index, opponent_index);
+            auto symmetry = BoardSet::split(board_value, moving_index, opponent_index);
             auto const& army          = army_set[0].at(moving_index);
             auto const& opponent_army = army_set[1].at(opponent_index);
             if (CHECK) {
                 army.check(__LINE__);
                 opponent_army.check(__LINE__);
             }
-            make_moves(army, opponent_army, opponent_index, board_set[1], army_set[2], nr_moves);
+            Army army_symmetric = army.symmetric();
+            make_moves(symmetry ? army_symmetric : army,
+                       symmetry ? army : army_symmetric,
+                       opponent_army, opponent_index, 
+                       board_set[1], army_set[2], nr_moves);
         }
 
         cout << "===============================\n";
@@ -1107,21 +1336,15 @@ void play() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    int nr_moves = NR_MOVES;
-    if (argc > 1) {
-        nr_moves = atoi(argv[1]);
-        if (nr_moves <= 0)
-            throw(range_error("Number of moves must be positive"));
-    }
-        
-    auto start = tables.start();
+    auto start_global = chrono::steady_clock::now();
+    auto start_board = tables.start();
     if (false) {
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
         tables.print_moves();
         cout << "Red:\n";
-        cout << start.red();
+        cout << start_board.red();
         cout << "Blue:\n";
-        cout << start.blue();
+        cout << start_board.blue();
         cout << "Base red distance:\n";
         tables.print_distance_base_red();
         cout << "Base red:\n";
@@ -1130,8 +1353,22 @@ void my_main(int argc, char const* const* argv) {
         tables.print_edge_red();
         cout << "Type:\n";
         tables.print_type();
+        cout << "Symmetric:\n";
+        tables.print_symmetric();
         cout << "Red Base type count:\n";
         tables.print_type_count();
+    }
+    int needed_moves = start_board.min_moves();
+    cout << "Minimum possible number of moves: " << needed_moves << "\n";
+    int nr_moves = needed_moves;
+    if (argc > 1) {
+        nr_moves = atoi(argv[1]);
+        if (nr_moves < needed_moves) {
+            if (nr_moves <= 0)
+                throw(range_error("Number of moves must be positive"));
+            cout << "No solution in " << nr_moves << " moves\n";
+            return;
+        }
     }
 
     if (false) {
@@ -1141,9 +1378,10 @@ void my_main(int argc, char const* const* argv) {
 
     BoardSet board_set[2];
     ArmySet  army_set[3];
-    board_set[0].insert(start, army_set[0], army_set[1], nr_moves);
-    cout << "Starting set done\n";
+    board_set[0].insert(start_board, army_set[0], army_set[1], nr_moves);
+    cout << "Set " << nr_moves << " done" << endl;;
     for (int i=0; nr_moves>0; --nr_moves, ++i) {
+        auto start = chrono::steady_clock::now();
         auto& from_board_set = board_set[ i    % 2];
         auto& to_board_set   = board_set[(i+1) % 2];
         to_board_set.clear();
@@ -1155,18 +1393,34 @@ void my_main(int argc, char const* const* argv) {
         for (auto& board_value: from_board_set) {
             if (board_value == 0) continue;
             ArmySet::Index moving_index, opponent_index;
-            BoardSet::split(board_value, moving_index, opponent_index);
-            // cout << "Value=" << hex << board_value << ", moving_index=" << moving_index << ", opponent_index=" << opponent_index << dec << "\n";
+            auto symmetry = BoardSet::split(board_value, moving_index, opponent_index);
             auto const& army          = moving_army_set.  at(moving_index);
             auto const& opponent_army = opponent_army_set.at(opponent_index);
             if (CHECK) {
                 army.check(__LINE__);
                 opponent_army.check(__LINE__);
             }
-            late += make_moves(army, opponent_army, opponent_index, to_board_set, moved_army_set, nr_moves);
+            Army army_symmetric = army.symmetric();
+            late += make_moves(symmetry ? army_symmetric : army,
+                               symmetry ? army : army_symmetric,
+                               opponent_army, opponent_index,
+                               to_board_set, moved_army_set, nr_moves);
         }
-        cout << "Set " << nr_moves << " done, " << to_board_set.size() << " boards, " << moved_army_set.size() << " armies, late prune=" << late << endl;
+        auto stop = chrono::steady_clock::now();
+        auto duration = chrono::duration_cast<Sec>(stop-start).count();
+        moved_army_set.show_stats();
+        to_board_set.show_stats();
+        cout << "Set " << setw(2) << nr_moves-1 << " done, " << setw(9) << to_board_set.size() << " boards, " << setw(8) << moved_army_set.size() << " armies, " << setw(5) << duration << " s, late prune=" << late << endl;
+        if (to_board_set.size() == 0) {
+            auto stop_global = chrono::steady_clock::now();
+            auto duration = chrono::duration_cast<Sec>(stop_global-start_global).count();
+            cout << setw(6) << duration << " s, no solution" << endl;
+            return;
+        }
     }
+    auto stop_global = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<Sec>(stop_global-start_global).count();
+    cout << setw(6) << duration << " s, solved" << endl;
 }
 
 int main(int argc, char** argv) {
