@@ -3,54 +3,52 @@ int const Y = 9;
 int const MOVES = 6;
 int const ARMY = 10;
 
-nr_moves = 27
-Starting set done
-Set 27 done, 14 boards, 14 armies, late prune=0
-Set 26 done, 196 boards, 14 armies, late prune=0
-Set 25 done, 764 boards, 56 armies, late prune=0
-Set 24 done, 2926 boards, 56 armies, late prune=0
-Set 23 done, 7520 boards, 155 armies, late prune=0
-Set 22 done, 23784 boards, 196 armies, late prune=0
-Set 21 done, 11812 boards, 96 armies, late prune=0
-Set 20 done, 25750 boards, 552 armies, late prune=0
-Set 19 done, 2136 boards, 140 armies, late prune=0
-Set 18 done, 58830 boards, 3756 armies, late prune=0
-Set 17 done, 3394 boards, 90 armies, late prune=4944
-Set 16 done, 87942 boards, 13262 armies, late prune=0
-Set 15 done, 3162 boards, 54 armies, late prune=6622
-Set 14 done, 75192 boards, 28428 armies, late prune=0
-Set 13 done, 878 boards, 8 armies, late prune=3700
-Set 12 done, 21178 boards, 17844 armies, late prune=0
-Set 11 done, 0 boards, 0 armies, late prune=534
-No solution
+Set 27 done
+Set 26 done,         7 boards,        7 armies,     0 s, late prune=0
+Set 25 done,        98 boards,        7 armies,     0 s, late prune=0
+Set 24 done,       382 boards,       28 armies,     0 s, late prune=0
+Set 23 done,      1463 boards,       28 armies,     0 s, late prune=0
+Set 22 done,      3760 boards,       78 armies,     0 s, late prune=0
+Set 21 done,     11893 boards,       99 armies,     0 s, late prune=0
+Set 20 done,      5906 boards,       48 armies,     0 s, late prune=0
+Set 19 done,     12875 boards,      276 armies,     0 s, late prune=0
+Set 18 done,      1068 boards,       70 armies,     0 s, late prune=0
+Set 17 done,     29415 boards,     1878 armies,     0 s, late prune=0
+Set 16 done,      1697 boards,       45 armies,     0 s, late prune=2472
+Set 15 done,     43971 boards,     6632 armies,     0 s, late prune=0
+Set 14 done,      1581 boards,       27 armies,     0 s, late prune=3311
+Set 13 done,     37596 boards,    14219 armies,     0 s, late prune=0
+Set 12 done,       439 boards,        4 armies,     0 s, late prune=1850
+Set 11 done,     10589 boards,     8925 armies,     0 s, late prune=0
+Set 10 done,         0 boards,        0 armies,     0 s, late prune=267
+     0 s, no solution
 
-nr_moves = 28
-Starting set done
-Set 28 done, 14 boards, 14 armies, late prune=0
-Set 27 done, 196 boards, 14 armies, late prune=0
-Set 26 done, 2506 boards, 179 armies, late prune=0
-Set 25 done, 16686 boards, 179 armies, late prune=14
-Set 24 done, 83612 boards, 1152 armies, late prune=96
-Set 23 done, 280337 boards, 943 armies, late prune=3654
-Set 22 done, 896452 boards, 4720 armies, late prune=9464
-Set 21 done, 438964 boards, 565 armies, late prune=54062
-Set 20 done, 1035254 boards, 16621 armies, late prune=27950
-Set 19 done, 87428 boards, 1658 armies, late prune=62842
-Set 18 done, 2337564 boards, 74538 armies, late prune=2532
-Set 17 done, 217118 boards, 2172 armies, late prune=182218
-Set 16 done, 5370947 boards, 295969 armies, late prune=366
-Set 15 done, 326408 boards, 2696 armies, late prune=425970
-Set 14 done, 7735272 boards, 839640 armies, late prune=240
-Set 13 done, 316039 boards, 1966 armies, late prune=485992
-Set 12 done, 7335812 boards, 1018888 armies, late prune=436
-Set 11 done, 171250 boards, 840 armies, late prune=402900
-Set 10 done, 3906628 boards, 853320 armies, late prune=80
-Set 9 done, 22767 boards, 157 armies, late prune=174548
-Set 8 done, 528427 boards, 196550 armies, late prune=0
-Set 7 done, 84 boards, 10 armies, late prune=13432
-Set 6 done, 1322 boards, 518 armies, late prune=0
-Set 5 done, 0 boards, 0 armies, late prune=30
-No solution
+          set 28 done
+     0 s, set 27 done,         7 boards /        7 armies =   1
+     0 s, set 26 done,        98 boards /        7 armies =  14
+     0 s, set 25 done,      1253 boards /       93 armies =  13
+     0 s, set 24 done,      8343 boards /       93 armies =  89
+     0 s, set 23 done,     41812 boards /      578 armies =  72
+     0 s, set 22 done,    140172 boards /      473 armies = 296
+     0 s, set 21 done,    448229 boards /     2363 armies = 189
+     0 s, set 20 done,    219482 boards /      283 armies = 775
+     0 s, set 19 done,    517628 boards /     8313 armies =  62
+     0 s, set 18 done,     43714 boards /      829 armies =  52
+     0 s, set 17 done,   1168782 boards /    37272 armies =  31
+     2 s, set 16 done,    108560 boards /     1087 armies =  99
+     1 s, set 15 done,   2685480 boards /   148001 armies =  18
+     6 s, set 14 done,    163204 boards /     1348 armies = 121
+     3 s, set 13 done,   3867636 boards /   419860 armies =   9
+     9 s, set 12 done,    158020 boards /      984 armies = 160
+     2 s, set 11 done,   3667907 boards /   509503 armies =   7
+     8 s, set 10 done,     85625 boards /      420 armies = 203
+     1 s, set  9 done,   1953314 boards /   426679 armies =   4
+     3 s, set  8 done,     11385 boards /       79 armies = 144
+     0 s, set  7 done,    264220 boards /    98301 armies =   2
+     0 s, set  6 done,        42 boards /        5 armies =   8
+     0 s, set  5 done,       661 boards /      259 armies =   2
+     0 s, set  4 done,         0 boards /        0 armies =   0
+    43 s, no solution
 
 nr_moves = 29
 
@@ -237,44 +235,41 @@ int const Y = 16;
 int const MOVES = 8;
 int const ARMY = 19;
 
-nr_moves = 45
-Starting set done
-Set 45 done, 4 boards, 4 armies, late prune=0
-Set 44 done, 8 boards, 8 armies, late prune=0
-Set 43 done, 0 boards, 0 armies, late prune=0
-No solution
+Set 45 done
+Set 44 done,         2 boards,        2 armies,     0 s, late prune=0
+Set 43 done,         4 boards,        4 armies,     0 s, late prune=0
+Set 42 done,         0 boards,        0 armies,     0 s, late prune=0
+     0 s, no solution
 
-nr_moves = 46
-Starting set done
-Set 46 done, 40 boards, 40 armies, late prune=0
-Set 45 done, 438 boards, 28 armies, late prune=0
-Set 44 done, 1763 boards, 646 armies, late prune=4
-Set 43 done, 578 boards, 31 armies, late prune=41
-Set 42 done, 1715 boards, 379 armies, late prune=0
-Set 41 done, 833 boards, 9 armies, late prune=0
-Set 40 done, 2182 boards, 554 armies, late prune=0
-Set 39 done, 0 boards, 0 armies, late prune=0
-No solution
+Set 46 done
+Set 45 done,        21 boards,       21 armies,     0 s, late prune=0
+Set 44 done,       221 boards,       15 armies,     0 s, late prune=0
+Set 43 done,       828 boards,      267 armies,     0 s, late prune=2
+Set 42 done,       290 boards,       16 armies,     0 s, late prune=19
+Set 41 done,       861 boards,      193 armies,     0 s, late prune=0
+Set 40 done,       420 boards,        5 armies,     0 s, late prune=0
+Set 39 done,      1097 boards,      283 armies,     0 s, late prune=0
+Set 38 done,         0 boards,        0 armies,     0 s, late prune=0
+     0 s, no solution
 
-nr_moves = 47
-Starting set done
-Set 47 done, 40 boards, 40 armies, late prune=0
-Set 46 done, 1600 boards, 42 armies, late prune=0
-Set 45 done, 18911 boards, 888 armies, late prune=0
-Set 44 done, 124812 boards, 2010 armies, late prune=684
-Set 43 done, 79718 boards, 1881 armies, late prune=3984
-Set 42 done, 300369 boards, 10423 armies, late prune=3897
-Set 41 done, 145537 boards, 800 armies, late prune=12295
-Set 40 done, 483056 boards, 39173 armies, late prune=3324
-Set 39 done, 210429 boards, 148 armies, late prune=18116
-Set 38 done, 610806 boards, 67853 armies, late prune=8544
-Set 37 done, 93420 boards, 576 armies, late prune=25883
-Set 36 done, 5931876 boards, 540918 armies, late prune=0
-Set 35 done, 573542 boards, 215 armies, late prune=319675
-Set 34 done, 29474633 boards, 5411491 armies, late prune=0
-Set 33 done, 402697 boards, 74 armies, late prune=1113169
-Set 32 done, 16470890 boards, 15357310 armies, late prune=0
-Set 31 done, 382 boards, 7 armies, late prune=347165
-Set 30 done, 17899 boards, 17393 armies, late prune=0
-Set 29 done, 0 boards, 0 armies, late prune=40
-No solution
+          set 47 done
+     0 s, set 46 done,        21 boards /       21 armies =   1
+     0 s, set 45 done,       802 boards /       21 armies =  38
+     0 s, set 44 done,      8548 boards /      346 armies =  24
+     0 s, set 43 done,     48607 boards /      561 armies =  86
+     0 s, set 42 done,     33052 boards /      807 armies =  40
+     0 s, set 41 done,    127051 boards /     3682 armies =  34
+     2 s, set 40 done,     62041 boards /      384 armies = 161
+     1 s, set 39 done,    208302 boards /    14665 armies =  14
+     4 s, set 38 done,     90387 boards /       74 armies =1221
+     2 s, set 37 done,    264201 boards /    27895 armies =   9
+     5 s, set 36 done,     40523 boards /      291 armies = 139
+     3 s, set 35 done,   2527641 boards /   201864 armies =  12
+    60 s, set 34 done,    221096 boards /      108 armies =2047
+    19 s, set 33 done,  11454522 boards /  1945230 armies =   5
+   271 s, set 32 done,    129758 boards /       38 armies =3414
+    13 s, set 31 done,   5709552 boards /  5264799 armies =   1
+   129 s, set 30 done,       189 boards /        4 armies =  47
+     0 s, set 29 done,      8787 boards /     8493 armies =   1
+     0 s, set 28 done,         0 boards /        0 armies =   0
+   516 s, no solution

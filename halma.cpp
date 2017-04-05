@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
@@ -21,6 +22,10 @@
 # define UNLIKELY(x)	__builtin_expect(!!(x),false)
 # define HOT		__attribute__((__hot__))
 # define COLD		__attribute__((__cold__))
+// pure means does not modify any (non const) global memory.
+# define PURE		__attribute__((__pure__))
+// const means does not read/modify any (non const) global memory.
+# define FUNCTIONAL	__attribute__((__const__))
 #else // __GNUC__
 # define RESTRICT
 # define NOINLINE
@@ -28,6 +33,8 @@
 # define UNLIKELY(x)	(x)
 # define HOT
 # define COLD
+# define PURE
+# define FUNCTIONAL
 #endif // __GNUC__
 
 using namespace std;
@@ -77,11 +84,11 @@ class Coord {
     Coord() {}
     Coord(Coord const& from, Diff const& diff) : pos_{static_cast<CoordVal>(from.pos_ + diff.pos_)} {}
     Coord(int x, int y) : pos_{static_cast<CoordVal>(y*ROW+x)} { }
-    int x() const { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
-    int y() const { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
-    int pos()     const { return pos_; }
-    uint index()  const { return OFFSET+ pos_; }
-    uint index2() const { return MAX+pos_; }
+    int x() const PURE { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
+    int y() const PURE { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
+    int pos()     const PURE { return pos_; }
+    uint index()  const PURE { return OFFSET+ pos_; }
+    uint index2() const PURE { return MAX+pos_; }
     void check(int line) const {
         int x_ = x();
         int y_ = y();
@@ -90,14 +97,14 @@ class Coord {
         if (y_ < 0) throw(logic_error("y negative at line " + to_string(line)));
         if (y_ >= Y) throw(logic_error("y too large at line " + to_string(line)));
     }
-    // Mirror over SW-NE diagonal 
-    Coord mirror() const {
+    // Mirror over SW-NE diagonal
+    Coord mirror() const PURE {
         Coord result;
         result.pos_ = MAX - pos_;
         return result;
     }
-    // Mirror over NW-SE diagonal 
-    inline Coord symmetric() const;
+    // Mirror over NW-SE diagonal
+    inline Coord symmetric() const PURE;
   private:
     static uint const OFFSET = ROW+1;
     CoordVal pos_;
@@ -124,7 +131,7 @@ class Coord {
 };
 struct Move {
     Coord from, to;
-    Move mirror() const {
+    Move mirror() const PURE {
         return Move{from.mirror(), to.mirror()};
     }
 };
@@ -134,11 +141,11 @@ class ArmyE;
 class Army: public array<Coord, ARMY> {
   public:
     Army() {}
-    uint64_t hash() const {
+    uint64_t hash() const PURE {
         return XXHash64::hash(reinterpret_cast<void const*>(&(*this)[0]), sizeof(Coord) * ARMY, SEED);
     }
     inline void check(int line) const;
-    inline Army symmetric() const {
+    inline Army symmetric() const PURE {
         Army result;
         transform(begin(), end(), result.begin(), [](Coord const&pos){ return pos.symmetric(); });
         sort(result.begin(), result.end());
@@ -158,8 +165,8 @@ class Army: public array<Coord, ARMY> {
 
 int cmp(Army const& left, Army const& right) {
     if (!SYMMETRY) return 0;
-    return memcmp(reinterpret_cast<void const *>(&left[0]), 
-                  reinterpret_cast<void const *>(&right[0]), 
+    return memcmp(reinterpret_cast<void const *>(&left[0]),
+                  reinterpret_cast<void const *>(&right[0]),
                   sizeof(Coord) * ARMY);
 }
 
@@ -172,12 +179,12 @@ class ArmyE: public array<Coord, ARMY+2> {
     }
     // Coord operator[](ssize_t) = delete;
     Coord& at(int i) { return (*this)[i+1]; }
-    Coord const& at(int i) const { return (*this)[i+1]; }
-    uint64_t hash() const {
+    Coord const& at(int i) const FUNCTIONAL { return (*this)[i+1]; }
+    uint64_t hash() const PURE {
         return XXHash64::hash(reinterpret_cast<void const*>(&at(0)), sizeof(Coord) * ARMY, SEED);
     }
     inline void check(int line) const;
-    inline ArmyE symmetric() const {
+    inline ArmyE symmetric() const PURE {
         ArmyE result;
         transform(begin(), end(), result.begin(), [](Coord const&pos){ return pos.symmetric(); });
         sort(result.begin(), result.end());
@@ -185,18 +192,18 @@ class ArmyE: public array<Coord, ARMY+2> {
     }
     Coord* begin() { return &at(0); }
     Coord* end  () { return &at(ARMY); }
-    Coord const* begin() const { return &at(0); }
-    Coord const* end  () const { return &at(ARMY); }
-    Coord const* cbegin() { return &at(0); }
-    Coord const* cend  () { return &at(ARMY); }
-    Coord const* cbegin() const { return &at(0); }
-    Coord const* cend  () const { return &at(ARMY); }
+    Coord const* begin() const FUNCTIONAL { return &at(0); }
+    Coord const* end  () const FUNCTIONAL { return &at(ARMY); }
+    Coord const* cbegin() FUNCTIONAL { return &at(0); }
+    Coord const* cend  () FUNCTIONAL { return &at(ARMY); }
+    Coord const* cbegin() const FUNCTIONAL { return &at(0); }
+    Coord const* cend  () const FUNCTIONAL { return &at(ARMY); }
 };
 
 int cmp(ArmyE const& left, ArmyE const& right) {
     if (!SYMMETRY) return 0;
-    return memcmp(reinterpret_cast<void const *>(&left.at(0)), 
-                  reinterpret_cast<void const *>(&right.at(0)), 
+    return memcmp(reinterpret_cast<void const *>(&left.at(0)),
+                  reinterpret_cast<void const *>(&right.at(0)),
                   sizeof(Coord) * ARMY);
 }
 
@@ -323,26 +330,26 @@ class ArmySet: public SetStatistics {
   public:
     using Index = uint32_t;
 
-    ArmySet(Index size = 2);
+    ArmySet(Index size = 1);
     ~ArmySet();
-    void clear(Index size = 2);
-    Index size() const {
+    void clear(Index size = 1);
+    Index size() const PURE {
         return used1_ - 1;
     }
-    Index max_size() const {
+    Index max_size() const PURE {
         return size_;
     }
-    Index capacity() const {
+    Index capacity() const PURE {
         return limit_;
     }
-    Army const& at(Index i) const { return armies_[i]; }
+    Army const& at(Index i) const PURE { return armies_[i]; }
     inline Index insert(Army  const& value);
     inline Index insert(ArmyE const& value);
-    Index find(Army const& value) const;
-    Army const* begin() const { return &armies_[1]; }
-    Army const* end()   const { return &armies_[used1_]; }
+    Index find(Army const& value) const PURE;
+    Army const* begin() const PURE { return &armies_[1]; }
+    Army const* end()   const PURE { return &armies_[used1_]; }
   private:
-    static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(0.7*factor); }
+    static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(ceil(0.7*factor)); }
     void resize();
     inline Index insert(Army  const& value, bool is_resize);
     inline Index insert(ArmyE const& value, bool is_resize);
@@ -365,17 +372,17 @@ class Board {
     void move(Move const& move_, bool blue_to_move);
     Army& blue() { return blue_; }
     Army& red()  { return red_; }
-    Army const& blue() const { return blue_; }
-    Army const& red()  const { return red_; }
+    Army const& blue() const FUNCTIONAL { return blue_; }
+    Army const& red()  const FUNCTIONAL { return red_; }
     void check(int line) const {
         blue_.check(line);
         red_.check(line);
     }
-    int min_moves(bool blue_to_move) const;
-    int min_moves() const {
+    int min_moves(bool blue_to_move) const PURE;
+    int min_moves() const PURE {
         return min(min_moves(true), min_moves(false));
     }
-    inline Board symmetric() const {
+    inline Board symmetric() const PURE {
         return Board{blue().symmetric(), red().symmetric()};
     }
   private:
@@ -397,16 +404,16 @@ class BoardSet: public SetStatistics {
         // cout << "Split: Value=" << hex << value << ", moving_index=" << moving << ", opponent=" << opponent << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
         return value & ARMY_HIGHBIT;
     }
-    BoardSet(Index size = 2);
+    BoardSet(Index size = 1);
     ~BoardSet();
-    void clear(Index size = 2);
-    Index size() const {
+    void clear(Index size = 1);
+    Index size() const PURE {
         return limit_ - left_;
     }
-    Index max_size() const {
+    Index max_size() const PURE {
         return size_;
     }
-    Index capacity() const {
+    Index capacity() const PURE {
         return limit_;
     }
     bool insert(Value value, bool is_resize = false);
@@ -420,19 +427,19 @@ class BoardSet: public SetStatistics {
         return insert(value);
     }
     bool insert(Board const& board, ArmySet& army, ArmySet& opponent, int nr_moves);
-    bool find(Value value) const;
-    bool find(ArmySet::Index to_move, ArmySet::Index opponent, int symmetry) const {
+    bool find(Value value) const PURE;
+    bool find(ArmySet::Index to_move, ArmySet::Index opponent, int symmetry) const PURE {
         Value value = static_cast<Value>(opponent) << ARMY_BITS | to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0);
         return find(value);
     }
-    bool find(Board const& board, ArmySet const& army, ArmySet const& opponent, int nr_moves) const;
-    Value const* begin() const { return &values_[0]; }
-    Value const* end()   const { return &values_[size_]; }
+    bool find(Board const& board, ArmySet const& army, ArmySet const& opponent, int nr_moves) const PURE;
+    Value const* begin() const PURE { return &values_[0]; }
+    Value const* end()   const PURE { return &values_[size_]; }
   private:
     static const int ARMY_BITS = std::numeric_limits<ArmySet::Index>::digits;
     static const Value ARMY_HIGHBIT = static_cast<Value>(1) << (ARMY_BITS-1);
     static const Value ARMY_MASK = ARMY_HIGHBIT-1;
-    static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(0.7*factor); }
+    static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(ceil(0.7*factor)); }
     void resize();
 
     Index size_;
@@ -458,8 +465,8 @@ class Image {
     inline explicit Image(ArmyE const& blue);
     void print(ostream& os) const;
     inline void clear();
-    Color get(Coord const& pos) const { return board_[pos.index()]; }
-    Color get(int x, int y) const { return get(Coord{x,y}); }
+    Color get(Coord const& pos) const PURE { return board_[pos.index()]; }
+    Color get(int x, int y) const PURE { return get(Coord{x,y}); }
     void  set(Coord const& pos, Color c) { board_[pos.index()] = c; }
     void  set(int x, int y, Color c) { set(Coord{x,y}, c); }
   private:
@@ -534,40 +541,43 @@ using TypeCount = array<int, 4>;
 class Tables {
   public:
     Tables();
-    inline Norm norm(Coord const&left, Coord const&right) const {
+    inline Norm norm(Coord const& left, Coord const& right) const PURE {
         return norm_[right.pos() - left.pos() + Coord::MAX];
     }
-    inline Norm distance(Coord const& left, Coord const& right) const {
+    inline Norm distance(Coord const& left, Coord const& right) const PURE {
         return distance_[right.pos() - left.pos() + Coord::MAX];
     }
-    inline Norm distance_base_red(Coord const& pos) const {
+    inline Norm distance_base_red(Coord const& pos) const PURE {
         return distance_base_red_[pos.pos()];
     }
-    inline Nbits Ndistance(Coord const& left, Coord const& right) const {
+    inline Nbits Ndistance(Coord const& left, Coord const& right) const PURE {
         return NLEFT >> distance(left, right);
     }
-    inline Nbits Ndistance_base_red(Coord const& pos) const {
+    inline Nbits Ndistance_base_red(Coord const& pos) const PURE {
         return NLEFT >> distance_base_red(pos);
     }
-    inline uint8_t base_red(Coord const& pos) const {
+    inline uint8_t base_red(Coord const& pos) const PURE {
         return base_red_[pos.pos()];
     }
-    inline uint8_t edge_red(Coord const& pos) const {
+    inline uint8_t edge_red(Coord const& pos) const PURE {
         return edge_red_[pos.pos()];
     }
-    inline uint8_t type(Coord const& pos) const {
+    inline uint8_t type(Coord const& pos) const PURE {
         return type_[pos.pos()];
     }
-    inline Coord symmetric(Coord const& pos) const {
+    inline Coord symmetric(Coord const& pos) const PURE {
         return symmetric_[pos.pos()];
     }
-    inline TypeCount const& type_count() const {
+    // The folowing methods in Tables really only PURE. However they are only
+    // ever applied to the constant tables so the access global memory that
+    // never changes making them effectively FUNCTIONAL
+    inline TypeCount const& type_count() const FUNCTIONAL {
         return type_count_;
     }
-    Norm infinity() const { return infinity_; }
-    Moves const& moves() const { return moves_; }
-    Board const& start() const { return start_; }
-    Image const& start_image() const { return start_image_; }
+    Norm infinity() const FUNCTIONAL { return infinity_; }
+    Moves const& moves() const FUNCTIONAL { return moves_; }
+    Board const& start() const FUNCTIONAL { return start_; }
+    Image const& start_image() const FUNCTIONAL { return start_image_; }
     void print_moves(ostream& os) const;
     void print_moves() const {
         print_moves(cout);
@@ -1051,7 +1061,7 @@ int Board::min_moves(bool blue_to_move) const {
     return needed_moves;
 }
 
-uint make_moves(Army const& army, Army const& army_symmetric, 
+uint make_moves(Army const& army, Army const& army_symmetric,
                 Army const& opponent_army, ArmySet::Index opponent_index,
                 BoardSet& board_set, ArmySet& army_set, int available_moves) {
     uint8_t blue_to_move = available_moves & 1;
@@ -1214,7 +1224,7 @@ uint make_moves(Army const& army, Army const& army_symmetric,
             if (CHECK) armyE.check(__LINE__);
             armyESymmetric.store(val.symmetric());
             if (CHECK) armyESymmetric.check(__LINE__);
-            int symmetry = cmp(armyE, armyESymmetric); 
+            int symmetry = cmp(armyE, armyESymmetric);
             auto moved_index = army_set.insert(symmetry >= 0 ? armyE : armyESymmetric);
             if (CHECK && moved_index == 0)
                 throw(logic_error("Army Insert returns 0"));
@@ -1319,7 +1329,7 @@ void play() {
             Army army_symmetric = army.symmetric();
             make_moves(symmetry ? army_symmetric : army,
                        symmetry ? army : army_symmetric,
-                       opponent_army, opponent_index, 
+                       opponent_army, opponent_index,
                        board_set[1], army_set[2], nr_moves);
         }
 
@@ -1379,7 +1389,7 @@ void my_main(int argc, char const* const* argv) {
     BoardSet board_set[2];
     ArmySet  army_set[3];
     board_set[0].insert(start_board, army_set[0], army_set[1], nr_moves);
-    cout << "Set " << nr_moves << " done" << endl;;
+    cout << setw(14) << "set " << nr_moves << " done" << endl;;
     for (int i=0; nr_moves>0; --nr_moves, ++i) {
         auto start = chrono::steady_clock::now();
         auto& from_board_set = board_set[ i    % 2];
@@ -1410,7 +1420,7 @@ void my_main(int argc, char const* const* argv) {
         auto duration = chrono::duration_cast<Sec>(stop-start).count();
         moved_army_set.show_stats();
         to_board_set.show_stats();
-        cout << "Set " << setw(2) << nr_moves-1 << " done, " << setw(9) << to_board_set.size() << " boards, " << setw(8) << moved_army_set.size() << " armies, " << setw(5) << duration << " s, late prune=" << late << endl;
+        cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done, " << setw(9) << to_board_set.size() << " boards / " << setw(8) << moved_army_set.size() << " armies =" << setw(4) << to_board_set.size()/(moved_army_set.size() ? moved_army_set.size() : 1) << endl;
         if (to_board_set.size() == 0) {
             auto stop_global = chrono::steady_clock::now();
             auto duration = chrono::duration_cast<Sec>(stop_global-start_global).count();
