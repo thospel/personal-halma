@@ -39,10 +39,11 @@
 
 using namespace std;
 
-bool const CHECK = false;
+bool const CHECK = true;
 bool const VERBOSE = false;
 bool const STATISTICS = false;
 bool const SYMMETRY = true;
+bool const MEMCHECK = false;
 
 int const X_MAX = 16;
 int const Y_MAX = 16;
@@ -57,6 +58,19 @@ bool const PASS = false;
 uint64_t SEED = 123456789;
 
 using Sec      = chrono::seconds;
+
+uint64_t const murmur_multiplier = UINT64_C(0xc6a4a7935bd1e995);
+
+inline uint64_t murmur_mix(uint64_t v) {
+    v *= murmur_multiplier;
+    return v ^ (v >> 47);
+}
+
+inline uint64_t hash64(uint64_t v) {
+    return murmur_mix(murmur_mix(v));
+    // return murmur_mix(murmur_mix(murmur_mix(v)));
+    // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
+}
 
 using Norm = uint8_t;
 using Nbits = uint;
@@ -194,10 +208,6 @@ class ArmyE: public array<Coord, ARMY+2> {
     Coord* end  () { return &at(ARMY); }
     Coord const* begin() const FUNCTIONAL { return &at(0); }
     Coord const* end  () const FUNCTIONAL { return &at(ARMY); }
-    Coord const* cbegin() FUNCTIONAL { return &at(0); }
-    Coord const* cend  () FUNCTIONAL { return &at(ARMY); }
-    Coord const* cbegin() const FUNCTIONAL { return &at(0); }
-    Coord const* cend  () const FUNCTIONAL { return &at(ARMY); }
 };
 
 int cmp(ArmyE const& left, ArmyE const& right) {
@@ -326,44 +336,51 @@ void SetStatistics::show_stats(ostream& os) const {
         os << "Average retries: " << 1. * tries_ / hits_ << "\n";
 }
 
+using ArmyId = uint32_t;
+STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
+STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
+STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
+
 class ArmySet: public SetStatistics {
   public:
-    using Index = uint32_t;
-
-    ArmySet(Index size = 1);
+    ArmySet(ArmyId size = 1);
     ~ArmySet();
-    void clear(Index size = 1);
-    Index size() const PURE {
+    void clear(ArmyId size = 1);
+    ArmyId size() const PURE {
         return used1_ - 1;
     }
-    Index max_size() const PURE {
+    ArmyId max_size() const PURE {
         return size_;
     }
-    Index capacity() const PURE {
+    ArmyId capacity() const PURE {
         return limit_;
     }
-    Army const& at(Index i) const PURE { return armies_[i]; }
-    inline Index insert(Army  const& value);
-    inline Index insert(ArmyE const& value);
-    Index find(Army const& value) const PURE;
+    Army const& at(ArmyId i) const PURE { return armies_[i]; }
+    inline ArmyId insert(Army  const& value);
+    inline ArmyId insert(ArmyE const& value);
+    ArmyId find(Army const& value) const PURE;
     Army const* begin() const PURE { return &armies_[1]; }
     Army const* end()   const PURE { return &armies_[used1_]; }
-  private:
-    static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(ceil(0.7*factor)); }
-    void resize();
-    inline Index insert(Army  const& value, bool is_resize);
-    inline Index insert(ArmyE const& value, bool is_resize);
 
-    Index size_;
-    Index mask_;
-    Index used1_;
-    Index limit_;
-    Index* values_;
+    // Non copyable
+    ArmySet(ArmySet const&) = delete;
+    ArmySet& operator=(ArmySet const&) = delete;
+
+  private:
+    static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(ceil(0.7*factor)); }
+    NOINLINE void resize();
+    inline ArmyId insert(Army  const& value, bool is_resize);
+    inline ArmyId insert(ArmyE const& value, bool is_resize);
+
+    ArmyId size_;
+    ArmyId mask_;
+    ArmyId used1_;
+    ArmyId limit_;
+    ArmyId* values_;
     Army* armies_;
 };
 
 // Board as two Armies
-class BoardSet;
 class Board {
   public:
     Board() {}
@@ -393,64 +410,239 @@ class Board {
     }
 };
 
-class BoardSet: public SetStatistics {
+class BoardSubSet {
   public:
-    using Value = uint64_t;
-    using Index = uint64_t;
+    ArmyId allocated() const PURE { return mask_+1; }
+    ArmyId capacity()  const PURE { return FACTOR(allocated()); }
+    ArmyId size()      const PURE { return capacity() - left_; }
+    void create(ArmyId size = 1);
+    void destroy() {
+        // cout << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << "\n";
+        if (MEMCHECK) nr_armies_ -= allocated();
+        delete[] armies_;
+    }
+    ArmyId const* begin() const PURE { return &armies_[0]; }
+    ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
-    static Value split(Value value, ArmySet::Index& moving, ArmySet::Index& opponent) {
+    bool insert(ArmyId to_move, int symmetry) {
+        if (CHECK) {
+            if (to_move <= 0) throw(logic_error("to_move <= 0"));
+            if (to_move >= ARMY_HIGHBIT) throw(logic_error("to_move is too large"));
+        }
+        return insert(to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0));
+    }
+    bool find(ArmyId to_move, int symmetry) const PURE {
+        if (CHECK) {
+            if (to_move <= 0) throw(logic_error("to_move <= 0"));
+            if (to_move >= ARMY_HIGHBIT) throw(logic_error("to_move is too large"));
+        }
+        return find(to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0));
+    }
+
+    static ArmyId split(ArmyId value, ArmyId& moving) {
         moving   = value & ARMY_MASK;
-        opponent = value >> ARMY_BITS;
-        // cout << "Split: Value=" << hex << value << ", moving_index=" << moving << ", opponent=" << opponent << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
+        // cout << "Split: Value=" << hex << value << ", index=" << moving << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
         return value & ARMY_HIGHBIT;
     }
-    BoardSet(Index size = 1);
-    ~BoardSet();
-    void clear(Index size = 1);
-    Index size() const PURE {
-        return limit_ - left_;
+    static size_t nr_armies() PURE { return nr_armies_; }
+
+  private:
+    static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(ceil(0.7*factor)); }
+    NOINLINE void resize();
+
+    ArmyId* begin() PURE { return &armies_[0]; }
+    ArmyId* end()   PURE { return &armies_[allocated()]; }
+
+    bool insert(ArmyId id) {
+        return _insert(id, false);
     }
-    Index max_size() const PURE {
-        return size_;
+    bool insert_new(ArmyId id) {
+        return _insert(id, true);
     }
-    Index capacity() const PURE {
-        return limit_;
-    }
-    bool insert(Value value, bool is_resize = false);
-    bool insert(ArmySet::Index to_move, ArmySet::Index opponent, int symmetry) {
-        if (CHECK) {
-            if (to_move  == 0) throw(logic_error("to_move == 0"));
-            if (opponent == 0) throw(logic_error("opponent == 0"));
+    inline bool _insert(ArmyId id, bool is_resize);
+    bool find(ArmyId id) const PURE;
+
+    ArmyId mask_;
+    ArmyId left_;
+    ArmyId* armies_;
+
+    static size_t nr_armies_;
+};
+size_t BoardSubSet::nr_armies_ = 0;
+
+void BoardSubSet::create(ArmyId size) {
+    mask_ = size-1;
+    left_ = FACTOR(size);
+    armies_ = new ArmyId[size];
+    // cout << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n";
+    fill(begin(), end(), 0);
+    if (MEMCHECK) nr_armies_ += allocated();
+}
+
+bool BoardSubSet::find(ArmyId value) const {
+    ArmyId pos = hash64(value) & mask_;
+    uint offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        auto& v = armies_[pos];
+        if (v == 0) return false;
+        if (v == value) {
+            // cout << "Found duplicate " << hash << "\n";
+            return true;
         }
-        Value value = static_cast<Value>(opponent) << ARMY_BITS | to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0);
-        // cout << "Insert: Value=" << hex << value << ", moving_index=" << to_move << ", opponent=" << opponent << ", symmetry=" << symmetry << dec << "\n";
-        return insert(value);
+        ++offset;
+        pos = (pos + offset) & mask_;
+    }
+}
+
+bool BoardSubSet::_insert(ArmyId value, bool is_resize) {
+    // cout << "Insert " << value << "\n";
+    if (left_ == 0) resize();
+    ArmyId pos = hash64(value) & mask_;
+    uint offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << mask_+1 << "\n";
+        auto& v = armies_[pos];
+        if (v == 0) {
+            // if (!is_resize) stats_update(offset);
+            v = value;
+            --left_;
+            // cout << "Found empty\n";
+            return true;
+        }
+        if (!is_resize && v == value) {
+            // cout << "Found duplicate\n";
+            // if (!is_resize) stats_update(offset);
+            return false;
+        }
+        ++offset;
+        pos = (pos + offset) & mask_;
+    }
+}
+
+void BoardSubSet::resize() {
+    auto old_armies = armies_;
+    auto old_size = mask_+1;
+    ArmyId size = old_size*2;
+    armies_ = new ArmyId[size];
+    // cout << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n";
+    if (MEMCHECK) nr_armies_ -= allocated();
+    mask_ = size-1;
+    if (MEMCHECK) nr_armies_ += allocated();
+    left_ = FACTOR(size);
+    fill(begin(), end(), 0);
+    for (ArmyId i = 0; i < old_size; ++i)
+        if (old_armies[i] != 0) insert_new(old_armies[i]);
+    delete [] old_armies;
+}
+
+class BoardSet {
+    friend class BoardSubSetRef;
+  public:
+    BoardSet(ArmyId size = 1);
+    ~BoardSet() {
+        for (auto& subset: *this)
+            subset.destroy();
+        // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+        delete [] subsets_;
+    }
+    ArmyId subsets() const PURE { return top_ - from_; }
+    ArmyId size() const PURE { return size_; }
+    void clear(ArmyId size = 1);
+    BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
+    BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
+    BoardSubSet const* begin() const PURE { return &subsets_[from_]; }
+    BoardSubSet const* end()   const PURE { return &subsets_[top_]; }
+    bool insert(ArmyId to_move, ArmyId opponent, int symmetry) {
+        if (CHECK) {
+            if (opponent <= 0)
+                throw(logic_error("opponent <= 0"));
+            if (opponent >= ARMY_HIGHBIT)
+                throw(logic_error("opponent is too large"));
+        }
+        bool result = at(opponent).insert(to_move, symmetry);
+        size_ += result;
+        return result;
     }
     bool insert(Board const& board, ArmySet& army, ArmySet& opponent, int nr_moves);
-    bool find(Value value) const PURE;
-    bool find(ArmySet::Index to_move, ArmySet::Index opponent, int symmetry) const PURE {
-        Value value = static_cast<Value>(opponent) << ARMY_BITS | to_move | (symmetry < 0 ? ARMY_HIGHBIT : 0);
-        return find(value);
+    bool find(ArmyId to_move, ArmyId opponent, int symmetry) const PURE {
+        if (CHECK) {
+            if (opponent <= 0)
+                throw(logic_error("opponent <= 0"));
+            if (opponent >= ARMY_HIGHBIT)
+                throw(logic_error("opponent is too large"));
+        }
+        return cat(opponent).find(to_move, symmetry);
     }
     bool find(Board const& board, ArmySet const& army, ArmySet const& opponent, int nr_moves) const PURE;
-    Value const* begin() const PURE { return &values_[0]; }
-    Value const* end()   const PURE { return &values_[size_]; }
-  private:
-    static const int ARMY_BITS = std::numeric_limits<ArmySet::Index>::digits;
-    static const Value ARMY_HIGHBIT = static_cast<Value>(1) << (ARMY_BITS-1);
-    static const Value ARMY_MASK = ARMY_HIGHBIT-1;
-    static Index constexpr FACTOR(Index factor=1) { return static_cast<Index>(ceil(0.7*factor)); }
-    void resize();
 
-    Index size_;
-    Index mask_;
-    Index left_;
-    Index limit_;
-    Value* values_;
-    uint64_t hits_  = 0;
-    uint64_t misses = 0;
-    uint64_t tries  = 0;
+    // Non copyable
+    BoardSet(BoardSet const&) = delete;
+    BoardSet& operator=(BoardSet const&) = delete;
+  private:
+    ArmyId capacity() const PURE { return capacity_-1; }
+    ArmyId next() { return from_++; }
+    BoardSubSet& at(ArmyId id) {
+        if (id >= top_) {
+            if (id != top_) throw(logic_error("Cannot grow more than 1"));
+            if (top_ >= capacity_) resize();
+            subsets_[top_++].create();
+        }
+        return subsets_[id];
+    }
+    NOINLINE void resize() {
+        auto old_subsets = subsets_;
+        subsets_ = new BoardSubSet[capacity_*2];
+        capacity_ *= 2;
+        // cout << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n";
+        copy(&old_subsets[from_], &old_subsets[top_], &subsets_[1]);
+        top_ -= from_ - 1;
+        from_ = 1;
+        delete [] old_subsets;
+    }
+    BoardSubSet* begin() PURE { return &subsets_[from_]; }
+    BoardSubSet* end()   PURE { return &subsets_[top_]; }
+
+    ArmyId size_;
+    ArmyId capacity_;
+    ArmyId from_;
+    ArmyId top_;
+    BoardSubSet* subsets_;
 };
+
+class BoardSubSetRef {
+  public:
+    BoardSubSetRef(BoardSet& set): BoardSubSetRef{set, set.next()} {}
+    ~BoardSubSetRef() { subset_.destroy(); }
+    ArmyId id() const PURE { return id_; }
+    BoardSubSet const& armies() const PURE { return subset_; }
+
+    BoardSubSetRef(BoardSubSetRef const&) = delete;
+    BoardSubSetRef& operator=(BoardSubSetRef const&) = delete;
+  private:
+    BoardSubSetRef(BoardSet& set, ArmyId id): subset_{set.at(id)}, id_{id} {}
+    BoardSubSet& subset_;
+    ArmyId const id_;
+};
+
+BoardSet::BoardSet(ArmyId size): size_{0}, capacity_{size+1}, from_{1}, top_{1} {
+    subsets_ = new BoardSubSet[capacity_];
+    // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
+}
+
+void BoardSet::clear(ArmyId size) {
+    for (auto& subset: *this)
+        subset.destroy();
+    from_ = top_ = 1;
+    size_ = 0;
+    if (true) {
+        auto old_subsets = subsets_;
+        ++size;
+        subsets_ = new BoardSubSet[size];
+        delete[] old_subsets;
+        capacity_ = size;
+    }
+}
 
 class Image {
   public:
@@ -771,9 +963,11 @@ Coord Coord::symmetric() const {
     return tables.symmetric(*this);
 }
 
-ArmySet::ArmySet(Index size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
-    values_ = new Index[size];
-    for (Index i=0; i<size; ++i) values_[i] = 0;
+ArmySet::ArmySet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
+    if (limit_ >= ARMY_HIGHBIT)
+        throw(overflow_error("Army size too large"));
+    values_ = new ArmyId[size];
+    for (ArmyId i=0; i<size; ++i) values_[i] = 0;
     armies_ = new Army[limit_+1];
 }
 
@@ -782,42 +976,44 @@ ArmySet::~ArmySet() {
     delete [] values_;
 }
 
-void ArmySet::clear(Index size) {
+void ArmySet::clear(ArmyId size) {
     stats_reset();
-    auto new_values = new Index[size];
-    Index new_limit = FACTOR(size);
+    ArmyId new_limit = FACTOR(size);
+    if (new_limit >= ARMY_HIGHBIT)
+        throw(overflow_error("Army size grew too large"));
+    auto new_values = new ArmyId[size];
     auto new_armies = new Army[new_limit+1];
     delete [] values_;
     values_ = new_values;
     delete [] armies_;
     armies_ = new_armies;
-    for (Index i=0; i<size; ++i) values_[i] = 0;
+    for (ArmyId i=0; i<size; ++i) values_[i] = 0;
     size_ = size;
     mask_ = size-1;
     limit_ = new_limit;
     used1_ = 1;
 }
 
-ArmySet::Index ArmySet::insert(Army  const& value) {
+ArmyId ArmySet::insert(Army  const& value) {
     // cout << "Insert:\n" << Image{value};
-    Index i = insert(value, false);
+    ArmyId i = insert(value, false);
     // cout << "i=" << i << "\n\n";
     return i;
 }
-ArmySet::Index ArmySet::insert(ArmyE const& value) {
+ArmyId ArmySet::insert(ArmyE const& value) {
     // cout << "Insert:\n" << Image{value};
-    Index i = insert(value, false);
+    ArmyId i = insert(value, false);
     // cout << "i=" << i << "\n\n";
     return i;
 }
 
-ArmySet::Index ArmySet::insert(Army const& value, bool is_resize) {
+ArmyId ArmySet::insert(Army const& value, bool is_resize) {
     if (used1_ > limit_) resize();
-    Index pos = value.hash() & mask_;
-    Index offset = 0;
+    ArmyId pos = value.hash() & mask_;
+    ArmyId offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
-        Index i = values_[pos];
+        ArmyId i = values_[pos];
         if (i == 0) {
             if (!is_resize) stats_update(offset);
             values_[pos] = used1_;
@@ -837,13 +1033,13 @@ ArmySet::Index ArmySet::insert(Army const& value, bool is_resize) {
     }
 }
 
-ArmySet::Index ArmySet::insert(ArmyE const& value, bool is_resize) {
+ArmyId ArmySet::insert(ArmyE const& value, bool is_resize) {
     if (used1_ > limit_) resize();
-    Index pos = value.hash() & mask_;
-    Index offset = 0;
+    ArmyId pos = value.hash() & mask_;
+    ArmyId offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
-        Index i = values_[pos];
+        ArmyId i = values_[pos];
         if (i == 0) {
             if (!is_resize) stats_update(offset);
             values_[pos] = used1_;
@@ -863,12 +1059,12 @@ ArmySet::Index ArmySet::insert(ArmyE const& value, bool is_resize) {
     }
 }
 
-ArmySet::Index ArmySet::find(Army const& army) const {
-    Index pos = army.hash() & mask_;
+ArmyId ArmySet::find(Army const& army) const {
+    ArmyId pos = army.hash() & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
-        Index i = values_[pos];
+        ArmyId i = values_[pos];
         if (i == 0) return 0;
         Army& a = armies_[i];
         if (a == army) return i;
@@ -878,79 +1074,23 @@ ArmySet::Index ArmySet::find(Army const& army) const {
 }
 
 void ArmySet::resize() {
+    if (size_ >= ARMY_HIGHBIT)
+        throw(overflow_error("Army size grew too large"));
     auto old_values = values_;
     auto old_armies = armies_;
     auto old_used1  = used1_;
     size_ *= 2;
     // cout << "Resize: " << size_ << "\n";
-    values_ = new Index[size_];
+    values_ = new ArmyId[size_];
     limit_ = FACTOR(size_);
     armies_ = new Army[limit_+1];
     delete [] old_values;
     mask_ = size_-1;
     used1_ = 1;
-    for (Index i = 0; i < size_; ++i) values_[i] = 0;
-    for (Index i = 1; i < old_used1; ++i)
+    for (ArmyId i = 0; i < size_; ++i) values_[i] = 0;
+    for (ArmyId i = 1; i < old_used1; ++i)
         insert(old_armies[i], true);
     delete [] old_armies;
-}
-
-BoardSet::BoardSet(Index size) : size_{size}, mask_{size-1}, left_{FACTOR(size)}, limit_{FACTOR(size)} {
-    values_ = new Value[size];
-    for (Index i=0; i<size; ++i) values_[i] = 0;
-}
-
-BoardSet::~BoardSet() {
-    delete [] values_;
-}
-
-void BoardSet::clear(Index size) {
-    stats_reset();
-    auto old_values = values_;
-    values_ = new Value[size];
-    delete [] old_values;
-    for (Index i=0; i<size; ++i) values_[i] = 0;
-    size_ = size;
-    mask_ = size-1;
-    limit_ = left_ = FACTOR(size);
-}
-
-uint64_t const murmur_multiplier = UINT64_C(0xc6a4a7935bd1e995);
-
-inline uint64_t murmur_mix(uint64_t v) {
-    v *= murmur_multiplier;
-    return v ^ (v >> 47);
-}
-
-inline uint64_t hash64(uint64_t v) {
-    return murmur_mix(murmur_mix(v));
-    // return murmur_mix(murmur_mix(murmur_mix(v)));
-    // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
-}
-
-bool BoardSet::insert(Value value, bool is_resize) {
-    // cout << "Insert\n";
-    if (left_ == 0) resize();
-    Index pos = hash64(value) & mask_;
-    uint offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        Value& v = values_[pos];
-        if (v == 0) {
-            if (!is_resize) stats_update(offset);
-            v = value;
-            --left_;
-            // cout << "Found empty\n";
-            return true;
-        }
-        if (!is_resize && v == value) {
-            // cout << "Found duplicate " << hash << "\n";
-            if (!is_resize) stats_update(offset);
-            return false;
-        }
-        ++offset;
-        pos = (pos + offset) & mask_;
-    }
 }
 
 bool BoardSet::insert(Board const& board, ArmySet& army_set, ArmySet& opponent_set, int nr_moves) {
@@ -961,30 +1101,14 @@ bool BoardSet::insert(Board const& board, ArmySet& army_set, ArmySet& opponent_s
 
     auto army_symmetric = army.symmetric();
     int army_symmetry = cmp(army, army_symmetric);
-    auto moving_index = army_set.insert(army_symmetry >= 0 ? army : army_symmetric);
+    auto moving_id = army_set.insert(army_symmetry >= 0 ? army : army_symmetric);
 
     auto opponent_symmetric = opponent.symmetric();
     int opponent_symmetry = cmp(opponent, opponent_symmetric);
-    auto opponent_index = opponent_set.insert(opponent_symmetry >= 0 ? opponent : opponent_symmetric);
+    auto opponent_id = opponent_set.insert(opponent_symmetry >= 0 ? opponent : opponent_symmetric);
 
     int symmetry = army_symmetry * opponent_symmetry;
-    return insert(moving_index, opponent_index, symmetry);
-}
-
-bool BoardSet::find(Value value) const {
-    Index pos = hash64(value) & mask_;
-    uint offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        Value& v = values_[pos];
-        if (v == 0) return false;
-        if (v == value) {
-            // cout << "Found duplicate " << hash << "\n";
-            return true;
-        }
-        ++offset;
-        pos = (pos + offset) & mask_;
-    }
+    return insert(moving_id, opponent_id, symmetry);
 }
 
 bool BoardSet::find(Board const& board, ArmySet const& army_set, ArmySet const& opponent_set, int nr_moves) const {
@@ -993,33 +1117,17 @@ bool BoardSet::find(Board const& board, ArmySet const& army_set, ArmySet const& 
     Army const& army = blue_to_move ? board.blue() : board.red();
     auto army_symmetric = army.symmetric();
     int army_symmetry = cmp(army, army_symmetric);
-    auto moving_index = army_set.find(army_symmetry >= 0 ? army : army_symmetric);
-    if (moving_index == 0) return false;
+    auto moving_id = army_set.find(army_symmetry >= 0 ? army : army_symmetric);
+    if (moving_id == 0) return false;
 
     Army const& opponent = blue_to_move ? board.red() : board.blue();
     auto opponent_symmetric = opponent.symmetric();
     int opponent_symmetry = cmp(opponent, opponent_symmetric);
-    auto opponent_index = opponent_set.find(opponent_symmetry >= 0 ? opponent : opponent_symmetric);
-    if (opponent_index == 0) return false;
+    auto opponent_id = opponent_set.find(opponent_symmetry >= 0 ? opponent : opponent_symmetric);
+    if (opponent_id == 0) return false;
 
     int symmetry = army_symmetry * opponent_symmetry;
-    return find(moving_index, opponent_index, symmetry);
-}
-
-void BoardSet::resize() {
-    auto old_values = values_;
-    auto old_size = size_;
-    values_ = new Value[2*size_];
-    size_ *= 2;
-    // cout << "Resize: " << size_ << "\n";
-    mask_ = size_-1;
-    left_ = limit_ = FACTOR(size_);
-    for (Index i = 0; i < size_; ++i) values_[i] = 0;
-    for (Index i = 0; i < old_size; ++i) {
-        if (old_values[i] == 0) continue;
-        insert(old_values[i], true);
-    }
-    delete [] old_values;
+    return find(moving_id, opponent_id, symmetry);
 }
 
 void Image::clear() {
@@ -1062,7 +1170,7 @@ int Board::min_moves(bool blue_to_move) const {
 }
 
 uint make_moves(Army const& army, Army const& army_symmetric,
-                Army const& opponent_army, ArmySet::Index opponent_index,
+                Army const& opponent_army, ArmyId opponent_id, int opponent_symmetry,
                 BoardSet& board_set, ArmySet& army_set, int available_moves) {
     uint8_t blue_to_move = available_moves & 1;
     Army const& blue = blue_to_move ? army : opponent_army;
@@ -1112,8 +1220,6 @@ uint make_moves(Army const& army, Army const& army_symmetric,
     auto off_base   = off_base_from;
     auto type_count = type_count_from;
     auto edge_count = edge_count_from;
-    auto const opponent_symmetric = opponent_army.symmetric();
-    int opponent_symmetry = cmp(opponent_army, opponent_symmetric);
     ArmyMapper mapper{army_symmetric};
 
     for (int a=0; a<ARMY; ++a) {
@@ -1229,7 +1335,7 @@ uint make_moves(Army const& army, Army const& army_symmetric,
             if (CHECK && moved_index == 0)
                 throw(logic_error("Army Insert returns 0"));
             symmetry *= opponent_symmetry;
-            if (board_set.insert(opponent_index, moved_index, symmetry)) {
+            if (board_set.insert(opponent_id, moved_index, symmetry)) {
                 if (VERBOSE) {
                     if (blue_to_move)
                         cout << Image{armyE, opponent_army};
@@ -1316,21 +1422,28 @@ void play() {
         ArmySet  army_set[3];
         board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
 
-        for (auto& board_value: board_set[0]) {
-            if (!board_value) continue;
-            ArmySet::Index moving_index, opponent_index;
-            auto symmetry = BoardSet::split(board_value, moving_index, opponent_index);
-            auto const& army          = army_set[0].at(moving_index);
-            auto const& opponent_army = army_set[1].at(opponent_index);
-            if (CHECK) {
-                army.check(__LINE__);
-                opponent_army.check(__LINE__);
+        while (board_set[0].subsets()) {
+            BoardSubSetRef subset{board_set[0]};
+
+            ArmyId opponent_id = subset.id();
+            auto const& opponent_army = army_set[1].at(opponent_id);
+            if (CHECK) opponent_army.check(__LINE__);
+            auto const opponent_symmetric = opponent_army.symmetric();
+            int opponent_symmetry = cmp(opponent_army, opponent_symmetric);
+
+            BoardSubSet const& armies = subset.armies();
+            for (auto const& value: armies) {
+                if (value == 0) continue;
+                ArmyId moving_id;
+                auto symmetry = BoardSubSet::split(value, moving_id);
+                auto const& army = army_set[0].at(moving_id);
+                if (CHECK) army.check(__LINE__);
+                Army army_symmetric = army.symmetric();
+                make_moves(symmetry ? army_symmetric : army,
+                           symmetry ? army : army_symmetric,
+                           opponent_army, opponent_id, opponent_symmetry,
+                           board_set[1], army_set[2], nr_moves);
             }
-            Army army_symmetric = army.symmetric();
-            make_moves(symmetry ? army_symmetric : army,
-                       symmetry ? army : army_symmetric,
-                       opponent_army, opponent_index,
-                       board_set[1], army_set[2], nr_moves);
         }
 
         cout << "===============================\n";
@@ -1399,27 +1512,38 @@ void my_main(int argc, char const* const* argv) {
         auto& opponent_army_set = army_set[(i+1) % 3];
         auto& moved_army_set    = army_set[(i+2) % 3];
         moved_army_set.clear();
-        uint64_t late = 0;
-        for (auto& board_value: from_board_set) {
-            if (board_value == 0) continue;
-            ArmySet::Index moving_index, opponent_index;
-            auto symmetry = BoardSet::split(board_value, moving_index, opponent_index);
-            auto const& army          = moving_army_set.  at(moving_index);
-            auto const& opponent_army = opponent_army_set.at(opponent_index);
-            if (CHECK) {
-                army.check(__LINE__);
-                opponent_army.check(__LINE__);
+        // uint64_t late = 0;
+
+        while (from_board_set.subsets()) {
+            BoardSubSetRef subset{from_board_set};
+
+            ArmyId opponent_id = subset.id();
+            auto const& opponent_army = opponent_army_set.at(opponent_id);
+            if (CHECK) opponent_army.check(__LINE__);
+            auto const opponent_symmetric = opponent_army.symmetric();
+            int opponent_symmetry = cmp(opponent_army, opponent_symmetric);
+
+            BoardSubSet const& armies = subset.armies();
+            for (auto const& value: armies) {
+                if (value == 0) continue;
+                ArmyId moving_id;
+                auto symmetry = BoardSubSet::split(value, moving_id);
+                auto const& army = moving_army_set.at(moving_id);
+                if (CHECK) army.check(__LINE__);
+                Army army_symmetric = army.symmetric();
+                // late += 
+                make_moves(symmetry ? army_symmetric : army,
+                           symmetry ? army : army_symmetric,
+                           opponent_army, opponent_id, opponent_symmetry,
+                           to_board_set, moved_army_set, nr_moves);
             }
-            Army army_symmetric = army.symmetric();
-            late += make_moves(symmetry ? army_symmetric : army,
-                               symmetry ? army : army_symmetric,
-                               opponent_army, opponent_index,
-                               to_board_set, moved_army_set, nr_moves);
         }
+
         auto stop = chrono::steady_clock::now();
         auto duration = chrono::duration_cast<Sec>(stop-start).count();
         moved_army_set.show_stats();
-        to_board_set.show_stats();
+        // to_board_set.show_stats();
+        if (MEMCHECK) cout << "nr armies in subsets=" << BoardSubSet::nr_armies() << "\n";
         cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done, " << setw(9) << to_board_set.size() << " boards / " << setw(8) << moved_army_set.size() << " armies =" << setw(4) << to_board_set.size()/(moved_army_set.size() ? moved_army_set.size() : 1) << endl;
         if (to_board_set.size() == 0) {
             auto stop_global = chrono::steady_clock::now();
