@@ -6,9 +6,14 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <sstream>
+#include <stdexcept>
+
+#include <unistd.h>
 
 #include "xxhash64.h"
 
@@ -70,6 +75,25 @@ inline uint64_t hash64(uint64_t v) {
     return murmur_mix(murmur_mix(v));
     // return murmur_mix(murmur_mix(murmur_mix(v)));
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
+}
+
+NOINLINE string get_memory(bool set_base_mem = false);
+size_t PAGE_SIZE;
+// Linux specific
+string get_memory(bool set_base_mem) {
+    stringstream out;
+
+    static size_t base_mem = 0;
+
+    size_t mem = 0;
+    std::ifstream statm;
+    statm.open("/proc/self/statm");
+    statm >> mem;
+    mem *= PAGE_SIZE;
+    if (set_base_mem) base_mem = mem;
+    else mem -= base_mem;
+    if (mem >= 1000000) out << "(" << setw(5) << mem / 1000000  << " MB)";
+    return out.str();
 }
 
 using Norm = uint8_t;
@@ -1494,6 +1518,8 @@ void my_main(int argc, char const* const* argv) {
         }
     }
 
+    get_memory(true);
+
     if (false) {
         play();
         return;
@@ -1544,7 +1570,7 @@ void my_main(int argc, char const* const* argv) {
         moved_army_set.show_stats();
         // to_board_set.show_stats();
         if (MEMCHECK) cout << "nr armies in subsets=" << BoardSubSet::nr_armies() << "\n";
-        cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done, " << setw(9) << to_board_set.size() << " boards / " << setw(8) << moved_army_set.size() << " armies =" << setw(4) << to_board_set.size()/(moved_army_set.size() ? moved_army_set.size() : 1) << endl;
+        cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << to_board_set.size() << " boards /" << setw(9) << moved_army_set.size() << " armies =" << setw(4) << to_board_set.size()/(moved_army_set.size() ? moved_army_set.size() : 1) << " " << get_memory() << endl;
         if (to_board_set.size() == 0) {
             auto stop_global = chrono::steady_clock::now();
             auto duration = chrono::duration_cast<Sec>(stop_global-start_global).count();
@@ -1559,6 +1585,12 @@ void my_main(int argc, char const* const* argv) {
 
 int main(int argc, char** argv) {
     try {
+        long tmp = sysconf(_SC_PAGE_SIZE);
+        if (tmp == -1)
+            throw(system_error(errno, system_category(),
+                               "Could not determine PAGE SIZE"));
+        PAGE_SIZE = tmp;
+
         my_main(argc, argv);
     } catch(exception& e) {
         cerr << "Exception: " << e.what() << endl;
