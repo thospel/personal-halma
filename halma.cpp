@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
@@ -57,10 +58,10 @@ bool const MEMCHECK = false;
 int const X_MAX = 16;
 int const Y_MAX = 16;
 
-int const X = 16;
-int const Y = 16;
+int const X = 8;
+int const Y = 8;
 int const MOVES = 8;
-int const ARMY = 19;
+int const ARMY = 10;
 bool const CLOSED_LOOP = false;
 bool const PASS = false;
 
@@ -197,6 +198,11 @@ class Army: public array<Coord, ARMY> {
         for (auto const& pos: *this)
             os << pos << "\n";
     }
+    Army& operator=(Army const& army) {
+        std::copy(army.begin(), army.end(), begin());
+        return *this;
+    }
+    inline Army& operator=(ArmyE const& army);
 
     friend bool operator==(Army const& l, Army const& r) {
         for (int i=0; i<ARMY; ++i)
@@ -232,6 +238,10 @@ class ArmyE: public array<Coord, ARMY+2> {
         sort(result.begin(), result.end());
         return result;
     }
+    ArmyE& operator=(ArmyE const& army) {
+        std::copy(army.begin(), army.end(), begin());
+        return *this;
+    }
     Coord* begin() { return &at(0); }
     Coord* end  () { return &at(ARMY); }
     Coord const* begin() const FUNCTIONAL { return &at(0); }
@@ -243,6 +253,11 @@ int cmp(ArmyE const& left, ArmyE const& right) {
     return memcmp(reinterpret_cast<void const *>(&left.at(0)),
                   reinterpret_cast<void const *>(&right.at(0)),
                   sizeof(Coord) * ARMY);
+}
+
+Army& Army::operator=(ArmyE const& army) {
+    std::copy(army.begin(), army.end(), begin());
+    return *this;
 }
 
 class ArmyPos: public ArmyE {
@@ -485,7 +500,7 @@ class BoardSubSet {
     bool insert(ArmyId id) {
         return _insert(id, false);
     }
-    bool insert_new(ArmyId id) {
+    inline bool insert_new(ArmyId id) {
         return _insert(id, true);
     }
     inline bool _insert(ArmyId id, bool is_resize);
@@ -568,20 +583,21 @@ void BoardSubSet::resize() {
 class BoardSet {
     friend class BoardSubSetRef;
   public:
-    BoardSet(ArmyId size = 1);
+    BoardSet(ArmyId size = 1, bool keep = false);
     ~BoardSet() {
         for (auto& subset: *this)
             subset.destroy();
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
         delete [] subsets_;
     }
-    ArmyId subsets() const PURE { return top_ - from_; }
+    ArmyId subsets() const PURE { return top_ - from(); }
     ArmyId size() const PURE { return size_; }
     void clear(ArmyId size = 1);
     BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
     BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
-    BoardSubSet const* begin() const PURE { return &subsets_[from_]; }
+    BoardSubSet const* begin() const PURE { return &subsets_[from()]; }
     BoardSubSet const* end()   const PURE { return &subsets_[top_]; }
+    ArmyId back_id() const PURE { return top_-1; }
     bool insert(ArmyId to_move, ArmyId opponent, int symmetry) {
         if (CHECK) {
             if (opponent <= 0)
@@ -605,17 +621,25 @@ class BoardSet {
         return cat(opponent).find(to_move, symmetry);
     }
     bool find(Board const& board, ArmySet const& army, ArmySet const& opponent, int nr_moves) const PURE;
-    bool solve() { return solutions_++ == 0; }
-
+    bool solve(ArmyId solution_id, Army const& solution) {
+        lock_guard<mutex> lock{exclude_};
+        if (solution_id_) return false;
+        solution_id_ = solution_id;
+        solution_ = solution;
+        return true;
+    }
+    ArmyId solution_id() const PURE { return solution_id_; }
+    Army const& solution() const PURE { return solution_; }
     // Non copyable
     BoardSet(BoardSet const&) = delete;
     BoardSet& operator=(BoardSet const&) = delete;
   private:
     ArmyId capacity() const PURE { return capacity_-1; }
-    ArmyId next() { 
+    ArmyId next() {
         lock_guard<mutex> lock{exclude_};
         return from_ < top_ ? from_++ : 0;
     }
+    ArmyId from() const PURE { return keep_ ? 1 : from_; }
     BoardSubSet&  at(ArmyId id) PURE { return subsets_[id]; }
     BoardSubSet& grow_at(ArmyId id) {
         if (id >= top_) {
@@ -632,21 +656,25 @@ class BoardSet {
         subsets_ = new BoardSubSet[capacity_*2];
         capacity_ *= 2;
         // cout << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n";
-        copy(&old_subsets[from_], &old_subsets[top_], &subsets_[1]);
-        top_ -= from_ - 1;
-        from_ = 1;
+        copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
+        if (!keep_) {
+            top_ -= from_ - 1;
+            from_ = 1;
+        }
         delete [] old_subsets;
     }
-    BoardSubSet* begin() PURE { return &subsets_[from_]; }
+    BoardSubSet* begin() PURE { return &subsets_[from()]; }
     BoardSubSet* end()   PURE { return &subsets_[top_]; }
 
     mutex exclude_;
-    atomic<ArmyId> solutions_;
+    Army solution_;
+    ArmyId solution_id_;
     ArmyId size_;
     ArmyId capacity_;
     ArmyId from_;
     ArmyId top_;
     BoardSubSet* subsets_;
+    bool const keep_;
 };
 
 class BoardSubSetRef {
@@ -658,13 +686,14 @@ class BoardSubSetRef {
 
     BoardSubSetRef(BoardSubSetRef const&) = delete;
     BoardSubSetRef& operator=(BoardSubSetRef const&) = delete;
+    void keep() { id_ = 0; }
   private:
     BoardSubSetRef(BoardSet& set, ArmyId id): subset_{set.at(id)}, id_{id} {}
     BoardSubSet& subset_;
-    ArmyId const id_;
+    ArmyId id_;
 };
 
-BoardSet::BoardSet(ArmyId size): solutions_{0}, size_{0}, capacity_{size+1}, from_{1}, top_{1} {
+BoardSet::BoardSet(ArmyId size, bool keep): solution_id_{0}, size_{0}, capacity_{size+1}, from_{1}, top_{1}, keep_{keep} {
     subsets_ = new BoardSubSet[capacity_];
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
@@ -674,7 +703,7 @@ void BoardSet::clear(ArmyId size) {
         subset.destroy();
     from_ = top_ = 1;
     size_ = 0;
-    solutions_ = 0;
+    solution_id_ = 0;
     if (true) {
         auto old_subsets = subsets_;
         ++size;
@@ -692,9 +721,11 @@ class Image {
     inline Image(Army const& blue, Army const& red);
     inline Image(ArmyE const& blue, Army const& red);
     inline Image(Army const& blue, ArmyE const& red);
+    inline Image(Army const& army, Color color);
+    inline Image(ArmyE const& army, Color color);
     inline explicit Image(Board const& board): Image{board.blue(), board.red()} {}
-    inline explicit Image(Army const& blue);
-    inline explicit Image(ArmyE const& blue);
+    inline explicit Image(Army  const& blue): Image{blue, BLUE} {}
+    inline explicit Image(ArmyE const& blue): Image{blue, BLUE} {}
     void print(ostream& os) const;
     inline void clear();
     Color get(Coord const& pos) const PURE { return board_[pos.index()]; }
@@ -719,14 +750,14 @@ Image::Image(ArmyE const& blue, Army const& red) : Image{} {
         set(pos, RED);
 }
 
-Image::Image(Army const& blue) : Image{} {
-    for (auto const& pos: blue)
-        set(pos, BLUE);
+Image::Image(Army const& army, Color color) : Image{} {
+    for (auto const& pos: army)
+        set(pos, color);
 }
 
-Image::Image(ArmyE const& blue) : Image{} {
-    for (auto const& pos: blue)
-        set(pos, BLUE);
+Image::Image(ArmyE const& army, Color color) : Image{} {
+    for (auto const& pos: army)
+        set(pos, color);
 }
 
 Image::Image(Army const& blue, ArmyE const& red) : Image{} {
@@ -768,6 +799,24 @@ inline ostream& operator<<(ostream& os, Board const& board) {
     return os;
 }
 
+template<class T>
+class BoardTable {
+  public:
+    T&       operator[](Coord const& pos)       PURE { return data_[pos.pos()];}
+    T const& operator[](Coord const& pos) const PURE { return data_[pos.pos()];}
+    void fill(T value) { std::fill(data_.begin(), data_.end(), value); }
+    void set(Army const& army, T const& value) {
+        for (auto const& pos: army)
+            (*this)[pos] = value;
+    }
+    void set(ArmyE const& army, T const& value) {
+        for (auto const& pos: army)
+            (*this)[pos] = value;
+    }
+  private:
+    array<T, Coord::MAX+1> data_;
+};
+
 using Moves = array<Diff, MOVES>;
 using TypeCount = array<int, 4>;
 class Tables {
@@ -780,7 +829,7 @@ class Tables {
         return distance_[right.pos() - left.pos() + Coord::MAX];
     }
     inline Norm distance_base_red(Coord const& pos) const PURE {
-        return distance_base_red_[pos.pos()];
+        return distance_base_red_[pos];
     }
     inline Nbits Ndistance(Coord const& left, Coord const& right) const PURE {
         return NLEFT >> distance(left, right);
@@ -789,16 +838,16 @@ class Tables {
         return NLEFT >> distance_base_red(pos);
     }
     inline uint8_t base_red(Coord const& pos) const PURE {
-        return base_red_[pos.pos()];
+        return base_red_[pos];
     }
     inline uint8_t edge_red(Coord const& pos) const PURE {
-        return edge_red_[pos.pos()];
+        return edge_red_[pos];
     }
     inline uint8_t type(Coord const& pos) const PURE {
-        return type_[pos.pos()];
+        return type_[pos];
     }
     inline Coord symmetric(Coord const& pos) const PURE {
-        return symmetric_[pos.pos()];
+        return symmetric_[pos];
     }
     // The folowing methods in Tables really only PURE. However they are only
     // ever applied to the constant tables so the access global memory that
@@ -842,13 +891,13 @@ class Tables {
     TypeCount type_count_;
     Moves moves_;
     Norm infinity_;
-    array<Coord, Coord::MAX+1> symmetric_;
+    BoardTable<Coord> symmetric_;
     array<Norm, 2*Coord::MAX+1> norm_;
     array<Norm, 2*Coord::MAX+1> distance_;
-    array<Norm, Coord::MAX+1> distance_base_red_;
-    array<uint8_t, Coord::MAX+1> base_red_;
-    array<uint8_t, Coord::MAX+1> edge_red_;
-    array<uint8_t, Coord::MAX+1> type_;
+    BoardTable<Norm> distance_base_red_;
+    BoardTable<uint8_t> base_red_;
+    BoardTable<uint8_t> edge_red_;
+    BoardTable<uint8_t> type_;
     Board start_;
     Image start_image_;
 };
@@ -883,7 +932,7 @@ Tables::Tables() {
     ++infinity_;
 
     // Fill base
-    fill(base_red_.begin(), base_red_.end(), 0);
+    base_red_.fill(0);
     auto& red  = start_.red();
     auto& blue = start_.blue();
     int d = 0;
@@ -898,7 +947,7 @@ Tables::Tables() {
         while (n--) {
             blue[i] = Coord{x, y};
             red[i]  = Coord{X-1-x, Y-1-y};
-            base_red_[red[i].pos()] = 1;
+            base_red_[red[i]] = 1;
             ++i;
             --x;
             ++y;
@@ -920,10 +969,10 @@ Tables::Tables() {
                 Norm d1 = norm(pos, red[i]);
                 if (d1 < d) d = d1;
             }
-            distance_base_red_[pos.pos()] = d > 2 ? d-2 : 0;
-            edge_red_[pos.pos()] = d == 1;
-            type_[pos.pos()] = y_type + x % 2;
-            symmetric_[pos.pos()] = Coord(y, x);
+            distance_base_red_[pos] = d > 2 ? d-2 : 0;
+            edge_red_[pos] = d == 1;
+            type_[pos] = y_type + x % 2;
+            symmetric_[pos] = Coord(y, x);
         }
     }
     for (int x=-1; x <= X; ++x) {
@@ -1090,7 +1139,7 @@ ArmyId ArmySet::_insert(ArmyE const& value, ArmyId hash, bool is_resize) {
             if (!is_resize) stats_update(offset);
             values_[pos] = used1_;
             auto& v = armies_[used1_];
-            copy(value.begin(), value.end(), v.begin());
+            v = value;
             // cout << "Found empty\n";
             return used1_++;
         }
@@ -1215,185 +1264,13 @@ int Board::min_moves(bool blue_to_move) const {
     return needed_moves;
 }
 
-uint make_moves(Army const& army, Army const& army_symmetric,
-                Army const& opponent_army, ArmyId opponent_id, int opponent_symmetry,
-                BoardSet& board_set, ArmySet& army_set, int available_moves) {
-    uint8_t blue_to_move = available_moves & 1;
-    Army const& blue = blue_to_move ? army : opponent_army;
-    Army const& red  = blue_to_move ? opponent_army : army;
-    Image image{blue, red};
-    if (VERBOSE) cout << "From: " << available_moves << "\n" << image;
-
-    Nbits Ndistance_army, Ndistance_red;
-    Ndistance_army = Ndistance_red = NLEFT >> tables.infinity();
-    int off_base_from = 0;
-    TypeCount type_count_from = tables.type_count();
-    int edge_count_from = 0;
-    for (auto const& b: blue) {
-        --type_count_from[tables.type(b)];
-        if (tables.base_red(b)) continue;
-        ++off_base_from;
-        edge_count_from += tables.edge_red(b);
-        Ndistance_red |= tables.Ndistance_base_red(b);
-        for (auto const& r: red)
-            Ndistance_army |= tables.Ndistance(r, b);
-    }
-    int slides = 0;
-    for (auto tc: type_count_from)
-        slides += max(tc, 0);
-    int distance_army = __builtin_clz(Ndistance_army);
-    int distance_red  = __builtin_clz(Ndistance_red);
-
-    if (VERBOSE) {
-        cout << "Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
-        cout << "Distance army=" << distance_army << "\n";
-        cout << "Distance red =" << distance_red  << "\n";
-        cout << "Off base=" << off_base_from << "\n";
-    }
-    int pre_moves = min((distance_army + blue_to_move) / 2, distance_red);
-    int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
-    int needed_moves = 2*blue_moves - blue_to_move;
-    if (VERBOSE)
-        cout << "Needed moves=" << static_cast<int>(needed_moves) << "\n";
-    if (needed_moves > available_moves) {
-        if (VERBOSE)
-            cout << "Late prune " << needed_moves << " > " << available_moves << "\n";
-        return 1;
-    }
-    --available_moves;
-
-    ArmyPos armyE, armyESymmetric;
-    auto off_base   = off_base_from;
-    auto type_count = type_count_from;
-    auto edge_count = edge_count_from;
-    ArmyMapper mapper{army_symmetric};
-
-    for (int a=0; a<ARMY; ++a) {
-        armyE.copy(army, a);
-        auto const soldier = army[a];
-        image.set(soldier, EMPTY);
-        armyESymmetric.copy(army_symmetric, mapper.map(soldier));
-        if (blue_to_move) {
-            off_base = off_base_from;
-            off_base += tables.base_red(soldier);
-            type_count = type_count_from;
-            ++type_count[tables.type(soldier)];
-            edge_count = edge_count_from;
-            edge_count -= tables.edge_red(soldier);
-        }
-
-        // Jumps
-        array<Coord, ARMY*2*MOVES+(1+MOVES)> reachable;
-        reachable[0] = soldier;
-        int nr_reachable = 1;
-        if (!CLOSED_LOOP) image.set(soldier, COLORS);
-        for (int i=0; i < nr_reachable; ++i) {
-            for (auto move: tables.moves()) {
-                Coord jumpee{reachable[i], move};
-                if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
-                Coord target{jumpee, move};
-                if (image.get(target) != EMPTY) continue;
-                image.set(target, COLORS);
-                reachable[nr_reachable++] = target;
-            }
-        }
-        for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
-            image.set(reachable[i], EMPTY);
-
-        // Step moves
-        for (auto move: tables.moves()) {
-            Coord target{soldier, move};
-            if (image.get(target) != EMPTY) continue;
-            reachable[nr_reachable++] = target;
-        }
-
-        for (int i=1; i < nr_reachable; ++i) {
-            // armyZ[a] = CoordZ{reachable[i]};
-            if (false) {
-                image.set(reachable[i], RED - blue_to_move);
-                cout << image;
-                image.set(reachable[i], EMPTY);
-            }
-            auto val = reachable[i];
-
-            Nbits Ndistance_a = Ndistance_army;
-            if (blue_to_move) {
-                Nbits Ndistance_r = Ndistance_red;
-                auto off    = off_base;
-                auto type_c = type_count;
-                auto edge_c = edge_count;
-
-                if (tables.base_red(val)) {
-                    --off;
-                    if (off == 0) {
-                        if (board_set.solve()) {
-                            image.set(reachable[i], RED - blue_to_move);
-                            cout << "==================================\n";
-                            cout << image << "Solution!" << endl;
-                            image.set(reachable[i], EMPTY);
-                        }
-                        goto SOLUTION;
-                    }
-                } else {
-                    edge_c += tables.edge_red(val);
-                    Ndistance_r |=  tables.Ndistance_base_red(val);
-                    for (auto const& r: red)
-                        Ndistance_a |= tables.Ndistance(val, r);
-                }
-                int distance_red  = __builtin_clz(Ndistance_red);
-                int distance_army = __builtin_clz(Ndistance_a);
-                int pre_moves = min(distance_army / 2, distance_red);
-                --type_c[tables.type(val)];
-                int slides = 0;
-                for (auto tc: type_c)
-                    slides += max(tc, 0);
-                int blue_moves = pre_moves + max(slides-pre_moves-edge_c, 0) + off;
-                needed_moves = 2*blue_moves;
-            } else {
-                // We won't notice an increase in army distance, but these
-                // are rare and will be discovered in the late prune
-                for (auto const& b: blue) {
-                    if (tables.base_red(b)) continue;
-                    Ndistance_a |= tables.Ndistance(val, b);
-                }
-                int distance_army = __builtin_clz(Ndistance_a);
-                int pre_moves = min((distance_army + 1) / 2, distance_red);
-                int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
-                needed_moves = 2*blue_moves - 1;
-            }
-            if (needed_moves > available_moves) {
-                if (VERBOSE) {
-                    cout << "Move " << soldier << " to " << val << "\n";
-                    cout << "Prune " << needed_moves << " > " << available_moves << "\n";
-                }
-                continue;
-            }
-
-          SOLUTION:
-            armyE.store(val);
-            // cout << "Final Set pos " << pos << armyE[pos] << "\n";
-            // cout << armyE << "----------------\n";
-            if (CHECK) armyE.check(__LINE__);
-            armyESymmetric.store(val.symmetric());
-            if (CHECK) armyESymmetric.check(__LINE__);
-            int symmetry = cmp(armyE, armyESymmetric);
-            auto moved_index = army_set.insert(symmetry >= 0 ? armyE : armyESymmetric);
-            if (CHECK && moved_index == 0)
-                throw(logic_error("Army Insert returns 0"));
-            symmetry *= opponent_symmetry;
-            if (board_set.insert(opponent_id, moved_index, symmetry)) {
-                if (VERBOSE) {
-                    if (blue_to_move)
-                        cout << Image{armyE, opponent_army};
-                    else
-                        cout << Image{opponent_army, armyE};
-                }
-            }
-        }
-
-        image.set(soldier, RED - blue_to_move);
-    }
-    return 0;
+void Board::move(Move const& move_, bool blue_to_move) {
+    auto& army = blue_to_move ? blue() : red();
+    auto pos = equal_range(army.begin(), army.end(), move_.from);
+    if (pos.first == pos.second)
+        throw(logic_error("Move not found"));
+    *pos.first = move_.to;
+    sort(army.begin(), army.end());
 }
 
 void Board::move(Move const& move_) {
@@ -1410,15 +1287,6 @@ void Board::move(Move const& move_) {
         return;
     }
     throw(logic_error("Move not found"));
-}
-
-void Board::move(Move const& move_, bool blue_to_move) {
-    auto& army = blue_to_move ? blue() : red();
-    auto pos = equal_range(army.begin(), army.end(), move_.from);
-    if (pos.first == pos.second)
-        throw(logic_error("Move not found"));
-    *pos.first = move_.to;
-    sort(army.begin(), army.end());
 }
 
 // The classic 30 solution
@@ -1456,12 +1324,41 @@ Move const game30[] = {
     {{7,8}, {1,2}},
 };
 
-uint64_t _make_all_moves(BoardSet& from_board_set,
-                        BoardSet& to_board_set,
-                        ArmySet const& moving_army_set,
-                        ArmySet const& opponent_army_set,
-                        ArmySet& moved_army_set,
-                        int nr_moves) {
+// When this is used it should not be accessed.
+// Make it point to bad memory to force mayhem if it is
+BoardTable<uint8_t>const *dummy_demand = nullptr;
+
+// gcc is unable to inline the huge body if it done as a function
+// Hack around it using the preprocessor
+NOINLINE
+uint make_moves(Army const& army, Army const& army_symmetric,
+                Army const& opponent_army, ArmyId opponent_id, int opponent_symmetry,
+                BoardSet& board_set, ArmySet& army_set, int available_moves) {
+#define red_demand (*dummy_demand)
+#define demand     false
+#include "moves.cpp"
+#undef demand
+#undef red_demand
+}
+
+NOINLINE
+uint make_moves_backtrack(Army const& army, Army const& army_symmetric,
+                          Army const& opponent_army, ArmyId opponent_id, int opponent_symmetry,
+                          BoardSet& board_set, ArmySet& army_set, int available_moves, BoardTable<uint8_t> const& red_demand) {
+#define demand     true
+#include "moves.cpp"
+#undef demand
+}
+
+static inline
+uint64_t _thread_make_all_moves(BoardSet& from_board_set,
+                                BoardSet& to_board_set,
+                                ArmySet const& moving_army_set,
+                                ArmySet const& opponent_army_set,
+                                ArmySet& moved_army_set,
+                                int nr_moves,
+                                bool backtrack,
+                                BoardTable<uint8_t> const& red_demand) {
     uint64_t late = 0;
     while (true) {
         BoardSubSetRef subset{from_board_set};
@@ -1481,37 +1378,124 @@ uint64_t _make_all_moves(BoardSet& from_board_set,
             auto const& army = moving_army_set.at(moving_id);
             if (CHECK) army.check(__LINE__);
             Army army_symmetric = army.symmetric();
-            late += make_moves(symmetry ? army_symmetric : army,
-                               symmetry ? army : army_symmetric,
-                               opponent_army, opponent_id, opponent_symmetry,
-                               to_board_set, moved_army_set, nr_moves);
+            late += backtrack ?
+                make_moves_backtrack
+                (symmetry ? army_symmetric : army,
+                 symmetry ? army : army_symmetric,
+                 opponent_army, opponent_id, opponent_symmetry,
+                 to_board_set, moved_army_set, nr_moves,
+                 red_demand) :
+                make_moves
+                (symmetry ? army_symmetric : army,
+                 symmetry ? army : army_symmetric,
+                 opponent_army, opponent_id, opponent_symmetry,
+                 to_board_set, moved_army_set, nr_moves);
         }
+        if (backtrack) subset.keep();
     }
     return late;
 }
 
-uint64_t make_all_moves(BoardSet& from_board_set,
+static NOINLINE
+uint64_t thread_make_all_moves(BoardSet& from_board_set,
                         BoardSet& to_board_set,
                         ArmySet const& moving_army_set,
                         ArmySet const& opponent_army_set,
                         ArmySet& moved_army_set,
-                        int nr_moves, uint nr_threads = 0) {
+                        int nr_moves) {
+    return _thread_make_all_moves(from_board_set, to_board_set,
+                            moving_army_set, opponent_army_set, moved_army_set,
+                            nr_moves, false, *dummy_demand);
+}
+
+static NOINLINE
+uint64_t thread_make_all_moves_backtrack(BoardSet& from_board_set,
+                                   BoardSet& to_board_set,
+                                   ArmySet const& moving_army_set,
+                                   ArmySet const& opponent_army_set,
+                                   ArmySet& moved_army_set,
+                                   int nr_moves,
+                                   BoardTable<uint8_t> const& red_demand) {
+    return _thread_make_all_moves(from_board_set, to_board_set,
+                            moving_army_set, opponent_army_set, moved_army_set,
+                            nr_moves, true, red_demand);
+}
+
+uint64_t _make_all_moves(BoardSet& from_board_set,
+                         BoardSet& to_board_set,
+                         ArmySet const& moving_army_set,
+                         ArmySet const& opponent_army_set,
+                         ArmySet& moved_army_set,
+                         int nr_moves,
+                         bool demand,
+                         BoardTable<uint8_t> const& red_demand,
+                         uint nr_threads = 0) {
+    auto start = chrono::steady_clock::now();
+
     if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
     vector<future<uint64_t>> results;
-    for (uint i=1; i < nr_threads; ++i)
-        results.emplace_back
-            (async
-             (launch::async, _make_all_moves, 
-              ref(from_board_set), ref(to_board_set),
-              ref(moving_army_set), ref(opponent_army_set), ref(moved_army_set),
-              nr_moves));
-    uint64_t late = _make_all_moves
-        (from_board_set, to_board_set,
-         moving_army_set, opponent_army_set, moved_army_set,
-         nr_moves);
-    for (auto& result: results)
-        late += result.get();
+    uint64_t late;
+    if (demand) {
+        for (uint i=1; i < nr_threads; ++i)
+            results.emplace_back
+                (async
+                 (launch::async, thread_make_all_moves_backtrack,
+                  ref(from_board_set), ref(to_board_set),
+                  ref(moving_army_set), ref(opponent_army_set), ref(moved_army_set),
+                  nr_moves, ref(red_demand)));
+        late = thread_make_all_moves_backtrack
+            (from_board_set, to_board_set,
+             moving_army_set, opponent_army_set, moved_army_set,
+             nr_moves, red_demand);
+    } else {
+        for (uint i=1; i < nr_threads; ++i)
+            results.emplace_back
+                (async
+                 (launch::async, thread_make_all_moves,
+                  ref(from_board_set), ref(to_board_set),
+                  ref(moving_army_set), ref(opponent_army_set), ref(moved_army_set),
+                  nr_moves));
+        late = thread_make_all_moves
+            (from_board_set, to_board_set,
+             moving_army_set, opponent_army_set, moved_army_set,
+             nr_moves);
+    }
+    for (auto& result: results) late += result.get();
+
+    auto stop = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<Sec>(stop-start).count();
+    moved_army_set.show_stats();
+    // to_board_set.show_stats();
+    if (MEMCHECK) cout << "nr armies in subsets=" << BoardSubSet::nr_armies() << "\n";
+    cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << to_board_set.size() << " boards /" << setw(9) << moved_army_set.size() << " armies =" << setw(6) << to_board_set.size()/(moved_army_set.size() ? moved_army_set.size() : 1) << " " << get_memory() << endl;
+
     return late;
+}
+
+NOINLINE uint64_t
+make_all_moves(BoardSet& from_board_set,
+               BoardSet& to_board_set,
+               ArmySet const& moving_army_set,
+               ArmySet const& opponent_army_set,
+               ArmySet& moved_army_set,
+               int nr_moves, uint nr_threads = 0) {
+    return _make_all_moves(from_board_set, to_board_set,
+                           moving_army_set, opponent_army_set, moved_army_set,
+                           nr_moves, false, *dummy_demand, nr_threads);
+}
+
+NOINLINE uint64_t
+make_all_moves_backtrack(BoardSet& from_board_set,
+                         BoardSet& to_board_set,
+                         ArmySet const& moving_army_set,
+                         ArmySet const& opponent_army_set,
+                         ArmySet& moved_army_set,
+                         int nr_moves,
+                         BoardTable<uint8_t> const& red_demand,
+                         uint nr_threads = 0) {
+    return _make_all_moves(from_board_set, to_board_set,
+                           moving_army_set, opponent_army_set, moved_army_set,
+                           nr_moves, true, red_demand, nr_threads);
 }
 
 void play() {
@@ -1541,8 +1525,132 @@ void play() {
     }
 }
 
+bool solve(Board const& board, int nr_moves, Army& red_army) {
+    auto start_solve = chrono::steady_clock::now();
+    array<BoardSet, 2> board_set;
+    array<ArmySet, 3>  army_set;
+    board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
+    cout << setw(14) << "set " << nr_moves << " done" << endl;
+    auto const& final_to_board_set   = board_set[nr_moves % 2];
+    for (int i=0; nr_moves>0; --nr_moves, ++i) {
+        auto& from_board_set = board_set[ i    % 2];
+        auto& to_board_set   = board_set[(i+1) % 2];
+        to_board_set.clear();
+        auto const& moving_army_set   = army_set[ i    % 3];
+        auto const& opponent_army_set = army_set[(i+1) % 3];
+        auto& moved_army_set    = army_set[(i+2) % 3];
+        moved_army_set.clear();
+        // uint64_t late = 0;
+
+        make_all_moves(from_board_set, to_board_set,
+                       moving_army_set, opponent_army_set, moved_army_set,
+                       nr_moves);
+
+        if (to_board_set.size() == 0) {
+            auto stop_solve = chrono::steady_clock::now();
+            auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+            cout << setw(6) << duration << " s, no solution" << endl;
+            return false;
+        }
+    }
+    auto stop_solve = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+    cout << setw(6) << duration << " s, solved" << endl;
+
+    ArmyId red_id = final_to_board_set.solution_id();
+    if (red_id == 0) throw(logic_error("Solved without solution"));
+    red_army = final_to_board_set.solution();
+    return true;
+}
+
+void backtrack(Board const& board, int nr_moves,
+               Army const& red_army) {
+    cout << "Start backtracking\n";
+
+    auto start_solve = chrono::steady_clock::now();
+    vector<unique_ptr<BoardSet>> board_set;
+    board_set.reserve(nr_moves+1);
+    vector<unique_ptr<ArmySet>>  army_set;
+    army_set.reserve(nr_moves+2);
+
+    board_set.emplace_back(new BoardSet(1, true));
+    army_set.emplace_back(new ArmySet);
+    army_set.emplace_back(new ArmySet);
+    board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves);
+
+    BoardTable<uint8_t> red_demand{};
+    red_demand.fill(0);
+    red_demand.set(red_army, 2);
+
+    cout << setw(14) << "set " << nr_moves << " done" << endl;
+    for (int i=0; nr_moves>0; --nr_moves, ++i) {
+        auto& from_board_set = *board_set[i];
+        board_set.emplace_back(new BoardSet(1, true));
+        auto& to_board_set   = *board_set[i+1];
+        auto const& moving_army_set   = *army_set[i];
+        auto const& opponent_army_set = *army_set[i+1];
+        army_set.emplace_back(new ArmySet);
+        auto& moved_army_set    = *army_set[i+2];
+
+        make_all_moves_backtrack
+            (from_board_set, to_board_set,
+             moving_army_set, opponent_army_set, moved_army_set,
+             nr_moves, red_demand);
+
+        if (to_board_set.size() == 0)
+            throw(logic_error("No solution while backtracking"));
+    }
+    auto stop_solve = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+    cout << setw(6) << duration << " s, backtrack tables built" << endl;
+
+    // Do some sanity checking
+    BoardSet const& final_board_set = *board_set.back();
+    ArmySet const& final_army_set = *army_set.back();
+
+    // There should be only 1 blue army completely on the red base
+    if (final_army_set.size() != 1)
+        throw(logic_error("More than 1 final blue army"));
+    ArmyId blue_id = final_board_set.back_id();
+    if (blue_id != 1)
+        throw(logic_error("Unexpected blue army id"));
+
+    // There should be only 1 final board
+    if (final_board_set.size() != 1)
+        throw(logic_error("More than 1 solution while backtracking"));
+    BoardSubSet const& final_subset = final_board_set.cat(1);
+    if (final_subset.size() != 1)
+        throw(logic_error("More than 1 final red army"));
+    ArmyId red_value = 0;
+    for (ArmyId value: final_subset)
+        if (value != 0) {
+            red_value = value;
+            break;
+        }
+    if (red_value == 0)
+        throw(logic_error("Could not find final red army"));
+    ArmyId red_id;
+    auto symmetry = BoardSubSet::split(red_value, red_id);
+    // Backtracking forced the final red army to be the target red_army
+    // So there can only be 1 final red army and it therefore has id 1
+    if (red_id != 1)
+        throw(logic_error("Unexpected red army id"));
+    // And it was stored without flip
+    if (symmetry)
+        throw(logic_error("Unexpected red army symmetry"));
+    if (true) {
+        cout << "Blue: " << blue_id << ", Red: " << red_id << ", symmetry=" << symmetry << "\n";
+        cout << Image{final_army_set.at(blue_id)};
+    }
+
+    //BoardSet work_board_set[2];
+    //BoardSet const* from = &final_board_set;
+    //BoardSet* to         = &work_board_set[1];
+    //{
+    //}
+}
+
 void my_main(int argc, char const* const* argv) {
-    auto start_global = chrono::steady_clock::now();
     auto start_board = tables.start();
     if (false) {
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
@@ -1564,6 +1672,7 @@ void my_main(int argc, char const* const* argv) {
         cout << "Red Base type count:\n";
         tables.print_type_count();
     }
+    cout << start_board;
     int needed_moves = start_board.min_moves();
     cout << "Minimum possible number of moves: " << needed_moves << "\n";
     int nr_moves = needed_moves;
@@ -1583,42 +1692,9 @@ void my_main(int argc, char const* const* argv) {
         play();
         return;
     }
-
-    BoardSet board_set[2];
-    ArmySet  army_set[3];
-    board_set[0].insert(start_board, army_set[0], army_set[1], nr_moves);
-    cout << setw(14) << "set " << nr_moves << " done" << endl;;
-    for (int i=0; nr_moves>0; --nr_moves, ++i) {
-        auto start = chrono::steady_clock::now();
-        auto& from_board_set = board_set[ i    % 2];
-        auto& to_board_set   = board_set[(i+1) % 2];
-        to_board_set.clear();
-        auto const& moving_army_set   = army_set[ i    % 3];
-        auto const& opponent_army_set = army_set[(i+1) % 3];
-        auto& moved_army_set    = army_set[(i+2) % 3];
-        moved_army_set.clear();
-        // uint64_t late = 0;
-
-        make_all_moves(from_board_set, to_board_set,
-                       moving_army_set, opponent_army_set, moved_army_set,
-                       nr_moves);
-
-        auto stop = chrono::steady_clock::now();
-        auto duration = chrono::duration_cast<Sec>(stop-start).count();
-        moved_army_set.show_stats();
-        // to_board_set.show_stats();
-        if (MEMCHECK) cout << "nr armies in subsets=" << BoardSubSet::nr_armies() << "\n";
-        cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << to_board_set.size() << " boards /" << setw(9) << moved_army_set.size() << " armies =" << setw(6) << to_board_set.size()/(moved_army_set.size() ? moved_army_set.size() : 1) << " " << get_memory() << endl;
-        if (to_board_set.size() == 0) {
-            auto stop_global = chrono::steady_clock::now();
-            auto duration = chrono::duration_cast<Sec>(stop_global-start_global).count();
-            cout << setw(6) << duration << " s, no solution" << endl;
-            return;
-        }
-    }
-    auto stop_global = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<Sec>(stop_global-start_global).count();
-    cout << setw(6) << duration << " s, solved" << endl;
+    Army red_army;
+    if (!solve(start_board, nr_moves, red_army)) return;
+    backtrack(start_board, nr_moves, red_army);
 }
 
 int main(int argc, char** argv) {
