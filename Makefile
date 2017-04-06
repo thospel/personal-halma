@@ -1,7 +1,7 @@
 # SANITIZE=-fsanitize=undefined
 SANITIZE=
 CXXFLAGS  = -Wall -Ofast -march=native -fstrict-aliasing -std=c++11 -g -pthread $(SANITIZE)
-LDFLAGS = -g $(SANITIZE)
+LDFLAGS = -g -pthread $(SANITIZE)
 CXX := ccache $(CXX)
 
 all: halma
