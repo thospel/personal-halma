@@ -2,7 +2,7 @@
 # SANITIZE= -fsanitize=thread
 SANITIZE=
 
-CXXFLAGS  = -Wall -Winline --param inline-unit-growth=100 --param max-inline-insns-single=100 -fno-math-errno -funsafe-math-optimizations -ffinite-math-only -ffast-math -fno-signed-zeros -fno-trapping-math -Ofast -march=native -fstrict-aliasing -std=c++11 -g -pthread $(SANITIZE)
+CXXFLAGS  = -Wall -Winline --param inline-unit-growth=200 --param large-function-growth=1000 -fno-math-errno -funsafe-math-optimizations -ffinite-math-only -ffast-math -fno-signed-zeros -fno-trapping-math -Ofast -march=native -fstrict-aliasing -std=c++11 -g -pthread $(SANITIZE)
 LDFLAGS = -g -pthread $(SANITIZE)
 CXX := ccache $(CXX)
 

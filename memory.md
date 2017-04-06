@@ -139,44 +139,44 @@ int const ARMY = 10;
      0 s, no solution
 
           set 24 done (hp)
-     0 s, set 23 done,        13 boards /       13 armies =   1 (   92 MB)
-     0 s, set 22 done,       290 boards /       13 armies =  22 (  226 MB)
-     0 s, set 21 done,      4162 boards /      215 armies =  19 (  226 MB)
-     0 s, set 20 done,      6246 boards /       59 armies = 105 (  226 MB)
-     0 s, set 19 done,     24793 boards /     2671 armies =   9 (  226 MB)
-     0 s, set 18 done,      6765 boards /      582 armies =  11 (  226 MB)
-     0 s, set 17 done,    213050 boards /    19152 armies =  11 (  228 MB)
-     0 s, set 16 done,     50741 boards /     1592 armies =  31 (  228 MB)
-     0 s, set 15 done,   1584525 boards /    88691 armies =  17 (  235 MB)
-     1 s, set 14 done,    199987 boards /     4121 armies =  48 (  234 MB)
-     3 s, set 13 done,   6438524 boards /   558226 armies =  11 (  278 MB)
-     6 s, set 12 done,    705433 boards /     6473 armies = 108 (  277 MB)
-    17 s, set 11 done,  22761557 boards /  2628730 armies =   8 (  494 MB)
-    21 s, set 10 done,   1689597 boards /     6803 armies = 248 (  479 MB)
-    53 s, set  9 done,  54150684 boards /  9769401 armies =   5 ( 1402 MB)
-    50 s, set  8 done,   2521128 boards /     4971 armies = 507 ( 1346 MB)
-    98 s, set  7 done,  83525287 boards / 25373265 armies =   3 ( 3299 MB)
-    78 s, set  6 done,   2570720 boards /     2262 armies =1136 ( 3067 MB)
-   108 s, set  5 done,  91806209 boards / 41017798 armies =   2 ( 5157 MB)
-    87 s, set  4 done,   1951416 boards /      447 armies =4365 ( 3953 MB)
-    87 s, set  3 done,  72123986 boards / 43675318 armies =   1 ( 5161 MB)
-    70 s, set  2 done,    872410 boards /       30 armies =29080 ( 3953 MB)
-    35 s, set  1 done,  30734946 boards / 24587811 armies =   1 ( 4624 MB)
+     0 s, set 23 done,        13 boards /       13 armies =     1 (   92 MB)
+     0 s, set 22 done,       290 boards /       13 armies =    22 (   92 MB)
+     0 s, set 21 done,      4162 boards /      215 armies =    19 (  226 MB)
+     0 s, set 20 done,      6246 boards /       59 armies =   105 (  226 MB)
+     0 s, set 19 done,     24793 boards /     2671 armies =     9 (  226 MB)
+     0 s, set 18 done,      6765 boards /      582 armies =    11 (  226 MB)
+     0 s, set 17 done,    213050 boards /    19152 armies =    11 (  227 MB)
+     0 s, set 16 done,     50741 boards /     1592 armies =    31 (  227 MB)
+     0 s, set 15 done,   1584525 boards /    88691 armies =    17 (  232 MB)
+     1 s, set 14 done,    199987 boards /     4121 armies =    48 (  232 MB)
+     3 s, set 13 done,   6438524 boards /   558226 armies =    11 (  261 MB)
+     7 s, set 12 done,    705433 boards /     6473 armies =   108 (  258 MB)
+    14 s, set 11 done,  22761557 boards /  2628730 armies =     8 (  367 MB)
+    24 s, set 10 done,   1689597 boards /     6803 armies =   248 (  349 MB)
+    45 s, set  9 done,  54150684 boards /  9769401 armies =     5 (  921 MB)
+    59 s, set  8 done,   2521128 boards /     4971 armies =   507 (  845 MB)
+    80 s, set  7 done,  83525287 boards / 25373265 armies =     3 ( 2301 MB)
+    90 s, set  6 done,   2570720 boards /     2262 armies =  1136 ( 1999 MB)
+    95 s, set  5 done,  91806209 boards / 41017798 armies =     2 ( 3372 MB)
+    97 s, set  4 done,   1951416 boards /      447 armies =  4365 ( 2097 MB)
+    76 s, set  3 done,  72123986 boards / 43675318 armies =     1 ( 3305 MB)
+    76 s, set  2 done,    872410 boards /       30 armies = 29080 ( 1700 MB)
+    32 s, set  1 done,  30734946 boards / 24587811 armies =     1 ( 2839 MB)
 ==================================
 +------------------+
 |. . . . . . . . . |
-|. . . . . . . . . |
-|. . . . . . . . . |
-|. X . . . . . X . |
-|. . . . X . . X . |
-|. . . X . . X . O |
-|. . . . . X . O O |
-|. . . . X X O O O |
-|. . . . X O O O O |
+|. . . X . . . . . |
+|. . . . . X X . . |
+|. . X . . . . . . |
+|X . . . . . . X . |
+|. . . . X X . . O |
+|. . . . . . X O O |
+|. . . . . X O O O |
+|. . . . . O O O O |
 +------------------+
 Solution!
-    28 s, set  0 done,    113603 boards /        1 armies =113603 ( 3416 MB)
-   752 s, solved
+    32 s, set  0 done,    113603 boards /        1 armies =113603 ( 1436 MB)
+   740 s, solved
 
 int const X = 8;
 int const Y = 8;
@@ -294,58 +294,60 @@ int const Y = 16;
 int const MOVES = 8;
 int const ARMY = 19;
 
-Set 45 done
-Set 44 done,         2 boards,        2 armies,     0 s, late prune=0
-Set 43 done,         4 boards,        4 armies,     0 s, late prune=0
-Set 42 done,         0 boards,        0 armies,     0 s, late prune=0
+          set 45 done (hp)
+     0 s, set 44 done,         2 boards /        2 armies =     1 (   92 MB)
+     0 s, set 43 done,         4 boards /        4 armies =     1 (   92 MB)
+     0 s, set 42 done,         0 boards /        0 armies =     0 (   92 MB)
      0 s, no solution
 
-Set 46 done
-Set 45 done,        21 boards,       21 armies,     0 s, late prune=0
-Set 44 done,       221 boards,       15 armies,     0 s, late prune=0
-Set 43 done,       828 boards,      267 armies,     0 s, late prune=2
-Set 42 done,       290 boards,       16 armies,     0 s, late prune=19
-Set 41 done,       861 boards,      193 armies,     0 s, late prune=0
-Set 40 done,       420 boards,        5 armies,     0 s, late prune=0
-Set 39 done,      1097 boards,      283 armies,     0 s, late prune=0
-Set 38 done,         0 boards,        0 armies,     0 s, late prune=0
+          set 46 done (hp)
+     0 s, set 45 done,        21 boards /       21 armies =     1 (   92 MB)
+     0 s, set 44 done,       221 boards /       15 armies =    14 (   92 MB)
+     0 s, set 43 done,       828 boards /      267 armies =     3 (   92 MB)
+     0 s, set 42 done,       290 boards /       16 armies =    18 (  226 MB)
+     0 s, set 41 done,       861 boards /      193 armies =     4 (  226 MB)
+     0 s, set 40 done,       420 boards /        5 armies =    84 (  226 MB)
+     0 s, set 39 done,      1097 boards /      283 armies =     3 (  226 MB)
+     0 s, set 38 done,         0 boards /        0 armies =     0 (  226 MB)
      0 s, no solution
 
-          set 47 done
-     0 s, set 46 done,        21 boards /       21 armies =   1
-     0 s, set 45 done,       802 boards /       21 armies =  38
-     0 s, set 44 done,      8548 boards /      346 armies =  24
-     0 s, set 43 done,     48607 boards /      561 armies =  86
-     0 s, set 42 done,     33052 boards /      807 armies =  40
-     0 s, set 41 done,    127051 boards /     3682 armies =  34
-     2 s, set 40 done,     62041 boards /      384 armies = 161
-     1 s, set 39 done,    208302 boards /    14665 armies =  14
-     4 s, set 38 done,     90387 boards /       74 armies =1221
-     2 s, set 37 done,    264201 boards /    27895 armies =   9
-     5 s, set 36 done,     40523 boards /      291 armies = 139
-     3 s, set 35 done,   2527641 boards /   201864 armies =  12
-    60 s, set 34 done,    221096 boards /      108 armies =2047
-    19 s, set 33 done,  11454522 boards /  1945230 armies =   5
-   271 s, set 32 done,    129758 boards /       38 armies =3414
-    13 s, set 31 done,   5709552 boards /  5264799 armies =   1
-   129 s, set 30 done,       189 boards /        4 armies =  47
-     0 s, set 29 done,      8787 boards /     8493 armies =   1
-     0 s, set 28 done,         0 boards /        0 armies =   0
-   516 s, no solution
+         set 47 done (hp)
+     0 s, set 46 done,        21 boards /       21 armies =     1 (   25 MB)
+     0 s, set 45 done,       802 boards /       21 armies =    38 (  226 MB)
+     0 s, set 44 done,      8548 boards /      346 armies =    24 (  226 MB)
+     0 s, set 43 done,     48607 boards /      561 armies =    86 (  226 MB)
+     0 s, set 42 done,     33052 boards /      807 armies =    40 (  226 MB)
+     0 s, set 41 done,    127051 boards /     3682 armies =    34 (  227 MB)
+     0 s, set 40 done,     62041 boards /      384 armies =   161 (  227 MB)
+     0 s, set 39 done,    208302 boards /    14665 armies =    14 (  228 MB)
+     0 s, set 38 done,     90387 boards /       74 armies =  1221 (  228 MB)
+     0 s, set 37 done,    264201 boards /    27895 armies =     9 (  230 MB)
+     0 s, set 36 done,     40523 boards /      291 armies =   139 (  229 MB)
+     1 s, set 35 done,   2527641 boards /   201864 armies =    12 (  251 MB)
+     5 s, set 34 done,    221096 boards /      108 armies =  2047 (  249 MB)
+    11 s, set 33 done,  11454522 boards /  1945230 armies =     5 (  390 MB)
+    24 s, set 32 done,    129758 boards /       38 armies =  3414 (  376 MB)
+     7 s, set 31 done,   5709552 boards /  5264799 armies =     1 (  645 MB)
+    15 s, set 30 done,       189 boards /        4 armies =    47 (  533 MB)
+     0 s, set 29 done,      8787 boards /     8493 armies =     1 (  533 MB)
+     0 s, set 28 done,         0 boards /        0 armies =     0 (  276 MB)
+    67 s, no solution
 
-          set 48 done
-     0 s, set 47 done,        21 boards /       21 armies =   1
-     0 s, set 46 done,       802 boards /       21 armies =  38
-     0 s, set 45 done,     21965 boards /      561 armies =  39
-     0 s, set 44 done,    293482 boards /      346 armies = 848
-     9 s, set 43 done,   2107470 boards /    11884 armies = 177
-    42 s, set 42 done,   1795610 boards /     1359 armies =1321
-    54 s, set 41 done,   7373142 boards /   116965 armies =  63
-   160 s, set 40 done,   3653372 boards /     1714 armies =2131
-   117 s, set 39 done,  12454752 boards /   572826 armies =  21
-   272 s, set 38 done,   4762105 boards /      764 armies =6233
-   162 s, set 37 done,  15247605 boards /  1386025 armies =  11
-   339 s, set 36 done,   2749722 boards /     4067 armies = 676
-   431 s, set 35 done, 132359994 boards /  8571720 armies =  15
-  3348 s, set 34 done,  15430334 boards /     9974 armies =1547
-Exception: std::bad_alloc (asus)
+          set 48 done (hp)
+     0 s, set 47 done,        21 boards /       21 armies =     1 (   25 MB)
+     0 s, set 46 done,       802 boards /       21 armies =    38 (   25 MB)
+     0 s, set 45 done,     21965 boards /      561 armies =    39 (  226 MB)
+     0 s, set 44 done,    293482 boards /      346 armies =   848 (  227 MB)
+     1 s, set 43 done,   2107470 boards /    11884 armies =   177 (  232 MB)
+     3 s, set 42 done,   1795610 boards /     1359 armies =  1321 (  232 MB)
+     6 s, set 41 done,   7373142 boards /   116965 armies =    63 (  249 MB)
+    12 s, set 40 done,   3653372 boards /     1714 armies =  2131 (  249 MB)
+    16 s, set 39 done,  12454752 boards /   572826 armies =    21 (  291 MB)
+    21 s, set 38 done,   4762105 boards /      764 armies =  6233 (  284 MB)
+    26 s, set 37 done,  15247605 boards /  1386025 armies =    11 (  435 MB)
+    28 s, set 36 done,   2749722 boards /     4067 armies =   676 (  340 MB)
+   135 s, set 35 done, 132359994 boards /  8571720 armies =    15 ( 1880 MB)
+   279 s, set 34 done,  15430334 boards /     9974 armies =  1547 ( 1237 MB)
+  1071 s, set 33 done, 684175807 boards / 79473900 armies =     8 (10814 MB)
+  1518 s, set 32 done,  29006386 boards /    13798 armies =  2102 ( 6677 MB)
+  Segmentation fault (core dumped)
