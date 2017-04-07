@@ -505,34 +505,321 @@ int const ARMY = 10;
      0 s, set  6 done,         0 boards /        0 armies =   0 (  226 MB)
      0 s, no solution
 
-          set 24 done (hp)
-     0 s, set 23 done,        13 boards /       13 armies =   1 (   25 MB)
-     0 s, set 22 done,        24 boards /        1 armies =  24 (   25 MB)
-     0 s, set 21 done,       416 boards /      215 armies =   1 (   92 MB)
-     0 s, set 20 done,       225 boards /       14 armies =  16 (  226 MB)
-     0 s, set 19 done,      2662 boards /     1074 armies =   2 (  226 MB)
-     0 s, set 18 done,       933 boards /       96 armies =   9 (  226 MB)
-     0 s, set 17 done,     30014 boards /     9612 armies =   3 (  227 MB)
-     0 s, set 16 done,      8881 boards /      424 armies =  20 (  227 MB)
-     0 s, set 15 done,    273772 boards /    61061 armies =   4 (  230 MB)
-     0 s, set 14 done,     60561 boards /     1454 armies =  41 (  230 MB)
-     1 s, set 13 done,   1792012 boards /   327471 armies =   5 (  250 MB)
-     1 s, set 12 done,    295351 boards /     3317 armies =  89 (  249 MB)
-     7 s, set 11 done,   8686486 boards /  1729349 armies =   5 (  351 MB)
-     8 s, set 10 done,   1039022 boards /     4900 armies = 212 (  344 MB)
-    34 s, set  9 done,  32353009 boards /  6995297 armies =   4 ( 1012 MB)
-    32 s, set  8 done,   3056429 boards /     4016 armies = 761 (  958 MB)
-   131 s, set  7 done,  97780736 boards / 23197561 armies =   4 ( 2765 MB)
-    99 s, set  6 done,   6459298 boards /     1567 armies =4122 ( 2473 MB)
-   337 s, set  5 done, 207003811 boards / 61327536 armies =   3 ( 7028 MB)
-   209 s, set  4 done,   8377492 boards /      272 armies =30799 ( 6457 MB)
-   712 s, set  3 done, 259578676 boards /106517199 armies =   2 (13734 MB)
-   374 s, set  2 done,   5293311 boards /       19 armies =278595 (11326 MB)
-   431 s, set  1 done, 151640164 boards / 93288919 armies =   1 (13383 MB)
+           set 24 done (hp)
+     0 s, set 23 done,        13 boards /       13 armies     13 (   92 MB)
+     0 s, set 22 done,        24 boards /        1 armies     24 (   92 MB)
+     0 s, set 21 done,       416 boards /      215 armies    416 (   92 MB)
+     0 s, set 20 done,       225 boards /       14 armies     16 (   92 MB)
+     0 s, set 19 done,      2662 boards /     1074 armies    190 (  226 MB)
+     0 s, set 18 done,       933 boards /       96 armies      9 (  226 MB)
+     0 s, set 17 done,     30014 boards /     9612 armies    312 (  226 MB)
+     0 s, set 16 done,      8881 boards /      424 armies     20 (  226 MB)
+     0 s, set 15 done,    273772 boards /    61061 armies    645 (  229 MB)
+     0 s, set 14 done,     60561 boards /     1454 armies     41 (  229 MB)
+     0 s, set 13 done,   1792012 boards /   327471 armies   1232 (  241 MB)
+     1 s, set 12 done,    295351 boards /     3317 armies     89 (  239 MB)
+     6 s, set 11 done,   8686486 boards /  1729349 armies   2618 (  328 MB)
+     9 s, set 10 done,   1039022 boards /     4900 armies    212 (  319 MB)
+    30 s, set  9 done,  32353009 boards /  6995297 armies   6602 (  807 MB)
+    36 s, set  8 done,   3056429 boards /     4016 armies    761 (  731 MB)
+   113 s, set  7 done,  97780736 boards / 23197561 armies  24347 ( 1878 MB)
+   119 s, set  6 done,   6459298 boards /     1567 armies   4122 ( 1576 MB)
+   298 s, set  5 done, 207003811 boards / 61327536 armies 132101 ( 4851 MB)
+   259 s, set  4 done,   8377492 boards /      272 armies  30799 ( 4046 MB)
+   498 s, set  3 done, 259578676 boards /106517199 armies 954333 ( 9636 MB)
+   310 s, set  2 done,   5293311 boards /       19 armies 278595 ( 5777 MB)
+   302 s, set  1 done, 151640164 boards / 93288919 armies 7981061 ( 8931 MB)
 ==================================
++----------------+
+|. . . . . . . . |
+|. . . . . . . . |
+|. X X . . . . . |
+|. . . . X . . . |
+|. X . X . . X O |
+|. X . X . X O O |
+|. . . . X O O O |
+|. . . . O O O O |
++----------------+
 Solution!
-   148 s, set  0 done,   1322721 boards /        1 armies =1322721 ( 8564 MB)
-  2536 s, solved
+   180 s, set  0 done,   1322721 boards /        1 armies 1322721 ( 2726 MB)
+  2168 s, solved
+Start backtracking
+          set 24 done
+     0 s, set 23 done,        13 boards /       13 armies     13 (  243 MB)
+     0 s, set 22 done,        24 boards /        1 armies     24 (  243 MB)
+     0 s, set 21 done,       416 boards /      215 armies    416 (  243 MB)
+     0 s, set 20 done,       225 boards /       14 armies     16 (  243 MB)
+     0 s, set 19 done,      2121 boards /      886 armies    151 (  243 MB)
+     0 s, set 18 done,       731 boards /       77 armies      9 (  243 MB)
+     0 s, set 17 done,     11789 boards /     3689 armies    153 (  243 MB)
+     0 s, set 16 done,      3639 boards /      244 armies     14 (  243 MB)
+     0 s, set 15 done,     34139 boards /     7443 armies    139 (  243 MB)
+     0 s, set 14 done,      9651 boards /      613 armies     15 (  243 MB)
+     0 s, set 13 done,     64066 boards /     9554 armies    104 (  243 MB)
+     0 s, set 12 done,     18327 boards /     1062 armies     17 (  243 MB)
+     0 s, set 11 done,     90172 boards /    10608 armies     84 (  243 MB)
+     0 s, set 10 done,     26877 boards /     1702 armies     15 (  243 MB)
+     0 s, set  9 done,     91509 boards /     8062 armies     53 (  243 MB)
+     0 s, set  8 done,     29434 boards /     1588 armies     18 (  243 MB)
+     0 s, set  7 done,     63364 boards /     4098 armies     39 (  243 MB)
+     0 s, set  6 done,     19011 boards /      712 armies     26 (  243 MB)
+     0 s, set  5 done,     16919 boards /      900 armies     23 (  243 MB)
+     0 s, set  4 done,      4532 boards /      160 armies     28 (  243 MB)
+     0 s, set  3 done,      1462 boards /       94 armies      9 (  243 MB)
+     0 s, set  2 done,       352 boards /       14 armies     25 (  243 MB)
+     0 s, set  1 done,        21 boards /        1 armies      1 (  243 MB)
+     0 s, set  0 done,         1 boards /        1 armies      1 (  243 MB)
+     0 s, backtrack tables built
++----------------+
+|O O O O . . . . |
+|O O O . . . . . |
+|O O . . . . . . |
+|O . . . . . . . |
+|. . . . . . . X |
+|. . . . . . X X |
+|. . . . . X X X |
+|. . . . X X X X |
++----------------+
++----------------+
+|O O O O . . . . |
+|O O O . . . . . |
+|O O . . . . . . |
+|O . . . . . . . |
+|. . . . . . . X |
+|. . . . X . X X |
+|. . . . . X X X |
+|. . . . X X . X |
++----------------+
++----------------+
+|O O O O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|O O . . . . . . |
+|. . . . . . . X |
+|. . . . X . X X |
+|. . . . . X X X |
+|. . . . X X . X |
++----------------+
++----------------+
+|O O O O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|O O . . . . . . |
+|. . . . . . . X |
+|. . . X X . X X |
+|. . . . . X X X |
+|. . . . X . . X |
++----------------+
++----------------+
+|O O . O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|O O . . . . . . |
+|. . . . . . . X |
+|. . . X X . X X |
+|. . . . O X X X |
+|. . . . X . . X |
++----------------+
++----------------+
+|O O . O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|O O . . . . . . |
+|. . . X . . . X |
+|. . . X X . X X |
+|. . . . O X X . |
+|. . . . X . . X |
++----------------+
++----------------+
+|O O . O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|O O . . . . . . |
+|. . . X . . . X |
+|. . . X X . X X |
+|. . . . . X X . |
+|. . . . X O . X |
++----------------+
++----------------+
+|O O . O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|O O . . X . . . |
+|. . . X . . . X |
+|. . . X . . X X |
+|. . . . . X X . |
+|. . . . X O . X |
++----------------+
++----------------+
+|O O . O . . . . |
+|O O O . . . . . |
+|. O . . . . . . |
+|. O . . X . . . |
+|. . . X . . . X |
+|. . . X . . X X |
+|. . . . . X X . |
+|. . . . X O O X |
++----------------+
++----------------+
+|O O . O . . . . |
+|O O O . . . . . |
+|. O X . . . . . |
+|. O . . X . . . |
+|. . . X . . . X |
+|. . . X . . X X |
+|. . . . . X . . |
+|. . . . X O O X |
++----------------+
++----------------+
+|. O . O . . . . |
+|O O O . . . . . |
+|. O X . . . . . |
+|. O . . X . . . |
+|. . . X . . . X |
+|. . . X . . X X |
+|. . . . . X O . |
+|. . . . X O O X |
++----------------+
++----------------+
+|. O . O . . . . |
+|O O O . . . . . |
+|. O X . . . . . |
+|. O . . X . . . |
+|. . . X . . . X |
+|. . . X . X X X |
+|. . . . . X O . |
+|. . . . X O O . |
++----------------+
++----------------+
+|. O . O . . . . |
+|O O O . . . . . |
+|. . X . . . . . |
+|. O . . X . . . |
+|. . . X . . . X |
+|. . . X . X X X |
+|. . . . . X O O |
+|. . . . X O O . |
++----------------+
++----------------+
+|. O . O . . . . |
+|O O O . . . . . |
+|. . X . . . . . |
+|. O . . X . . . |
+|. . . X . . X X |
+|. . . X . X X . |
+|. . . . . X O O |
+|. . . . X O O . |
++----------------+
++----------------+
+|. O . O . . . . |
+|O . O . . . . . |
+|. . X . . . . . |
+|. O . . X . . . |
+|. . . X . . X X |
+|. . . X . X X . |
+|. . . . . X O O |
+|. . . . X O O O |
++----------------+
++----------------+
+|. O . O . . . . |
+|O . O . . . . . |
+|. . X . . . . . |
+|. O . . X . . . |
+|. X . X . . X X |
+|. . . X . X X . |
+|. . . . . . O O |
+|. . . . X O O O |
++----------------+
++----------------+
+|. O . . . . . . |
+|O . O . . . . . |
+|. . X . . . . . |
+|. O . . X . . . |
+|. X . X . . X X |
+|. . . X . X X . |
+|. . . . . O O O |
+|. . . . X O O O |
++----------------+
++----------------+
+|. O . . . . . . |
+|O . O . . . . . |
+|. X X . . . . . |
+|. O . . X . . . |
+|. X . X . . X . |
+|. . . X . X X . |
+|. . . . . O O O |
+|. . . . X O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|O . O . . . . . |
+|. X X . . . . . |
+|. O . . X . . . |
+|. X . X . . X O |
+|. . . X . X X . |
+|. . . . . O O O |
+|. . . . X O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|O . O . . . . . |
+|. X X . . . . . |
+|. O . . X . . . |
+|. X . X . . X O |
+|. . . X . X X . |
+|. . . . X O O O |
+|. . . . . O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|O . . . . . . . |
+|. X X . . . . . |
+|. O . . X . . . |
+|. X . X . . X O |
+|. . . X . X X . |
+|. . . . X O O O |
+|. . . . O O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|O . . . . . . . |
+|. X X . . . . . |
+|. O . . X . . . |
+|. X . X . . X O |
+|. . X X . X . . |
+|. . . . X O O O |
+|. . . . O O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|O . . . . . . . |
+|. X X . . . . . |
+|. . . . X . . . |
+|. X . X . . X O |
+|. . X X . X . O |
+|. . . . X O O O |
+|. . . . O O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|O . . . . . . . |
+|. X X . . . . . |
+|. . . . X . . . |
+|. X . X . . X O |
+|. X . X . X . O |
+|. . . . X O O O |
+|. . . . O O O O |
++----------------+
++----------------+
+|. . . . . . . . |
+|. . . . . . . . |
+|. X X . . . . . |
+|. . . . X . . . |
+|. X . X . . X O |
+|. X . X . X O O |
+|. . . . X O O O |
+|. . . . O O O O |
++----------------+
 
 int const X = 9;
 int const Y = 9;

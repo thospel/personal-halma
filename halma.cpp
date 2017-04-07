@@ -62,7 +62,7 @@ uint const DEFAULT_THREADS = 0;
 #if !PLAY
 int const X = 9;
 int const Y = 9;
-int const MOVES = 9;
+int const MOVES = 6;
 int const ARMY = 10;
 #else  // !PLAY
 int const X = 9;
@@ -467,6 +467,9 @@ class Board {
     inline Board symmetric() const PURE {
         return Board{blue().symmetric(), red().symmetric()};
     }
+    void svg(ostream& os, uint scale = 10) const;
+    void svg(uint scale = 10) const { svg(cout, scale); }
+
   private:
     Army blue_, red_;
 
@@ -474,6 +477,27 @@ class Board {
         return l.blue() == r.blue() && l.red() == r.red();
     }
 };
+
+void Board::svg(ostream& os, uint scale) const {
+    uint margin = scale / 2;
+    os << "<html>\n";
+    os << " <body>\n";
+    os << "  <h1>Board</h1>\n";
+    os << "   <svg height='" << Y * scale + 2*margin << "' width='" << X * scale + 2*margin << "'>\n";
+    os << "     <path d='";
+    for (int x=0; x<=X; ++x) {
+        os << "M " << margin + x * scale << " " << margin << " ";
+        os << "L " << margin + x * scale << " " << margin + Y * scale << " ";
+    }
+    for (int y=0; y<=X; ++y) {
+        os << "M " << margin             << " " << margin + y * scale << " ";
+        os << "L " << margin + X * scale << " " << margin + y * scale << " ";
+    }
+    os << "' />\n";
+    os << "   </svg>\n";
+    os << " </body>\n";
+    os << "</html>\n";
+}
 
 class BoardSubSet {
   public:
@@ -1516,7 +1540,7 @@ uint64_t _make_all_moves(BoardSet& from_board_set,
     moved_armies.show_stats();
     // to_board_set.show_stats();
     if (MEMCHECK) cout << "nr armies in subsets=" << BoardSubSet::nr_armies() << "\n";
-    cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << to_board_set.size() << " boards /" << setw(9) << moved_armies.size() << " armies " << setw(6);
+    cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << to_board_set.size() << " boards /" << setw(9) << moved_armies.size() << " armies " << setw(7);
     if (nr_moves % 2)
         cout << to_board_set.size()/(moved_armies.size() ? moved_armies.size() : 1);
     else
@@ -1798,6 +1822,7 @@ void my_main(int argc, char const* const* argv) {
         cout << "Red Base type count:\n";
         tables.print_type_count();
     }
+    start_board.svg();
     cout << start_board;
     int needed_moves = start_board.min_moves();
     cout << "Minimum possible number of moves: " << needed_moves << "\n";
