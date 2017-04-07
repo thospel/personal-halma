@@ -1,9 +1,9 @@
 NOINLINE
 uint64_t NAME(BoardSet& from_board_set,
               BoardSet& to_board_set,
-              ArmySet const& moving_army_set,
-              ArmySet const& opponent_army_set,
-              ArmySet& moved_army_set,
+              ArmySet const& moving_armies,
+              ArmySet const& opponent_armies,
+              ArmySet& moved_armies,
 #if BACKTRACK && !BLUE_TO_MOVE
               BoardTable<uint8_t> const& red_backtrack,
 #endif // BACKTRACK && !BLUE_TO_MOVE
@@ -16,8 +16,8 @@ uint64_t NAME(BoardSet& from_board_set,
         if (blue_id == 0) break;
         if (VERBOSE) cout << "Processing blue " << blue_id << "\n";
         Army const& b = BLUE_TO_MOVE ?
-            moving_army_set.at(blue_id) :
-            opponent_army_set.at(blue_id);
+            moving_armies.at(blue_id) :
+            opponent_armies.at(blue_id);
         if (CHECK) b.check(__LINE__);
         Army const b_symmetric = b.symmetric();
 #if BLUE_TO_MOVE
@@ -43,8 +43,8 @@ uint64_t NAME(BoardSet& from_board_set,
 #endif // BLUE_TO_MOVE
             
             Army const& red = BLUE_TO_MOVE ?
-                opponent_army_set.at(red_id) :
-                moving_army_set.at(red_id);
+                opponent_armies.at(red_id) :
+                moving_armies.at(red_id);
             if (CHECK) red.check(__LINE__);
 
 #if VERBOSE            
@@ -236,18 +236,18 @@ uint64_t NAME(BoardSet& from_board_set,
                     armyESymmetric.store(val.symmetric());
                     if (CHECK) armyESymmetric.check(__LINE__);
                     int symmetry = cmp(armyE, armyESymmetric);
-                    auto moved_id = moved_army_set.insert(symmetry >= 0 ? armyE : armyESymmetric);
+                    auto moved_id = moved_armies.insert(symmetry >= 0 ? armyE : armyESymmetric);
                     if (CHECK && moved_id == 0)
                         throw(logic_error("Army Insert returns 0"));
 #if BLUE_TO_MOVE
-                    // The opponent is red and after this it is his move
+                    // The opponent is red and after this it is red's move
                     symmetry *= red_symmetry;
                     if (to_board_set.insert(moved_id, red_id, symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         cout << "   Blue id " << moved_id << "\n" << Image{armyE, red};
                     }
 #else  // BLUE_TO_MOVE
-                    // The opponent is blue and after this it is his move
+                    // The opponent is blue and after this it is blue's move
                     symmetry *= blue_symmetry;
                     if (to_board_set.insert(blue_id, moved_id, symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
@@ -259,9 +259,6 @@ uint64_t NAME(BoardSet& from_board_set,
                 image.set(soldier, BLUE_TO_MOVE ? BLUE : RED);
             }
         }
-#if BACKTRACK
-        subset.keep();
-#endif // BACKTRACK
     }
     return late;
 }
