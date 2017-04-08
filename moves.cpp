@@ -1,6 +1,6 @@
 NOINLINE
-uint64_t NAME(BoardSet& from_board_set,
-              BoardSet& to_board_set,
+uint64_t NAME(BoardSet& boards_from,
+              BoardSet& boards_to,
               ArmySet const& moving_armies,
               ArmySet const& opponent_armies,
               ArmySet& moved_armies,
@@ -10,7 +10,7 @@ uint64_t NAME(BoardSet& from_board_set,
               int available_moves) {
     uint64_t late = 0;
     while (true) {
-        BoardSubSetRef subset{from_board_set};
+        BoardSubSetRef subset{boards_from};
 
         ArmyId blue_id = subset.id();
         if (blue_id == 0) break;
@@ -41,13 +41,13 @@ uint64_t NAME(BoardSet& from_board_set,
 #else  // BLUE_TO_MOVE
             int  blue_symmetry       = symmetry ? -b_symmetry : b_symmetry;
 #endif // BLUE_TO_MOVE
-            
+
             Army const& red = BLUE_TO_MOVE ?
                 opponent_armies.at(red_id) :
                 moving_armies.at(red_id);
             if (CHECK) red.check(__LINE__);
 
-#if VERBOSE            
+#if VERBOSE
             Image image{blue, red};
             cout << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image;
 #endif // VERBOSE
@@ -55,10 +55,10 @@ uint64_t NAME(BoardSet& from_board_set,
             Nbits Ndistance_army, Ndistance_red;
             Ndistance_army = Ndistance_red = NLEFT >> tables.infinity();
             int off_base_from = 0;
-            TypeCount type_count_from = tables.type_count();
+            ParityCount parity_count_from = tables.parity_count();
             int edge_count_from = 0;
             for (auto const& b: blue) {
-                --type_count_from[tables.type(b)];
+                --parity_count_from[b.parity()];
                 if (tables.base_red(b)) continue;
                 ++off_base_from;
                 edge_count_from += tables.edge_red(b);
@@ -67,7 +67,7 @@ uint64_t NAME(BoardSet& from_board_set,
                     Ndistance_army |= tables.Ndistance(r, b);
             }
             int slides = 0;
-            for (auto tc: type_count_from)
+            for (auto tc: parity_count_from)
                 slides += max(tc, 0);
             int distance_army = __builtin_clz(Ndistance_army);
             int distance_red  = __builtin_clz(Ndistance_red);
@@ -102,9 +102,9 @@ uint64_t NAME(BoardSet& from_board_set,
 #endif // BLUE_TO_MOVE
 
             ArmyPos armyE, armyESymmetric;
-            auto off_base   = off_base_from;
-            auto type_count = type_count_from;
-            auto edge_count = edge_count_from;
+            auto off_base     = off_base_from;
+            auto parity_count = parity_count_from;
+            auto edge_count   = edge_count_from;
 
 #if BACKTRACK && !BLUE_TO_MOVE
             int red_backtrack_count_from = 2*ARMY;
@@ -115,19 +115,21 @@ uint64_t NAME(BoardSet& from_board_set,
                 red_backtrack_count_symmetric_from -= red_backtrack[pos];
 #endif // BACKTRACK && !BLUE_TO_MOVE
 
-#if !VERBOSE            
+#if !VERBOSE
             Image image{blue, red};
 #endif // VERBOSE
+            // Finally, finally we are going to do the actual moves
             for (int a=0; a<ARMY; ++a) {
                 armyE.copy(army, a);
+                // The piece that is going to move
                 auto const soldier = army[a];
                 image.set(soldier, EMPTY);
                 armyESymmetric.copy(army_symmetric, mapper.map(soldier));
 #if BLUE_TO_MOVE
                 off_base = off_base_from;
                 off_base += tables.base_red(soldier);
-                type_count = type_count_from;
-                ++type_count[tables.type(soldier)];
+                parity_count = parity_count_from;
+                ++parity_count[soldier.parity()];
                 edge_count = edge_count_from;
                 edge_count -= tables.edge_red(soldier);
 #elif BACKTRACK
@@ -141,7 +143,7 @@ uint64_t NAME(BoardSet& from_board_set,
                 int nr_reachable = 1;
                 if (!CLOSED_LOOP) image.set(soldier, COLORS);
                 for (int i=0; i < nr_reachable; ++i) {
-                    for (auto move: tables.moves()) {
+                    for (auto move: Coord::moves()) {
                         Coord jumpee{reachable[i], move};
                         if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
                         Coord target{jumpee, move};
@@ -153,8 +155,8 @@ uint64_t NAME(BoardSet& from_board_set,
                 for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
                     image.set(reachable[i], EMPTY);
 
-                // Step moves
-                for (auto move: tables.moves()) {
+                // Slides
+                for (auto move: Coord::moves()) {
                     Coord target{soldier, move};
                     if (image.get(target) != EMPTY) continue;
                     reachable[nr_reachable++] = target;
@@ -172,15 +174,15 @@ uint64_t NAME(BoardSet& from_board_set,
                     Nbits Ndistance_a = Ndistance_army;
                     if (BLUE_TO_MOVE) {
                         Nbits Ndistance_r = Ndistance_red;
-                        auto off    = off_base;
-                        auto type_c = type_count;
-                        auto edge_c = edge_count;
+                        auto off      = off_base;
+                        auto parity_c = parity_count;
+                        auto edge_c   = edge_count;
 
                         if (tables.base_red(val)) {
                             --off;
                             if (off == 0) {
 #if !BACKTRACK
-                                if (to_board_set.solve(red_id, red)) {
+                                if (boards_to.solve(red_id, red)) {
                                     image.set(reachable[i], BLUE_TO_MOVE ? BLUE : RED);
                                     cout << "==================================\n";
                                     cout << image << "Solution!" << endl;
@@ -198,9 +200,9 @@ uint64_t NAME(BoardSet& from_board_set,
                         int distance_red  = __builtin_clz(Ndistance_red);
                         int distance_army = __builtin_clz(Ndistance_a);
                         int pre_moves = min(distance_army / 2, distance_red);
-                        --type_c[tables.type(val)];
+                        --parity_c[val.parity()];
                         int slides = 0;
-                        for (auto tc: type_c)
+                        for (auto tc: parity_c)
                             slides += max(tc, 0);
                         int blue_moves = pre_moves + max(slides-pre_moves-edge_c, 0) + off;
                         needed_moves = 2*blue_moves;
@@ -242,14 +244,14 @@ uint64_t NAME(BoardSet& from_board_set,
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
                     symmetry *= red_symmetry;
-                    if (to_board_set.insert(moved_id, red_id, symmetry) && VERBOSE) {
+                    if (boards_to.insert(moved_id, red_id, symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         cout << "   Blue id " << moved_id << "\n" << Image{armyE, red};
                     }
 #else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
                     symmetry *= blue_symmetry;
-                    if (to_board_set.insert(blue_id, moved_id, symmetry) && VERBOSE) {
+                    if (boards_to.insert(blue_id, moved_id, symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         cout << "   Red id " << moved_id << "\n" << Image{blue, armyE};
                     }
