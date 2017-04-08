@@ -1,0 +1,762 @@
+<html>
+  <body>
+   <h1>24 moves</h1>
+    <table>
+      <tr><th>X</th><td>8</td></tr>
+      <tr><th>Y</th><td>8</td></tr>
+      <tr><th>Army</th><td>10</td></tr>
+      <tr><th>Rule</th><td>8-move</td></tr>
+      <tr><th>Bound</th><td> &ge; 23 moves</td></tr>
+    </table>
+    Balance 0, delay -1<br />
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <polyline points='160,140 120,100 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <polyline points='20,60 40,80 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <polyline points='120,100 100,100 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <polyline points='60,20 80,40 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <polyline points='160,160 120,120 80,80 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <polyline points='80,20 80,60 80,100 120,100 160,140 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <polyline points='140,120 120,100 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <polyline points='20,80 60,80 100,80 140,120 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <polyline points='140,160 100,120 140,80 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <polyline points='20,40 60,80 100,80 100,120 140,160 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <polyline points='80,80 60,80 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <polyline points='40,80 80,80 120,120 160,160 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <polyline points='120,160 120,120 120,80 80,120 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='40,40 40,80 80,80 120,120 120,160 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='140,140 100,140 60,100 60,60 60,20 100,60 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='20,20 60,20 60,60 60,100 100,140 140,140 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='120,140 100,140 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='40,60 80,100 80,140 120,140 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='160,100 120,60 80,60 80,20 40,60 80,100 80,140 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='40,20 80,60 120,60 160,100 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='160' cy='100' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <polyline points='100,160 60,120 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='160' cy='100' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <polyline points='60,40 100,40 100,80 100,120 100,160 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='160' cy='100' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='100' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <polyline points='160,120 120,120 80,160 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='160' cy='100' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='100' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='80' cy='160' r='7' fill='red' />
+      <polyline points='80,40 120,80 160,80 160,120 ' stroke='black' stroke-width='2' fill='none' marker-end='url(#arrowhead)' />
+    </svg>
+    <svg height='180' width='180'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4' 
+        refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 170 M 30 10 L 30 170 M 50 10 L 50 170 M 70 10 L 70 170 M 90 10 L 90 170 M 110 10 L 110 170 M 130 10 L 130 170 M 150 10 L 150 170 M 170 10 L 170 170 M 10 10 L 170 10 M 10 30 L 170 30 M 10 50 L 170 50 M 10 70 L 170 70 M 10 90 L 170 90 M 10 110 L 170 110 M 10 130 L 170 130 M 10 150 L 170 150 M 10 170 L 170 170 '           stroke='black' />
+      <circle cx='160' cy='100' r='7' fill='turquoise' />
+      <circle cx='140' cy='120' r='7' fill='turquoise' />
+      <circle cx='160' cy='120' r='7' fill='turquoise' />
+      <circle cx='120' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='100' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='80' cy='160' r='7' fill='red' />
+    </svg>
+  </body>
+</html>

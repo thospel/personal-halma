@@ -558,6 +558,543 @@ int const ARMY = 15;
   1484 s, set 16 done,  89630031 boards /   115930 armies     773 (20764 MB)
   Killed by oom-killer
 
+   BALANCED = 0
+   BALANCE_DELAY = 1
+          set 36 done (hp)
+     0 s, set 35 done,         9 boards /        9 armies       9 (   92 MB)
+     0 s, set 34 done,       162 boards /        9 armies      18 (   92 MB)
+     0 s, set 33 done,      2502 boards /      147 armies     278 (  226 MB)
+     0 s, set 32 done,     15997 boards /      127 armies     125 (  226 MB)
+     0 s, set 31 done,     75193 boards /      945 armies     592 (  226 MB)
+     0 s, set 30 done,     64673 boards /      187 armies     345 (  226 MB)
+     0 s, set 29 done,    106538 boards /     2591 armies     569 (  226 MB)
+     0 s, set 28 done,     22000 boards /      694 armies      31 (  226 MB)
+     0 s, set 27 done,    128723 boards /     5383 armies     185 (  226 MB)
+     0 s, set 26 done,     58280 boards /      455 armies     128 (  226 MB)
+     0 s, set 25 done,    996325 boards /    41737 armies    2189 (  230 MB)
+     1 s, set 24 done,    264135 boards /     1724 armies     153 (  229 MB)
+     2 s, set 23 done,   4843815 boards /   207655 armies    2809 (  248 MB)
+     6 s, set 22 done,    580987 boards /     5009 armies     115 (  247 MB)
+     7 s, set 21 done,  11468767 boards /   693398 armies    2289 (  283 MB)
+    16 s, set 20 done,    786547 boards /    10316 armies      76 (  272 MB)
+    12 s, set 19 done,  17663864 boards /  1445244 armies    1712 (  338 MB)
+    25 s, set 18 done,   1085242 boards /    19706 armies      55 (  316 MB)
+    18 s, set 17 done,  29140591 boards /  2540440 armies    1478 (  436 MB)
+    43 s, set 16 done,   2277390 boards /    30378 armies      74 (  392 MB)
+    45 s, set 15 done,  66997047 boards /  5662232 armies    2205 ( 1065 MB)
+   103 s, set 14 done,   5373647 boards /    40676 armies     132 (  943 MB)
+   144 s, set 13 done, 158219849 boards / 15422278 armies    3889 ( 2375 MB)
+   254 s, set 12 done,  10021321 boards /    40926 armies     244 ( 2064 MB)
+   325 s, set 11 done, 294086257 boards / 39224731 armies    7185 ( 5045 MB)
+   462 s, set 10 done,  11634353 boards /    27009 armies     430 ( 4071 MB)
+   399 s, set  9 done, 347160739 boards / 71488658 armies   12853 ( 7733 MB)
+   527 s, set  8 done,   7653929 boards /    10269 armies     745 ( 5787 MB)
+   274 s, set  7 done, 234852683 boards / 74525823 armies   22870 ( 9142 MB)
+   320 s, set  6 done,   2623163 boards /     2275 armies    1153 ( 5702 MB)
+    83 s, set  5 done,  84844211 boards / 40004095 armies   37294 ( 6997 MB)
+   106 s, set  4 done,    394283 boards /      258 armies    1528 ( 2680 MB)
+    10 s, set  3 done,  13529142 boards /  8079642 armies   52438 ( 2362 MB)
+    15 s, set  2 done,     13798 boards /       19 armies     726 (  618 MB)
+     0 s, set  1 done,    560215 boards /   437929 armies   29485 (  618 MB)
+==================================
++------------------+
+|. . . . . . . . . |
+|. . . . . . . . . |
+|. X X . X . . . . |
+|. . . X . X . X . |
+|. X . . . . X . O |
+|. . X . X . X O O |
+|. . . . . . O O O |
+|. . . X X O O O O |
+|. X X . O O O O O |
++------------------+
+Solution!
+     0 s, set  0 done,        18 boards /        1 armies      18 (  266 MB)
+  3208 s, solved
+Start backtracking
+          set 36 done
+     0 s, set 35 done,         9 boards /        9 armies       9 (  266 MB)
+     0 s, set 34 done,       162 boards /        9 armies      18 (  266 MB)
+     0 s, set 33 done,      2502 boards /      147 armies     278 (  266 MB)
+     0 s, set 32 done,     15997 boards /      127 armies     125 (  266 MB)
+     0 s, set 31 done,     75193 boards /      945 armies     592 (  266 MB)
+     0 s, set 30 done,     64673 boards /      187 armies     345 (  266 MB)
+     0 s, set 29 done,    102425 boards /     2488 armies     547 (  266 MB)
+     0 s, set 28 done,     21766 boards /      694 armies      31 (  266 MB)
+     0 s, set 27 done,     87843 boards /     3398 armies     126 (  266 MB)
+     0 s, set 26 done,     46666 boards /      432 armies     108 (  266 MB)
+     0 s, set 25 done,    364256 boards /    11399 armies     843 (  266 MB)
+     0 s, set 24 done,    123474 boards /     1225 armies     100 (  266 MB)
+     0 s, set 23 done,    680462 boards /    19858 armies     555 (  266 MB)
+     0 s, set 22 done,    129097 boards /     2844 armies      45 (  266 MB)
+     0 s, set 21 done,    556274 boards /    20459 armies     195 (  266 MB)
+     0 s, set 20 done,    102007 boards /     4687 armies      21 (  266 MB)
+     0 s, set 19 done,    385884 boards /    16127 armies      82 (  266 MB)
+     0 s, set 18 done,     72913 boards /     7002 armies      10 (  266 MB)
+     0 s, set 17 done,    231126 boards /    10561 armies      33 (  266 MB)
+     0 s, set 16 done,     66169 boards /     8564 armies       7 (  266 MB)
+     0 s, set 15 done,    163588 boards /     6900 armies      19 (  266 MB)
+     0 s, set 14 done,     49615 boards /     8710 armies       5 (  266 MB)
+     0 s, set 13 done,     84325 boards /     4301 armies       9 (  266 MB)
+     0 s, set 12 done,     21324 boards /     5604 armies       3 (  266 MB)
+     0 s, set 11 done,     25553 boards /     2148 armies       4 (  266 MB)
+     0 s, set 10 done,      5398 boards /     1908 armies       2 (  266 MB)
+     0 s, set  9 done,      4426 boards /      687 armies       2 (  266 MB)
+     0 s, set  8 done,       778 boards /      421 armies       1 (  266 MB)
+     0 s, set  7 done,       567 boards /      109 armies       1 (  266 MB)
+     0 s, set  6 done,       118 boards /       88 armies       1 (  266 MB)
+     0 s, set  5 done,       116 boards /       24 armies       1 (  266 MB)
+     0 s, set  4 done,        35 boards /       24 armies       1 (  266 MB)
+     0 s, set  3 done,        18 boards /        8 armies       0 (  266 MB)
+     0 s, set  2 done,         4 boards /        3 armies       1 (  266 MB)
+     0 s, set  1 done,         2 boards /        1 armies       0 (  266 MB)
+     0 s, set  0 done,         1 boards /        1 armies       1 (  266 MB)
+     5 s, backtrack tables built
+Move 0
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O O O . . . . . . |
+|O O . . . . . . . |
+|O . . . . . . . X |
+|. . . . . . . X X |
+|. . . . . . X X X |
+|. . . . . X X X X |
+|. . . . X X X X X |
++------------------+
+Move 1
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O O O . . . . . . |
+|O O . . . . . . . |
+|O . . . . . . . X |
+|. . . . . . . X X |
+|. . . . . X . X X |
+|. . . . . X X X X |
+|. . . . X X X X X |
++------------------+
+Move 2
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O O O . . . . . . |
+|. O O . . . . . . |
+|O . . . . . . . X |
+|. . . . . . . X X |
+|. . . . . X . X X |
+|. . . . . X X X X |
+|. . . . X X X X X |
++------------------+
+Move 3
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O O O . . . . . . |
+|. O O . . . . . . |
+|O . . . . . . . . |
+|. . . . . . . X X |
+|. . . . X X . X X |
+|. . . . . X X X X |
+|. . . . X X X X X |
++------------------+
+Move 4
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O O O . . . . . . |
+|. . O O . . . . . |
+|O . . . . . . . . |
+|. . . . . . . X X |
+|. . . . X X . X X |
+|. . . . . X X X X |
+|. . . . X X X X X |
++------------------+
+Move 5
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O O O . . . . . . |
+|. . O O . . . . . |
+|O . . . . . . . . |
+|. . . . . . . X X |
+|. . . . X X . X X |
+|. . . X . . X X X |
+|. . . . X X X X X |
++------------------+
+Move 6
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O . O . . . . . . |
+|. . O O . . . . . |
+|O . . O . . . . . |
+|. . . . . . . X X |
+|. . . . X X . X X |
+|. . . X . . X X X |
+|. . . . X X X X X |
++------------------+
+Move 7
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O . O . . . . . . |
+|. . O O . . . . . |
+|O . . O . . . . . |
+|. . . . X . . X X |
+|. . . . . X . X X |
+|. . . X . . X X X |
+|. . . . X X X X X |
++------------------+
+Move 8
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O . . . . . . . . |
+|. . O O . . . . . |
+|O . . O . . . . O |
+|. . . . X . . X X |
+|. . . . . X . X X |
+|. . . X . . X X X |
+|. . . . X X X X X |
++------------------+
+Move 9
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O . . . X . . . . |
+|. . O O . . . . . |
+|O . . O . . . . O |
+|. . . . X . . X X |
+|. . . . . X . X . |
+|. . . X . . X X X |
+|. . . . X X X X X |
++------------------+
+Move 10
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . . . . O |
+|. . . . X . . X X |
+|. . . . . X . X . |
+|. . . X . O X X X |
+|. . . . X X X X X |
++------------------+
+Move 11
++------------------+
+|O O O O O . . . . |
+|O O O O . . . . . |
+|O . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . . . . O |
+|. . . . X . . X X |
+|. . . . . X . X . |
+|. . . X . O X X X |
+|. . X . X X X X . |
++------------------+
+Move 12
++------------------+
+|O O . O O . . . . |
+|O O O O . . . . . |
+|O . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . . . . O |
+|. . . . X . . X X |
+|. . . . . X . X . |
+|. . . X . O X X X |
+|. . X . X X X X O |
++------------------+
+Move 13
++------------------+
+|O O . O O . . . . |
+|O O O O . . . . . |
+|O . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . X . . O |
+|. . . . X . . X X |
+|. . . . . X . X . |
+|. . . X . O X X X |
+|. . X . X . X X O |
++------------------+
+Move 14
++------------------+
+|O O . O O . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . X . . O |
+|. . . . X . . X X |
+|. . . . . X . X O |
+|. . . X . O X X X |
+|. . X . X . X X O |
++------------------+
+Move 15
++------------------+
+|O O . O O . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . X X . O |
+|. . . . X . . X X |
+|. . . . . X . X O |
+|. . . X . O X X X |
+|. . X . X . . X O |
++------------------+
+Move 16
++------------------+
+|. O . O O . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . . . . . |
+|O . . O . X X . O |
+|. . . . X . . X X |
+|. . . . . X . X O |
+|. . . X . O X X X |
+|. . X . X . O X O |
++------------------+
+Move 17
++------------------+
+|. O . O O . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O . . O . . X . O |
+|. . . . X . . X X |
+|. . . . . X . X O |
+|. . . X . O X X X |
+|. . X . X . O X O |
++------------------+
+Move 18
++------------------+
+|. O . O . . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O . . O . . X . O |
+|. . . . X . . X X |
+|. . . . . X O X O |
+|. . . X . O X X X |
+|. . X . X . O X O |
++------------------+
+Move 19
++------------------+
+|. O . O . . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . . . X . . X X |
+|. . . . . X O X O |
+|. . . X . O X X X |
+|. . X . X . O . O |
++------------------+
+Move 20
++------------------+
+|. O . . . . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . . . X . . X X |
+|. . . . . X O X O |
+|. . . X . O X X X |
+|. . X . X . O O O |
++------------------+
+Move 21
++------------------+
+|. O . . . . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . X . X . . X X |
+|. . . . . X O X O |
+|. . . X . O . X X |
+|. . X . X . O O O |
++------------------+
+Move 22
++------------------+
+|. . . . . . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . X . X . . X X |
+|. . . . . X O X O |
+|. . . X . O . X X |
+|. . X . X O O O O |
++------------------+
+Move 23
++------------------+
+|. . . . . . . . . |
+|O O O O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . X . X . . X X |
+|. . . . . X O X O |
+|. . . X X O . X . |
+|. . X . X O O O O |
++------------------+
+Move 24
++------------------+
+|. . . . . . . . . |
+|O O . O . . . . . |
+|. . . . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . X . X . . X X |
+|. . . . . X O X O |
+|. . . X X O . X O |
+|. . X . X O O O O |
++------------------+
+Move 25
++------------------+
+|. . . . . . . . . |
+|O O . O . . . . . |
+|. . X . X . . . . |
+|. . O . . X . . . |
+|O X . O . . X . O |
+|. . X . X . . X X |
+|. . . . . X O X O |
+|. . . X X O . X O |
+|. . X . . O O O O |
++------------------+
+Move 26
++------------------+
+|. . . . . . . . . |
+|O O . O . . . . . |
+|. . X . X . . . . |
+|. . . . . X . . . |
+|O X . O . . X . O |
+|. . X . X . . X X |
+|. . . . . X O X O |
+|. . . X X O O X O |
+|. . X . . O O O O |
++------------------+
+Move 27
++------------------+
+|. . . . . . . . . |
+|O O . O . . . . . |
+|. . X . X . . . . |
+|. . . . . X . . . |
+|O X . O . . X . O |
+|. . X . X . X X . |
+|. . . . . X O X O |
+|. . . X X O O X O |
+|. . X . . O O O O |
++------------------+
+Move 28
++------------------+
+|. . . . . . . . . |
+|O O . O . . . . . |
+|. . X . X . . . . |
+|. . . . . X . . . |
+|. X . O . . X . O |
+|. . X . X . X X . |
+|. . . . . X O X O |
+|. . . X X O O X O |
+|. . X . O O O O O |
++------------------+
+Move 29
++------------------+
+|. . . . . . . . . |
+|O O . O . . . . . |
+|. . X . X . . . . |
+|. . . . . X . X . |
+|. X . O . . X . O |
+|. . X . X . X . . |
+|. . . . . X O X O |
+|. . . X X O O X O |
+|. . X . O O O O O |
++------------------+
+Move 30
++------------------+
+|. . . . . . . . . |
+|. O . O . . . . . |
+|. . X . X . . . . |
+|. . . . . X . X . |
+|. X . O . . X . O |
+|. . X . X . X . O |
+|. . . . . X O X O |
+|. . . X X O O X O |
+|. . X . O O O O O |
++------------------+
+Move 31
++------------------+
+|. . . . . . . . . |
+|. O . O . . . . . |
+|. . X . X . . . . |
+|. . . X . X . X . |
+|. X . O . . X . O |
+|. . X . X . X . O |
+|. . . . . X O X O |
+|. . . X X O O . O |
+|. . X . O O O O O |
++------------------+
+Move 32
++------------------+
+|. . . . . . . . . |
+|. O . . . . . . . |
+|. . X . X . . . . |
+|. . . X . X . X . |
+|. X . O . . X . O |
+|. . X . X . X . O |
+|. . . . . X O X O |
+|. . . X X O O O O |
+|. . X . O O O O O |
++------------------+
+Move 33
++------------------+
+|. . . . . . . . . |
+|. O . . . . . . . |
+|. X X . X . . . . |
+|. . . X . X . X . |
+|. X . O . . X . O |
+|. . X . X . X . O |
+|. . . . . . O X O |
+|. . . X X O O O O |
+|. . X . O O O O O |
++------------------+
+Move 34
++------------------+
+|. . . . . . . . . |
+|. . . . . . . . . |
+|. X X . X . . . . |
+|. . . X . X . X . |
+|. X . O . . X . O |
+|. . X . X . X O O |
+|. . . . . . O X O |
+|. . . X X O O O O |
+|. . X . O O O O O |
++------------------+
+Move 35
++------------------+
+|. . . . . . . . . |
+|. . . . . . . . . |
+|. X X . X . . . . |
+|. . . X . X . X . |
+|. X . O . . X . O |
+|. . X . X . X O O |
+|. . . . . . O . O |
+|. . . X X O O O O |
+|. X X . O O O O O |
++------------------+
+Move 36
++------------------+
+|. . . . . . . . . |
+|. . . . . . . . . |
+|. X X . X . . . . |
+|. . . X . X . X . |
+|. X . . . . X . O |
+|. . X . X . X O O |
+|. . . . . . O O O |
+|. . . X X O O O O |
+|. X X . O O O O O |
++------------------+
+
 int const X = 16;
 int const Y = 16;
 int const MOVES = 8;
@@ -602,24 +1139,237 @@ int const ARMY = 19;
      0 s, set 28 done,         0 boards /        0 armies =     0 (  276 MB)
     67 s, no solution
 
-          set 48 done (hp)
-     0 s, set 47 done,        21 boards /       21 armies =     1 (   25 MB)
-     0 s, set 46 done,       802 boards /       21 armies =    38 (   25 MB)
-     0 s, set 45 done,     21965 boards /      561 armies =    39 (  226 MB)
-     0 s, set 44 done,    293482 boards /      346 armies =   848 (  227 MB)
-     1 s, set 43 done,   2107470 boards /    11884 armies =   177 (  232 MB)
-     3 s, set 42 done,   1795610 boards /     1359 armies =  1321 (  232 MB)
-     6 s, set 41 done,   7373142 boards /   116965 armies =    63 (  249 MB)
-    12 s, set 40 done,   3653372 boards /     1714 armies =  2131 (  249 MB)
-    16 s, set 39 done,  12454752 boards /   572826 armies =    21 (  291 MB)
-    21 s, set 38 done,   4762105 boards /      764 armies =  6233 (  284 MB)
-    26 s, set 37 done,  15247605 boards /  1386025 armies =    11 (  435 MB)
-    28 s, set 36 done,   2749722 boards /     4067 armies =   676 (  340 MB)
-   135 s, set 35 done, 132359994 boards /  8571720 armies =    15 ( 1880 MB)
-   279 s, set 34 done,  15430334 boards /     9974 armies =  1547 ( 1237 MB)
-  1071 s, set 33 done, 684175807 boards / 79473900 armies =     8 (10814 MB)
-  1518 s, set 32 done,  29006386 boards /    13798 armies =  2102 ( 6677 MB)
-  Segmentation fault (core dumped)
+           set 48 done (nas)
+     0 s, set 47 done,        21 boards /       21 armies      21 (   92 MB)
+     0 s, set 46 done,       802 boards /       21 armies      38 (   92 MB)
+     0 s, set 45 done,     21965 boards /      561 armies    1045 (  226 MB)
+     0 s, set 44 done,    293482 boards /      346 armies     848 (  226 MB)
+     1 s, set 43 done,   2107470 boards /    11884 armies    6090 (  231 MB)
+     2 s, set 42 done,   1795610 boards /     1359 armies    1321 (  231 MB)
+     5 s, set 41 done,   7373142 boards /   116965 armies    5425 (  248 MB)
+     8 s, set 40 done,   3653372 boards /     1714 armies    2131 (  248 MB)
+    12 s, set 39 done,  12454752 boards /   572826 armies    7266 (  293 MB)
+    13 s, set 38 done,   4762105 boards /      764 armies    6233 (  286 MB)
+    20 s, set 37 done,  15247605 boards /  1386025 armies   19957 (  438 MB)
+    20 s, set 36 done,   2749722 boards /     4067 armies     676 (  343 MB)
+   108 s, set 35 done, 132359994 boards /  8571720 armies   32544 ( 1859 MB)
+   180 s, set 34 done,  15430334 boards /     9974 armies    1547 ( 1267 MB)
+   842 s, set 33 done, 684175807 boards / 79473900 armies   68595 (10729 MB)
+   980 s, set 32 done,  29006386 boards /    13798 armies    2102 ( 6055 MB)
+  1571 s, set 31 done,1259169762 boards /261027455 armies   91257 (32142 MB)
+  2241 s, set 30 done,  45970330 boards /     6090 armies    7548 (20821 MB)
+  2088 s, set 29 done,2085103503 boards /165403675 armies  342381 (40066 MB)
+  3461 s, set 28 done,  20861333 boards /     5085 armies    4102 (21028 MB)
+   985 s, set 27 done, 957082774 boards / 16540527 armies  188216 (21991 MB)
+  1579 s, set 26 done,   3915809 boards /     3741 armies    1046 (10992 MB)
+   175 s, set 25 done, 261833479 boards / 14574698 armies   69990 ( 7925 MB)
+   477 s, set 24 done,   5756493 boards /     1515 armies    3799 ( 6764 MB)
+   294 s, set 23 done, 354677643 boards / 48865683 armies  234110 (11404 MB)
+   644 s, set 22 done,   3778585 boards /     1532 armies    2466 ( 9085 MB)
+   209 s, set 21 done, 220453523 boards / 86054998 armies  143899 (13259 MB)
+   558 s, set 20 done,    924928 boards /      557 armies    1660 ( 7877 MB)
+    57 s, set 19 done,  52214388 boards / 49927618 armies   93742 (10287 MB)
+   271 s, set 18 done,     47807 boards /      629 armies      76 ( 5173 MB)
+     2 s, set 17 done,   5833480 boards /  1461100 armies    9274 ( 5229 MB)
+     9 s, set 16 done,    142531 boards /      600 armies     237 ( 1592 MB)
+    10 s, set 15 done,  16312787 boards /  5486999 armies   27187 ( 1815 MB)
+    28 s, set 14 done,    225602 boards /      254 armies     888 ( 1759 MB)
+    19 s, set 13 done,  24314008 boards / 18405676 armies   95724 ( 2853 MB)
+    42 s, set 12 done,     23950 boards /       48 armies     498 ( 1959 MB)
+     1 s, set 11 done,   3258257 boards /  1855855 armies   67880 ( 2003 MB)
+     6 s, set 10 done,      3113 boards /        2 armies    1556 ( 1111 MB)
+     0 s, set  9 done,    397250 boards /   251197 armies  198625 (  482 MB)
+     1 s, set  8 done,         0 boards /        0 armies       0 (  370 MB)
+ 16937 s, no solution
+
+BALANCE 0 DELAY 1
+Minimum possible number of moves: 45
+           set 48 done (hp)
+     0 s, set 47 done,        21 boards /       21 armies      21 (   92 MB)
+     0 s, set 46 done,       802 boards /       21 armies      38 (   92 MB)
+     0 s, set 45 done,     21965 boards /      561 armies    1045 (  226 MB)
+     0 s, set 44 done,    293482 boards /      346 armies     848 (  227 MB)
+     1 s, set 43 done,   2107470 boards /    11884 armies    6090 (  232 MB)
+     3 s, set 42 done,   1795610 boards /     1359 armies    1321 (  232 MB)
+     6 s, set 41 done,   7369399 boards /   116884 armies    5422 (  250 MB)
+    14 s, set 40 done,   3652159 boards /     1714 armies    2130 (  250 MB)
+    18 s, set 39 done,  11858361 boards /   548783 armies    6918 (  299 MB)
+    22 s, set 38 done,   4602003 boards /      764 armies    6023 (  292 MB)
+    17 s, set 37 done,   9059441 boards /   830111 armies   11857 (  352 MB)
+    16 s, set 36 done,    807329 boards /      852 armies     947 (  324 MB)
+     4 s, set 35 done,   5182564 boards /   221445 armies    6082 (  324 MB)
+     9 s, set 34 done,    206394 boards /      541 armies     381 (  268 MB)
+     0 s, set 33 done,   1378597 boards /    92579 armies    2548 (  268 MB)
+     2 s, set 32 done,       776 boards /       73 armies      10 (  268 MB)
+     0 s, set 31 done,     43497 boards /    19463 armies     595 (  268 MB)
+     0 s, set 30 done,        63 boards /        3 armies      21 (  268 MB)
+     0 s, set 29 done,      3297 boards /     2184 armies    1099 (  268 MB)
+     0 s, set 28 done,         0 boards /        0 armies       0 (  268 MB)
+   118 s, no solution
+
+BALANCE 1 DELAY 1
+           set 48 done (hp)
+     0 s, set 47 done,        21 boards /       21 armies      21 (   92 MB)
+     0 s, set 46 done,       802 boards /       21 armies      38 (   92 MB)
+     0 s, set 45 done,     21965 boards /      561 armies    1045 (  226 MB)
+     0 s, set 44 done,    293482 boards /      346 armies     848 (  227 MB)
+     1 s, set 43 done,   2107470 boards /    11884 armies    6090 (  232 MB)
+     3 s, set 42 done,   1795610 boards /     1359 armies    1321 (  231 MB)
+     6 s, set 41 done,   7373142 boards /   116965 armies    5425 (  250 MB)
+    13 s, set 40 done,   3653372 boards /     1714 armies    2131 (  249 MB)
+    17 s, set 39 done,  12426804 boards /   571801 armies    7250 (  294 MB)
+    22 s, set 38 done,   4756489 boards /      764 armies    6225 (  287 MB)
+    24 s, set 37 done,  14059386 boards /  1288106 armies   18402 (  433 MB)
+    27 s, set 36 done,   1956995 boards /     1810 armies    1081 (  338 MB)
+    29 s, set 35 done,  34534219 boards /  2414041 armies   19079 (  692 MB)
+    65 s, set 34 done,   1443178 boards /      980 armies    1472 (  377 MB)
+    35 s, set 33 done,  41025360 boards /  6567658 armies   41862 ( 1084 MB)
+    86 s, set 32 done,    454475 boards /      796 armies     570 (  707 MB)
+    22 s, set 31 done,  25248987 boards /  8679525 armies   31719 ( 1301 MB)
+    64 s, set 30 done,    203496 boards /      686 armies     296 (  754 MB)
+     9 s, set 29 done,  11436359 boards /  3313397 armies   16671 ( 1010 MB)
+    26 s, set 28 done,     77106 boards /      198 armies     389 (  530 MB)
+     2 s, set 27 done,   4511976 boards /   318259 armies   22787 (  468 MB)
+    10 s, set 26 done,      7850 boards /       15 armies     523 (  245 MB)
+     0 s, set 25 done,    467713 boards /    69380 armies   31180 (  245 MB)
+     1 s, set 24 done,        50 boards /        8 armies       6 (  245 MB)
+     0 s, set 23 done,      4502 boards /     2288 armies     562 (  245 MB)
+     0 s, set 22 done,       174 boards /        8 armies      21 (  245 MB)
+     0 s, set 21 done,     14945 boards /     8378 armies    1868 (  245 MB)
+     0 s, set 20 done,        22 boards /        1 armies      22 (  245 MB)
+     0 s, set 19 done,      1951 boards /     1951 armies    1951 (  245 MB)
+     0 s, set 18 done,         0 boards /        0 armies       0 (  245 MB)
+   472 s, no solution
+
+BALANCE 2 DELAY 1
+Minimum possible number of moves: 45
+           set 48 done (hp)
+     0 s, set 47 done,        21 boards /       21 armies      21 (   92 MB)
+     0 s, set 46 done,       802 boards /       21 armies      38 (   92 MB)
+     0 s, set 45 done,     21965 boards /      561 armies    1045 (  226 MB)
+     0 s, set 44 done,    293482 boards /      346 armies     848 (  227 MB)
+     1 s, set 43 done,   2107470 boards /    11884 armies    6090 (  231 MB)
+     3 s, set 42 done,   1795610 boards /     1359 armies    1321 (  231 MB)
+     6 s, set 41 done,   7373142 boards /   116965 armies    5425 (  249 MB)
+    13 s, set 40 done,   3653372 boards /     1714 armies    2131 (  249 MB)
+    17 s, set 39 done,  12454752 boards /   572826 armies    7266 (  290 MB)
+    22 s, set 38 done,   4762105 boards /      764 armies    6233 (  283 MB)
+    26 s, set 37 done,  15148656 boards /  1379007 armies   19828 (  431 MB)
+    29 s, set 36 done,   2642253 boards /     4067 armies     649 (  336 MB)
+    89 s, set 35 done,  96389924 boards /  6809095 armies   23700 ( 1683 MB)
+   204 s, set 34 done,   7698891 boards /     9571 armies     804 ( 1090 MB)
+   490 s, set 33 done, 337013452 boards / 48375800 armies   35211 ( 7531 MB)
+   752 s, set 32 done,   8354970 boards /    12559 armies     665 ( 4592 MB)
+   795 s, set 31 done, 380711730 boards /115682611 armies   30313 (15191 MB)
+  1004 s, set 30 done,   5800409 boards /     5103 armies    1136 ( 9204 MB)
+   324 s, set 29 done, 276558054 boards / 55782150 armies   54195 (13916 MB)
+   689 s, set 28 done,   1885967 boards /      446 armies    4228 ( 5701 MB)
+    76 s, set 27 done,  93904760 boards /  3218801 armies  210548 ( 5857 MB)
+   236 s, set 26 done,    187120 boards /       15 armies   12474 ( 2019 MB)
+     8 s, set 25 done,   9836881 boards /  1309126 armies  655792 ( 2019 MB)
+    24 s, set 24 done,        58 boards /        8 armies       7 (  925 MB)
+     0 s, set 23 done,      6398 boards /     3232 armies     799 (  388 MB)
+     0 s, set 22 done,       264 boards /        8 armies      33 (  254 MB)
+     0 s, set 21 done,     28111 boards /    14157 armies    3513 (  254 MB)
+     0 s, set 20 done,        70 boards /        1 armies      70 (  254 MB)
+     0 s, set 19 done,      7304 boards /     7304 armies    7304 (  254 MB)
+     0 s, set 18 done,         0 boards /        0 armies       0 (  254 MB)
+  4821 s, no solution
+
+BALANCE 0 DELAY 0 49
+Minimum possible number of moves: 45
+           set 49 done (nas)
+     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
+     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
+     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
+     5 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
+    43 s, set 43 done,  64228527 boards /    11884 armies    9589 (  771 MB)
+    94 s, set 42 done,  74418075 boards /    27116 armies    2744 (  790 MB)
+   291 s, set 41 done, 351696676 boards /   210608 armies   12970 ( 3192 MB)
+   450 s, set 40 done, 199374348 boards /    43572 armies    4575 ( 3191 MB)
+   657 s, set 39 done, 512284681 boards /  1692493 armies   11757 ( 4762 MB)
+   635 s, set 38 done, 167571717 boards /    22816 armies    7344 ( 4540 MB)
+   283 s, set 37 done,  98016243 boards /  1769124 armies    4295 ( 3920 MB)
+   120 s, set 36 done,  21044577 boards /    26424 armies     796 ( 3070 MB)
+   378 s, set 35 done, 445378468 boards / 13270963 armies   16855 ( 4955 MB)
+   575 s, set 34 done,  16671699 boards /    17289 armies     964 ( 3853 MB)
+   136 s, set 33 done, 203626505 boards /  7045467 armies   11777 ( 4366 MB)
+   279 s, set 32 done,  15180117 boards /    12896 armies    1177 ( 3406 MB)
+   332 s, set 31 done, 416487786 boards / 13202265 armies   32295 ( 4969 MB)
+   613 s, set 30 done,  25639894 boards /    10266 armies    2497 ( 4389 MB)
+   670 s, set 29 done, 782594382 boards / 20216653 armies   76231 ( 8625 MB)
+  1168 s, set 28 done,  10190716 boards /     2525 armies    4035 ( 6882 MB)
+   301 s, set 27 done, 356042945 boards / 13447211 armies  141007 ( 7303 MB)
+   539 s, set 26 done,    481973 boards /      128 armies    3765 ( 5474 MB)
+    17 s, set 25 done,  20969500 boards /  3362518 armies  163824 ( 3930 MB)
+    38 s, set 24 done,         0 boards /        0 armies       0 (  560 MB)
+  7631 s, no solution
+
+BALANCE 0 DELAY 1 49
+Minimum possible number of moves: 45
+           set 49 done (hp)
+     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
+     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
+     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
+     4 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
+    39 s, set 43 done,  64228527 boards /    11884 armies    9589 (  771 MB)
+   134 s, set 42 done,  74418075 boards /    27116 armies    2744 (  794 MB)
+   383 s, set 41 done, 361519638 boards /   217389 armies   13332 ( 3203 MB)
+   710 s, set 40 done, 204368734 boards /    43572 armies    4690 ( 3135 MB)
+  1184 s, set 39 done, 755401353 boards /  2446362 armies   17336 ( 7245 MB)
+  1499 s, set 38 done, 237820612 boards /    32240 armies    7376 ( 7029 MB)
+  1094 s, set 37 done, 564346231 boards / 11386958 armies   17504 ( 7847 MB)
+  1113 s, set 36 done,  84222680 boards /    63800 armies    1320 ( 6393 MB)
+   806 s, set 35 done, 571174205 boards / 16568705 armies    8952 ( 7412 MB)
+  1148 s, set 34 done,  22880692 boards /    30282 armies     755 ( 5959 MB)
+   368 s, set 33 done, 345966795 boards / 12660359 armies   11424 ( 6919 MB)
+   748 s, set 32 done,  18006789 boards /    20191 armies     891 ( 5556 MB)
+   557 s, set 31 done, 499361904 boards / 18155543 armies   24731 ( 6253 MB)
+  1150 s, set 30 done,  28943379 boards /    12563 armies    2303 ( 5226 MB)
+  1123 s, set 29 done, 860325297 boards / 24371537 armies   68480 (10214 MB)
+  2026 s, set 28 done,  11401149 boards /     2655 armies    4294 ( 8074 MB)
+   567 s, set 27 done, 386576190 boards / 14512390 armies  145603 ( 7808 MB)
+   897 s, set 26 done,    496220 boards /      154 armies    3222 ( 4501 MB)
+    20 s, set 25 done,  21474553 boards /  3474047 armies  139445 ( 3113 MB)
+    51 s, set 24 done,         0 boards /        0 armies       0 (  516 MB)
+ 15631 s, no solution
+
+nas B=0 D=2
+Minimum possible number of moves: 45
+           set 49 done (nas)
+     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
+     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
+     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
+     5 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
+    44 s, set 43 done,  64228527 boards /    11884 armies    9589 (  770 MB)
+    94 s, set 42 done,  74418075 boards /    27116 armies    2744 (  794 MB)
+   296 s, set 41 done, 361710211 boards /   217512 armies   13339 ( 3158 MB)
+   460 s, set 40 done, 204451594 boards /    43572 armies    4692 ( 3041 MB)
+   965 s, set 39 done, 789291363 boards /  2549261 armies   18114 ( 7626 MB)
+   982 s, set 38 done, 246659636 boards /    33602 armies    7340 ( 7231 MB)
+  1240 s, set 37 done, 893670177 boards / 17116631 armies   26595 (10767 MB)
+  1167 s, set 36 done, 179321507 boards /   112651 armies    1591 ( 7870 MB)
+  Killed
+
+hp B=1 D=-1
+           set 49 done (hp)
+     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
+     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
+     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
+     4 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
+    39 s, set 43 done,  64228527 boards /    11884 armies    9589 (  773 MB)
+   131 s, set 42 done,  74418075 boards /    27116 armies    2744 (  805 MB)
+   353 s, set 41 done, 351696676 boards /   210608 armies   12970 ( 3138 MB)
+   693 s, set 40 done, 199374348 boards /    43572 armies    4575 ( 3136 MB)
+   869 s, set 39 done, 512284681 boards /  1692493 armies   11757 ( 4819 MB)
+   985 s, set 38 done, 167571717 boards /    22816 armies    7344 ( 4671 MB)
+   962 s, set 37 done, 544940397 boards / 11316677 armies   23884 ( 6166 MB)
+  1078 s, set 36 done,  78078909 boards /    38668 armies    2019 ( 3998 MB)
+Exception: std::bad_alloc
 
 int const X = 8;
 int const Y = 8;

@@ -5,9 +5,15 @@ uint64_t NAME(BoardSet& boards_from,
               ArmySet const& opponent_armies,
               ArmySet& moved_armies,
 #if BACKTRACK && !BLUE_TO_MOVE
-              BoardTable<uint8_t> const& red_backtrack,
+              BoardTable<uint8_t> const& backtrack,
 #endif // BACKTRACK && !BLUE_TO_MOVE
               int available_moves) {
+#if !BLUE_TO_MOVE
+    int balance_moves = max(available_moves/2 + balance_delay - ARMY, 0);
+    BalanceMask balance_mask = make_balance_mask(balance_min-balance_moves, balance_max+balance_moves);
+    balance_mask = ~balance_mask;
+    ParityCount balance_count_from, balance_count;
+#endif
     uint64_t late = 0;
     while (true) {
         BoardSubSetRef subset{boards_from};
@@ -99,22 +105,25 @@ uint64_t NAME(BoardSet& boards_from,
             Army const& army           = red;
             Army const& army_symmetric = red_symmetric;
             ArmyMapper const mapper{red_symmetric};
+
+#if BACKTRACK
+            int backtrack_count_from = 2*ARMY;
+            int backtrack_count_symmetric_from = 2*ARMY;
+            for (auto const& pos: army)
+                backtrack_count_from -= backtrack[pos];
+            for (auto const& pos: army_symmetric)
+                backtrack_count_symmetric_from -= backtrack[pos];
+#endif // BACKTRACK
+
+            if (BALANCE >= 0) {
+                fill(balance_count_from.begin(), balance_count_from.end(), 0);
+                for (auto const&pos: red)
+                    ++balance_count_from[pos.parity()];
+            }
+
 #endif // BLUE_TO_MOVE
 
             ArmyPos armyE, armyESymmetric;
-            auto off_base     = off_base_from;
-            auto parity_count = parity_count_from;
-            auto edge_count   = edge_count_from;
-
-#if BACKTRACK && !BLUE_TO_MOVE
-            int red_backtrack_count_from = 2*ARMY;
-            int red_backtrack_count_symmetric_from = 2*ARMY;
-            for (auto const& pos: army)
-                red_backtrack_count_from -= red_backtrack[pos];
-            for (auto const& pos: army_symmetric)
-                red_backtrack_count_symmetric_from -= red_backtrack[pos];
-#endif // BACKTRACK && !BLUE_TO_MOVE
-
 #if !VERBOSE
             Image image{blue, red};
 #endif // VERBOSE
@@ -126,16 +135,24 @@ uint64_t NAME(BoardSet& boards_from,
                 image.set(soldier, EMPTY);
                 armyESymmetric.copy(army_symmetric, mapper.map(soldier));
 #if BLUE_TO_MOVE
-                off_base = off_base_from;
+                auto off_base = off_base_from;
                 off_base += tables.base_red(soldier);
-                parity_count = parity_count_from;
+                ParityCount parity_count = parity_count_from;
                 ++parity_count[soldier.parity()];
-                edge_count = edge_count_from;
+                auto edge_count = edge_count_from;
                 edge_count -= tables.edge_red(soldier);
-#elif BACKTRACK
-                int red_backtrack_count = red_backtrack_count_from + red_backtrack[soldier];
-                int red_backtrack_count_symmetric = red_backtrack_count_symmetric_from + red_backtrack[soldier.symmetric()];
-#endif
+#else
+
+# if BACKTRACK
+                int backtrack_count = backtrack_count_from + backtrack[soldier];
+                int backtrack_count_symmetric = backtrack_count_symmetric_from + backtrack[soldier.symmetric()];
+# endif // BACKTRACK
+
+                if (BALANCE >= 0) {
+                    balance_count = balance_count_from;
+                    --balance_count[soldier.parity()];
+                }
+#endif // BLUE_TO_MOVE
 
                 // Jumps
                 array<Coord, ARMY*2*MOVES+(1+MOVES)> reachable;
@@ -172,7 +189,8 @@ uint64_t NAME(BoardSet& boards_from,
                     auto val = reachable[i];
 
                     Nbits Ndistance_a = Ndistance_army;
-                    if (BLUE_TO_MOVE) {
+                    {
+#if BLUE_TO_MOVE
                         Nbits Ndistance_r = Ndistance_red;
                         auto off      = off_base;
                         auto parity_c = parity_count;
@@ -206,13 +224,24 @@ uint64_t NAME(BoardSet& boards_from,
                             slides += max(tc, 0);
                         int blue_moves = pre_moves + max(slides-pre_moves-edge_c, 0) + off;
                         needed_moves = 2*blue_moves;
-                    } else {
-#if BACKTRACK && !BLUE_TO_MOVE
-                        if (red_backtrack_count - red_backtrack[val] >= available_moves &&
-                            red_backtrack_count_symmetric - red_backtrack[val.symmetric()] >= available_moves) continue;
-#endif // BACKTRACK && !BLUE_TO_MOVE
-                        // We won't notice an increase in army distance, but these
-                        // are rare and will be discovered in the late prune
+#else // BLUE_TO_MOVE
+# if BACKTRACK
+                        if (backtrack_count - backtrack[val] >= available_moves &&
+                            backtrack_count_symmetric - backtrack[val.symmetric()] >= available_moves) continue;
+# endif // BACKTRACK
+
+                        if (BALANCE >= 0) {
+                            auto balance_c = balance_count;
+                            ++balance_c[val.parity()];
+                            BalanceMask balance_bits = 0;
+                            for (auto b: balance_c)
+                                balance_bits |= static_cast<BalanceMask>(1) << b;
+                            if (balance_bits & balance_mask) continue;
+                        }
+
+                        // We won't notice an increase in army distance, but
+                        // these are rare and will be discovered in the late
+                        // prune
                         for (auto const& b: blue) {
                             if (tables.base_red(b)) continue;
                             Ndistance_a |= tables.Ndistance(val, b);
@@ -221,16 +250,18 @@ uint64_t NAME(BoardSet& boards_from,
                         int pre_moves = min((distance_army + 1) / 2, distance_red);
                         int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
                         needed_moves = 2*blue_moves - 1;
-                    }
-                    if (needed_moves >= available_moves) {
-                        if (VERBOSE) {
-                            cout << "   Move " << soldier << " to " << val << "\n";
-                            cout << "   Prune " << needed_moves << " > " << available_moves-1 << "\n";
+#endif // BLUE_TO_MOVE
+                        if (needed_moves >= available_moves) {
+                            if (VERBOSE) {
+                                cout << "   Move " << soldier << " to " << val << "\n";
+                                cout << "   Prune " << needed_moves << " > " << available_moves-1 << "\n";
+                            }
+                            continue;
                         }
-                        continue;
                     }
-
+#if BLUE_TO_MOVE
                   SOLUTION:
+#endif // BLUE_TO_MOVE
                     armyE.store(val);
                     // cout << "   Final Set pos " << pos << armyE[pos] << "\n";
                     // cout << armyE << "----------------\n";

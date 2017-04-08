@@ -55,8 +55,12 @@ using namespace std;
 bool const STATISTICS = false;
 bool const SYMMETRY = true;
 bool const MEMCHECK = false;
+bool const CLOSED_LOOP = false;
+bool const PASS = false;
+// For the moment it is always allowed to jump the same man multiple times
+// bool const DOUBLE_CROSS = true;
+int  const BALANCE  = -1;
 // 0 means let C++ decide
-uint const DEFAULT_THREADS = 0;
 
 #define CHECK   0
 #define VERBOSE	0
@@ -73,10 +77,27 @@ int const Y = 9;
 int const MOVES = 6;
 int const ARMY = 10;
 #endif // !PLAY
-bool const CLOSED_LOOP = false;
-bool const PASS = false;
-// For the moment it is always allowed to jump the same man multiple times
-// bool const DOUBLE_CROSS = true;
+
+// ARMY < 32
+using BalanceMask = uint32_t;
+int const BALANCE_BITS = std::numeric_limits<BalanceMask>::digits;
+BalanceMask BALANCE_FULL = ~ static_cast<BalanceMask>(0);
+constexpr BalanceMask make_balance_mask(int min, int max) {
+    return
+        min < 0 ? make_balance_mask(0, max) :
+        max >= BALANCE_BITS ? make_balance_mask(min, BALANCE_BITS-1) :
+        min > max ? 0 :
+        BALANCE_FULL << min & BALANCE_FULL >> (BALANCE_BITS-1 - max);
+}
+int balance = -1;
+int balance_delay = 0;
+int balance_min, balance_max;
+
+// There is no fundamental limit. Just make up *SOME* bound
+uint const THREADS_MAX = 256;
+uint nr_threads = 0;
+
+const char letters[] = "abcdefghijklmnopqrstuvwxyz";
 
 uint64_t SEED = 123456789;
 
@@ -128,10 +149,23 @@ Color operator+(Color from, int value) {
 Color operator-(Color from, int value) {
     return static_cast<Color>(static_cast<int>(from) - value);
 }
-inline string svg_name(Color color) {
+Color operator~(Color color) {
+    return RED+BLUE-color;
+}
+
+inline string svg_color(Color color) {
     switch (color) {
         case EMPTY: return "grey";
         case BLUE:  return "turquoise";
+        case RED:   return "red";
+        default:    return "black";
+    }
+}
+
+inline string font_color(Color color) {
+    switch (color) {
+        case EMPTY: return "grey";
+        case BLUE:  return "blue";
         case RED:   return "red";
         default:    return "black";
     }
@@ -157,6 +191,7 @@ class Coord {
     int x() const PURE { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
     int y() const PURE { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
     inline Parity parity() const PURE;
+    string str()  const PURE { return letters[x()] + to_string(y()+1); }
     int pos()     const PURE { return pos_; }
     uint index()  const PURE { return OFFSET+ pos_; }
     uint index2() const PURE { return MAX+pos_; }
@@ -176,6 +211,7 @@ class Coord {
     }
     // Mirror over NW-SE diagonal
     inline Coord symmetric() const PURE;
+
     void svg(ostream& os, Color color, uint scale) const;
   private:
     static uint const OFFSET = ROW+1;
@@ -206,7 +242,7 @@ class Coord {
 };
 
 void Coord::svg(ostream& os, Color color, uint scale) const {
-    os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_name(color) << "' />\n";
+    os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
 }
 
 struct Move {
@@ -938,6 +974,7 @@ class FullMove: public vector<Coord> {
   public:
     FullMove() {}
     FullMove(Board const& from, Board const& to, Color color=COLORS);
+    string str() const PURE;
   private:
     static Move army_diff(Army const& army_from, Army const& army_to);
 
@@ -1038,6 +1075,16 @@ FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) 
     throw(logic_error("closed loop analysis not implemented yet"));
 }
 
+string FullMove::str() const {
+    string result;
+    for (auto const &move: *this) {
+        result += move.str();
+        result += "-";
+    }
+    if (result.size()) result.pop_back();
+    return result;
+}
+
 class Svg {
   public:
     static uint const SCALE = 20;
@@ -1046,9 +1093,11 @@ class Svg {
         return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(MOVES) + ".html";
     }
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
+    void parameters(uint x, uint y, uint army, uint rule);
+    void game(vector<Board> const& boards);
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
-    void html_header();
+    void html_header(uint nr_moves);
     void html_footer();
     void header();
     void footer();
@@ -1063,41 +1112,6 @@ class Svg {
 inline ostream& operator<<(ostream& os, Svg const& svg) {
     os << svg.str();
     return os;
-}
-
-void Svg::html_header() {
-    out_ << "<html>\n";
-    out_ << "  <body>\n";
-}
-
-void Svg::html_footer() {
-    out_ << "  </body>\n";
-    out_ << "</html>\n";
-}
-
-void Svg::header() {
-    out_ << "    <svg height='" << Y * scale_ + 2*margin_ << "' width='" << X * scale_ + 2*margin_ << "'>\n";
-    uint h = scale_ * 0.10;
-    uint w = scale_ * 0.15;
-    out_ <<
-        "      <defs>\n"
-        "        <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "' \n"
-        "        refX='" << w << "' refY='" << h << "' orient='auto'>\n"
-        "          <polygon points='0 0, " << w << " " << h << ", 0 " << 2*h << "' />\n"
-        "        </marker>\n"
-        "      </defs>\n";
-}
-
-void Svg::footer() {
-    out_ << "    </svg>\n";
-}
-
-void Svg::move(FullMove const& move) {
-    out_ << "      <polyline points='";
-    for (Coord const& pos: move) {
-        out_ << pos.x() * scale_ + scale_/2 + margin_ << "," << pos.y() * scale_ + scale_/2 + margin_ << " ";
-    }
-    out_ << "' stroke='black' stroke-width='" << scale_/10 << "' fill='none' marker-end='url(#arrowhead)' />\n";
 }
 
 template<class T>
@@ -1122,6 +1136,7 @@ using ParityCount = array<int, 4>;
 class Tables {
   public:
     Tables();
+    uint min_moves() const PURE { return min_moves_; }
     inline Norm norm(Coord const& left, Coord const& right) const PURE {
         return norm_[right.pos() - left.pos() + Coord::MAX];
     }
@@ -1189,6 +1204,7 @@ class Tables {
     }
   private:
     ParityCount parity_count_;
+    uint min_moves_;
     Moves moves_;
     Norm infinity_;
     BoardTable<Coord> symmetric_;
@@ -1285,6 +1301,8 @@ Tables::Tables() {
     fill(parity_count_.begin(), parity_count_.end(), 0);
     for (auto const& r: red)
         ++parity_count_[parity(r)];
+
+    min_moves_ = start_.min_moves();
 }
 
 void Tables::print_moves(ostream& os) const {
@@ -1596,6 +1614,148 @@ void Board::move(Move const& move_) {
     throw(logic_error("Move not found"));
 }
 
+void Svg::html_header(uint nr_moves) {
+    out_ <<
+        "<html>\n"
+        "  <body>\n"
+        "   <h1>" << nr_moves << " moves</h1>\n";
+}
+
+void Svg::html_footer() {
+    out_ <<
+        "  </body>\n"
+        "</html>\n";
+}
+
+void Svg::header() {
+    out_ << "    <svg height='" << Y * scale_ + 2*margin_ << "' width='" << X * scale_ + 2*margin_ << "'>\n";
+    uint h = scale_ * 0.10;
+    uint w = scale_ * 0.15;
+    out_ <<
+        "      <defs>\n"
+        "        <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "' \n"
+        "        refX='" << w << "' refY='" << h << "' orient='auto'>\n"
+        "          <polygon points='0 0, " << w << " " << h << ", 0 " << 2*h << "' />\n"
+        "        </marker>\n"
+        "      </defs>\n";
+}
+
+void Svg::footer() {
+    out_ << "    </svg>\n";
+}
+
+void Svg::parameters(uint x, uint y, uint army, uint rule) {
+    out_ <<
+        "    <table>\n"
+        "      <tr><th align='left'>X</th><td>" << x << "</td></tr>\n"
+        "      <tr><th align='left'>Y</th><td>" << y << "</td></tr>\n"
+        "      <tr><th align='left'>Army</th><td>" << army << "</td></tr>\n"
+        "      <tr><th align='left'>Rule</th><td>" << rule << "-move</td></tr>\n"
+        "      <tr><th align='left'>Bound</th><td> &ge; " << tables.min_moves() << " moves</td></tr>\n"
+        "      <tr><th align='left'>Heuristics</th><td>";
+    if (balance < 0)
+        out_ << "None\n";
+    else
+        out_ << "Balance " << balance << ", delay " << balance_delay;
+    out_ <<
+        "</td>\n"
+        "      <tr><th align='left'>Host</th><td>" << HOSTNAME << "</td></tr>\n"
+        "      <tr><th align='left'>Threads</th><td>" << nr_threads << "</td></tr>\n"
+        "    </table>\n";
+}
+
+void Svg::move(FullMove const& move) {
+    out_ << "      <polyline points='";
+    for (Coord const& pos: move) {
+        out_ << pos.x() * scale_ + scale_/2 + margin_ << "," << pos.y() * scale_ + scale_/2 + margin_ << " ";
+    }
+    out_ << "' stroke='black' stroke-width='" << scale_/10 << "' fill='none' marker-end='url(#arrowhead)' />\n";
+}
+
+void Svg::game(vector<Board> const& boards) {
+    parameters(X, Y, ARMY, MOVES);
+    string moves_string;
+    int color_index = boards.size() % 2;
+    string color_font[] = {
+        "      <font color='" + font_color(BLUE) + "'>",
+        "      <font color='" + font_color(RED ) + "'>",
+    };
+    for (size_t i = 0; i < boards.size(); ++i) {
+        header();
+        auto const& board_from = boards[i];
+        board(board_from);
+        if (i < boards.size()-1) {
+            auto const& board_to = boards[i+1];
+            FullMove full_move{board_from, board_to};
+            move(full_move);
+            moves_string += color_font[color_index];
+            moves_string += full_move.str();
+            moves_string += "</font>,\n";
+            color_index = !color_index;
+        }
+        footer();
+    }
+    if (boards.size() > 1) {
+        moves_string.pop_back();
+        moves_string.pop_back();
+        out_ << "    <p>\n" << moves_string << "\n    </p>\n";
+    }
+}
+
+// Handle commandline options.
+// Simplified getopt for systems that don't have it in their library (Windows..)
+class GetOpt {
+  private:
+    string const options;
+    char const* const* argv;
+    int nextchar = 0;
+    int optind = 1;
+    char ch = '?';
+    char const* optarg = nullptr;
+
+  public:
+    int ind() const PURE { return optind; }
+    char const* arg() const PURE { return optarg; }
+    char const* next_arg() { return argv[optind++]; }
+    char option() const PURE { return ch; }
+
+    GetOpt(string const options_, char const* const* argv_) :
+        options(options_), argv(argv_) {}
+    char next() {
+        while (1) {
+            if (nextchar == 0) {
+                if (!argv[optind] ||
+                    argv[optind][0] != '-' ||
+                    argv[optind][1] == 0) return ch = 0;
+                if (argv[optind][1] == '-' && argv[optind][2] == 0) {
+                    ++optind;
+                    return ch = 0;
+                }
+                nextchar = 1;
+            }
+            ch = argv[optind][nextchar++];
+            if (ch == 0) {
+                ++optind;
+                nextchar = 0;
+                continue;
+            }
+            auto pos = options.find(ch);
+            if (pos == string::npos) ch = '?';
+            else if (options[pos+1] == ':') {
+                if (argv[optind][nextchar]) {
+                    optarg = &argv[optind][nextchar];
+                } else {
+                    optarg = argv[++optind];
+                    if (!optarg) return ch = options[0] == ':' ? ':' : '?';
+                }
+                ++optind;
+                nextchar = 0;
+            }
+            return ch;
+        }
+    }
+};
+
 // The classic 30 solution
 // Used to check the code, especially the pruning
 Move const game30[] = {
@@ -1676,11 +1836,9 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                          ArmySet& moved_armies,
                          int nr_moves,
                          bool backtrack,
-                         BoardTable<uint8_t> const& red_backtrack,
-                         uint nr_threads = DEFAULT_THREADS) {
+                         BoardTable<uint8_t> const& red_backtrack) {
     auto start = chrono::steady_clock::now();
 
-    if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
     vector<future<uint64_t>> results;
     uint64_t late;
     int blue_to_move = nr_moves & 1;
@@ -1760,10 +1918,10 @@ make_all_moves(BoardSet& boards_from,
                ArmySet const& moving_armies,
                ArmySet const& opponent_armies,
                ArmySet& moved_armies,
-               int nr_moves, uint nr_threads = DEFAULT_THREADS) {
+               int nr_moves) {
     return _make_all_moves(boards_from, boards_to,
                            moving_armies, opponent_armies, moved_armies,
-                           nr_moves, false, *dummy_backtrack, nr_threads);
+                           nr_moves, false, *dummy_backtrack);
 }
 
 NOINLINE uint64_t
@@ -1773,11 +1931,10 @@ make_all_moves_backtrack(BoardSet& boards_from,
                          ArmySet const& opponent_armies,
                          ArmySet& moved_armies,
                          int nr_moves,
-                         BoardTable<uint8_t> const& red_backtrack,
-                         uint nr_threads = DEFAULT_THREADS) {
+                         BoardTable<uint8_t> const& red_backtrack) {
     return _make_all_moves(boards_from, boards_to,
                            moving_armies, opponent_armies, moved_armies,
-                           nr_moves, true, red_backtrack, nr_threads);
+                           nr_moves, true, red_backtrack);
 }
 
 void play() {
@@ -1812,7 +1969,12 @@ bool solve(Board const& board, int nr_moves, Army& red_army) {
     array<BoardSet, 2> board_set;
     array<ArmySet, 3>  army_set;
     board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
-    cout << setw(15) << "set " << nr_moves << " done (" << HOSTNAME << ")" << endl;
+    cout << setw(14) << "set " << nr_moves << " done (" << HOSTNAME << ", ";
+    if (balance >= 0)
+        cout << "balance=" << balance << ", delay=" << balance_delay;
+    else
+        cout << "no heuristics";
+    cout << ")" << endl;
     auto const& final_boards_to   = board_set[nr_moves % 2];
     for (int i=0; nr_moves>0; --nr_moves, ++i) {
         auto& boards_from = board_set[ i    % 2];
@@ -1924,13 +2086,14 @@ void backtrack(Board const& board, int nr_moves,
 
     vector<Board> boards;
     // Reserve nr_moves+1 boards
-    boards.reserve(board_set.size());
-    boards.emplace_back(final_army_set.at(blue_id), last_red_army);
+    size_t board_pos = board_set.size();
+    boards.resize(board_pos);
+    boards[--board_pos] = Board{final_army_set.at(blue_id), last_red_army};
     bool opponent_flipped = false;
 
     if (false) {
         cout << "Blue: " << blue_id << ", Red: " << red_id << ", skewed=" << skewed << "\n";
-        cout << boards.back();
+        cout << boards[board_pos];
     }
 
     board_set.pop_back();
@@ -1968,9 +2131,11 @@ void backtrack(Board const& board, int nr_moves,
                     if (r_id != red_id) continue;
                     if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
                         opponent_flipped ^= skewed;
-                        boards.emplace_back(opponent_flipped ? blue_army.symmetric() : blue_army,
-                                            boards.back().red());
-                        // cout << "Found blue:\n" << boards.back();
+                        --board_pos;
+                        boards[board_pos] = Board{
+                            opponent_flipped ? blue_army.symmetric() : blue_army,
+                            boards[board_pos+1].red()};
+                        // cout << "Found blue:\n" << boards[board_pos];
                         goto BLUE_DONE;
                     }
                 }
@@ -1990,9 +2155,11 @@ void backtrack(Board const& board, int nr_moves,
                 if (red_id == 0) continue;
                 if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
                     opponent_flipped ^= skewed;
-                    boards.emplace_back(boards.back().blue(),
-                                        opponent_flipped ? red_army.symmetric() : red_army);
-                    // cout << "Found red:\n" << boards.back();
+                    --board_pos;
+                    boards[board_pos] = Board{
+                        boards[board_pos+1].blue(),
+                        opponent_flipped ? red_army.symmetric() : red_army};
+                    // cout << "Found red:\n" << boards[board_pos];
                     goto RED_DONE;
                 }
             }
@@ -2001,24 +2168,14 @@ void backtrack(Board const& board, int nr_moves,
         }
     }
     for (size_t i = 0; i < boards.size(); ++i)
-        cout << "Move " << i << "\n" << boards[boards.size()-1-i];
+        cout << "Move " << i << "\n" << boards[i];
 
     Svg svg;
-    svg.html_header();
-    for (size_t i = 0; i < boards.size(); ++i) {
-        svg.header();
-        auto const& board_from = boards[boards.size()-1-i];
-        svg.board(board_from);
-        if (i < boards.size()-1) {
-            auto const& board_to   = boards[boards.size()-2-i];
-            FullMove move{board_from, board_to};
-            svg.move(move);
-        }
-        svg.footer();
-        svg.html_footer();
-    }
+    svg.html_header(boards.size()-1);
+    svg.game(boards);
+    svg.html_footer();
     string const svg_file = Svg::solution_file();
-    string const svg_file_tmp = svg_file + ".new";
+    string const svg_file_tmp = svg_file + "." + HOSTNAME + "." + to_string(getpid()) + ".new";
     ofstream svg_fh;
     svg_fh.exceptions(ofstream::failbit | ofstream::badbit);
     try {
@@ -2036,7 +2193,44 @@ void backtrack(Board const& board, int nr_moves,
     }
 }
 
+void system_properties() {
+    char hostname[100];
+    hostname[sizeof(hostname)-1] = 0;
+    int rc = gethostname(hostname, sizeof(hostname)-1);
+    if (rc) throw(system_error(errno, system_category(),
+                               "Could not determine host name"));
+    HOSTNAME.assign(hostname);
+
+    long tmp = sysconf(_SC_PAGE_SIZE);
+    if (tmp == -1)
+        throw(system_error(errno, system_category(),
+                           "Could not determine PAGE SIZE"));
+    PAGE_SIZE = tmp;
+}
+
 void my_main(int argc, char const* const* argv) {
+    GetOpt options("b:B:t:", argv);
+    long long int val;
+    while (options.next())
+        switch (options.option()) {
+            case 'b': balance       = atoi(options.arg()); break;
+            case 'B': balance_delay = atoi(options.arg()); break;
+            case 't':
+              val = atoll(options.arg());
+              if (val < 0)
+                  throw(range_error("Number of threads cannot be negative"));
+              if (val > THREADS_MAX)
+                  throw(range_error("Too many threads"));
+              nr_threads = val;
+              break;
+            default:
+              cerr << "usage: " << argv[0] << " [-t threads] [-b balance] [-B balance_delay]\n";
+              exit(EXIT_FAILURE);
+        }
+    balance_min = ARMY     / 4 - balance;
+    balance_max = (ARMY+3) / 4 + balance;
+    if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
+
     auto start_board = tables.start();
     if (false) {
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
@@ -2059,11 +2253,12 @@ void my_main(int argc, char const* const* argv) {
         tables.print_parity_count();
     }
 
-    int needed_moves = start_board.min_moves();
+    int needed_moves = tables.min_moves();
     cout << "Minimum possible number of moves: " << needed_moves << "\n";
     int nr_moves = needed_moves;
-    if (argc > 1) {
-        nr_moves = atoi(argv[1]);
+    auto arg = options.next_arg();
+    if (arg) {
+        nr_moves = atoi(arg);
         if (nr_moves < needed_moves) {
             if (nr_moves <= 0)
                 throw(range_error("Number of moves must be positive"));
@@ -2083,22 +2278,7 @@ void my_main(int argc, char const* const* argv) {
     backtrack(start_board, nr_moves, red_army);
 }
 
-void system_properties() {
-    char hostname[100];
-    hostname[sizeof(hostname)-1] = 0;
-    int rc = gethostname(hostname, sizeof(hostname)-1);
-    if (rc) throw(system_error(errno, system_category(),
-                               "Could not determine host name"));
-    HOSTNAME.assign(hostname);
-
-    long tmp = sysconf(_SC_PAGE_SIZE);
-    if (tmp == -1)
-        throw(system_error(errno, system_category(),
-                           "Could not determine PAGE SIZE"));
-    PAGE_SIZE = tmp;
-}
-
-int main(int argc, char** argv) {
+int main(int argc, char const* const* argv) {
     try {
         system_properties();
 
