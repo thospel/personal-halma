@@ -75,6 +75,8 @@ int const ARMY = 10;
 #endif // !PLAY
 bool const CLOSED_LOOP = false;
 bool const PASS = false;
+// For the moment it is always allowed to jump the same man multiple times
+// bool const DOUBLE_CROSS = true;
 
 uint64_t SEED = 123456789;
 
@@ -1041,7 +1043,7 @@ class Svg {
     static uint const SCALE = 20;
 
     static string const solution_file() FUNCTIONAL {
-        return string("solutions/halmaX") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(MOVES) + ".html";
+        return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(MOVES) + ".html";
     }
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
