@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <condition_variable>
 #include <future>
 #include <fstream>
 #include <iomanip>
@@ -59,7 +60,7 @@ bool const CLOSED_LOOP = false;
 bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
 // bool const DOUBLE_CROSS = true;
-int  const BALANCE  = -1;
+int  const BALANCE  = 0;
 // 0 means let C++ decide
 
 #define CHECK   0
@@ -89,7 +90,7 @@ constexpr BalanceMask make_balance_mask(int min, int max) {
         min > max ? 0 :
         BALANCE_FULL << min & BALANCE_FULL >> (BALANCE_BITS-1 - max);
 }
-int balance = -1;
+int balance = 0;
 int balance_delay = 0;
 int balance_min, balance_max;
 
@@ -172,9 +173,80 @@ inline string font_color(Color color) {
 }
 
 class Coord;
+class CoordPair;
+class CoordZ {
+  public:
+    using value_type = uint8_t;
+
+    static int const SIZE = X*Y;
+    static const CoordZ MIN;
+    static const CoordZ MAX;
+
+    inline CoordZ() {}
+    inline CoordZ(int x, int y): pos_{static_cast<value_type>(y*X+x)} {}
+    explicit inline CoordZ(Coord const& pos);
+    inline CoordPair const& coord_pair() const PURE;
+    // Mirror over SW-NE diagonal
+    CoordZ mirror() const PURE { return CoordZ{static_cast<value_type>((SIZE-1) - pos_)}; }
+    // Mirror over NW-SE diagonal
+    inline CoordZ symmetric() const PURE;
+    inline Parity parity() const PURE;
+    inline uint x() const PURE { return pos_ % X; }
+    inline uint y() const PURE { return pos_ / X; }
+    string str() const PURE { return letters[x()] + to_string(y()+1); }
+    void check(int line) const {
+        int x_ = x();
+        int y_ = y();
+        if (x_ < 0) throw(logic_error("x negative at line " + to_string(line)));
+        if (x_ >= X) throw(logic_error("x too large at line " + to_string(line)));
+        if (y_ < 0) throw(logic_error("y negative at line " + to_string(line)));
+        if (y_ >= Y) throw(logic_error("y too large at line " + to_string(line)));
+    }
+
+    void svg(ostream& os, Color color, uint scale) const;
+    value_type _pos() const PURE { return pos_; }
+  private:
+    explicit inline CoordZ(value_type pos): pos_{pos} {}
+
+    value_type pos_;
+
+    friend inline bool operator<(CoordZ const& l, CoordZ const& r) {
+        return l.pos_ < r.pos_;
+    }
+    friend inline bool operator>(CoordZ const& l, CoordZ const& r) {
+        return l.pos_ > r.pos_;
+    }
+    friend inline bool operator>=(CoordZ const& l, CoordZ const& r) {
+        return l.pos_ >= r.pos_;
+    }
+    friend inline bool operator==(CoordZ const& l, CoordZ const& r) {
+        return l.pos_ == r.pos_;
+    }
+    friend inline bool operator!=(CoordZ const& l, CoordZ const& r) {
+        return l.pos_ != r.pos_;
+    }
+};
+
+inline ostream& operator<<(ostream& os, CoordZ const& pos) {
+    os << setw(2) << pos.x() << "," << setw(3) << pos.y();
+    return os;
+}
+
+const CoordZ CoordZ::MIN = CoordZ{std::numeric_limits<value_type>::min()};
+const CoordZ CoordZ::MAX = CoordZ{std::numeric_limits<value_type>::max()};
+
+template<class T>
+class BoardZTable {
+  public:
+    T&       operator[](CoordZ const& pos)       PURE { return data_[pos._pos()];}
+    T const& operator[](CoordZ const& pos) const PURE { return data_[pos._pos()];}
+    void fill(T value) { std::fill(data_.begin(), data_.end(), value); }
+  private:
+    array<T, CoordZ::SIZE> data_;
+};
+
 using Diff = Coord;
 using Moves = array<Diff, MOVES>;
-
 using CoordVal = int16_t;
 class Coord {
   private:
@@ -186,12 +258,12 @@ class Coord {
     static inline Moves const& moves();
 
     Coord() {}
+    explicit inline Coord(CoordZ const& pos);
     Coord(Coord const& from, Diff const& diff) : pos_{static_cast<CoordVal>(from.pos_ + diff.pos_)} {}
     Coord(int x, int y) : pos_{static_cast<CoordVal>(y*ROW+x)} { }
     int x() const PURE { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
     int y() const PURE { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
     inline Parity parity() const PURE;
-    string str()  const PURE { return letters[x()] + to_string(y()+1); }
     int pos()     const PURE { return pos_; }
     uint index()  const PURE { return OFFSET+ pos_; }
     uint index2() const PURE { return MAX+pos_; }
@@ -203,148 +275,196 @@ class Coord {
         if (y_ < 0) throw(logic_error("y negative at line " + to_string(line)));
         if (y_ >= Y) throw(logic_error("y too large at line " + to_string(line)));
     }
-    // Mirror over SW-NE diagonal
-    Coord mirror() const PURE {
-        Coord result;
-        result.pos_ = MAX - pos_;
-        return result;
-    }
     // Mirror over NW-SE diagonal
     inline Coord symmetric() const PURE;
 
-    void svg(ostream& os, Color color, uint scale) const;
+    friend inline bool operator<(Coord const& l, Coord const& r) {
+        return l.pos_ < r.pos_;
+    }
+    friend inline bool operator==(Coord const& l, Coord const& r) {
+        return l.pos_ == r.pos_;
+    }
+    friend inline bool operator>=(Coord const& l, Coord const& r) {
+        return l.pos_ >= r.pos_;
+    }
   private:
     static uint const OFFSET = ROW+1;
     CoordVal pos_;
+};
 
-    friend inline ostream& operator<<(ostream& os, Coord const& pos) {
+inline ostream& operator<<(ostream& os, Coord const& pos) {
     os << setw(2) << static_cast<int>(pos.x()) << "," << setw(3) << static_cast<int>(pos.y());
     return os;
 }
 
-    friend bool operator<(Coord const& l, Coord const& r) {
-        // cout << "operator<(" << l << ", " << r << ") [" << l.pos_ << ", " << r.pos_ << "] = " << (l.pos_ < r.pos_ ? "true" : "false") << "\n";
-        return l.pos_ < r.pos_;
-    }
-    friend bool operator>(Coord const& l, Coord const& r) {
-        // cout << "operator>(" << l << ", " << r << ") [" << l.pos_ << ", " << r.pos_ << "] = " << (l.pos_ > r.pos_ ? "true" : "false")  << "\n";
-        return l.pos_ > r.pos_;
-    }
-    friend bool operator>=(Coord const& l, Coord const& r) {
-        return l.pos_ >= r.pos_;
-    }
-    friend bool operator==(Coord const& l, Coord const& r) {
-        return l.pos_ == r.pos_;
-    }
-    friend bool operator!=(Coord const& l, Coord const& r) {
-        return l.pos_ != r.pos_;
-    }
-};
-
-void Coord::svg(ostream& os, Color color, uint scale) const {
+void CoordZ::svg(ostream& os, Color color, uint scale) const {
     os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
 }
 
+struct CoordPair {
+    CoordPair() {}
+    CoordPair(Coord const& normal, Coord const& symmetric):
+        normal_{normal}, symmetric_{symmetric} {}
+    CoordPair(Coord const& normal) : CoordPair{normal, normal.symmetric()} {}
+    inline Coord const& normal() const FUNCTIONAL {
+        return normal_;
+    }
+    inline Coord const& symmetric() const FUNCTIONAL {
+        return symmetric_;
+    }
+    Coord normal_, symmetric_;
+};
+
 struct Move {
-    Coord from, to;
+    CoordZ from, to;
     Move mirror() const PURE {
         return Move{from.mirror(), to.mirror()};
     }
 };
 
-class ArmyE;
-// Army as a set of Coord
-class Army: public array<Coord, ARMY> {
+class ArmyZE;
+// ArmyZ as a set of CoordZ
+class ArmyZ: public array<CoordZ, ARMY> {
   public:
-    Army() {}
+    ArmyZ() {}
     uint64_t hash() const PURE {
-        return XXHash64::hash(reinterpret_cast<void const*>(&(*this)[0]), sizeof(Coord) * ARMY, SEED);
+        return XXHash64::hash(reinterpret_cast<void const*>(&(*this)[0]), sizeof((*this)[0]) * ARMY, SEED);
     }
-    inline void check(int line) const;
-    inline Army symmetric() const PURE {
-        Army result;
-        transform(begin(), end(), result.begin(), [](Coord const&pos){ return pos.symmetric(); });
+    NOINLINE ArmyZ symmetric() const PURE {
+        ArmyZ result;
+        transform(begin(), end(), result.begin(), [](CoordZ const& pos){ return pos.symmetric(); });
         sort(result.begin(), result.end());
         return result;
     }
-    void print(ostream& os) const {
-        for (auto const& pos: *this)
-            os << pos << "\n";
-    }
-    Army& operator=(Army const& army) {
+
+    NOINLINE void check(int line) const;
+    int symmetry() const;
+    ArmyZ& operator=(ArmyZ const& army) {
         std::copy(army.begin(), army.end(), begin());
         return *this;
     }
-    inline Army& operator=(ArmyE const& army);
+    inline ArmyZ& operator=(ArmyZE const& army);
 
-    friend bool operator==(Army const& l, Army const& r) {
+    friend bool operator==(ArmyZ const& l, ArmyZ const& r) {
         for (int i=0; i<ARMY; ++i)
             if (l[i] != r[i]) return false;
         return true;
     }
 };
 
-int cmp(Army const& left, Army const& right) {
+inline ostream& operator<<(ostream& os, ArmyZ const& army) {
+    for (auto const& pos: army)
+        os << pos << "\n";
+    return os;
+}
+
+int cmp(ArmyZ const& left, ArmyZ const& right) {
     if (!SYMMETRY) return 0;
     return memcmp(reinterpret_cast<void const *>(&left[0]),
                   reinterpret_cast<void const *>(&right[0]),
-                  sizeof(Coord) * ARMY);
+                  sizeof(left[0]) * ARMY);
 }
 
-// Army as a set of Coord
-class ArmyE: public array<Coord, ARMY+2> {
+int ArmyZ::symmetry() const {
+    BoardZTable<uint8_t> test;
+    for (auto const& pos: *this)
+        test[pos] = 0;
+    for (auto const& pos: *this)
+        test[pos.symmetric()] = 1;
+    uint8_t sum = ARMY;
+    for (auto const& pos: *this)
+        sum -= test[pos];
+    return sum ? 1 : 0;
+}
+
+void ArmyZ::check(int line) const {
+    // for (int i=0; i<ARMY; ++i) (*this)[i].check(line);
+    for (int i=0; i<ARMY-1; ++i)
+        if ((*this)[i] >= (*this)[i+1]) {
+            cerr << *this;
+            throw(logic_error("ArmyZ out of order at line " + to_string(line)));
+        }
+}
+
+// ArmyZ as a set of CoordZ
+class ArmyZE: public array<CoordZ, ARMY+2> {
   public:
-    ArmyE() {
-        at(-1)   = Coord{-1,-1};
-        at(ARMY) = Coord{ X, Y};
+    ArmyZE() {
+        at(-1)   = CoordZ::MIN;
+        at(ARMY) = CoordZ::MAX;
     }
-    explicit ArmyE(Army const& army) : ArmyE{} { *this = army; }
+    explicit ArmyZE(ArmyZ const& army) : ArmyZE{} { *this = army; }
     // Coord operator[](ssize_t) = delete;
-    Coord& at(int i) { return (*this)[i+1]; }
-    Coord const& at(int i) const FUNCTIONAL { return (*this)[i+1]; }
+    CoordZ& at(int i) { return (*this)[i+1]; }
+    CoordZ const& at(int i) const FUNCTIONAL { return (*this)[i+1]; }
     uint64_t hash() const PURE {
-        return XXHash64::hash(reinterpret_cast<void const*>(&at(0)), sizeof(Coord) * ARMY, SEED);
+        return XXHash64::hash(reinterpret_cast<void const*>(&at(0)), sizeof((*this)[0]) * ARMY, SEED);
     }
-    inline void check(int line) const;
-    inline ArmyE symmetric() const PURE {
-        ArmyE result;
-        transform(begin(), end(), result.begin(), [](Coord const&pos){ return pos.symmetric(); });
-        sort(result.begin(), result.end());
-        return result;
-    }
-    ArmyE& operator=(ArmyE const& army) {
+    NOINLINE void check(int line) const;
+    ArmyZE& operator=(ArmyZE const& army) {
         std::copy(army.begin(), army.end(), begin());
         return *this;
     }
-    ArmyE& operator=(Army const& army) {
+    ArmyZE& operator=(ArmyZ const& army) {
         std::copy(army.begin(), army.end(), begin());
         return *this;
     }
-    Coord* begin() { return &at(0); }
-    Coord* end  () { return &at(ARMY); }
-    Coord const* begin() const FUNCTIONAL { return &at(0); }
-    Coord const* end  () const FUNCTIONAL { return &at(ARMY); }
+    CoordZ* begin() FUNCTIONAL { return &at(0); }
+    CoordZ* end  () FUNCTIONAL { return &at(ARMY); }
+    CoordZ const* begin() const FUNCTIONAL { return &at(0); }
+    CoordZ const* end  () const FUNCTIONAL { return &at(ARMY); }
 };
 
-int cmp(ArmyE const& left, ArmyE const& right) {
+int cmp(ArmyZE const& left, ArmyZE const& right) {
     if (!SYMMETRY) return 0;
     return memcmp(reinterpret_cast<void const *>(&left.at(0)),
                   reinterpret_cast<void const *>(&right.at(0)),
-                  sizeof(Coord) * ARMY);
+                  sizeof(left[0]) * ARMY);
 }
 
-Army& Army::operator=(ArmyE const& army) {
+bool operator==(ArmyZE const& l, ArmyZ const& r) {
+    for (int i=0; i<ARMY; ++i)
+        if (l.at(i) != r[i]) return false;
+    return true;
+}
+
+bool operator==(ArmyZ const& l, ArmyZE const& r) {
+    for (int i=0; i<ARMY; ++i)
+        if (l[i] != r.at(i)) return false;
+    return true;
+}
+
+inline ostream& operator<<(ostream& os, ArmyZE const& army) {
+    for (int i=-1; i<=ARMY; ++i)
+        os << army.at(i) << "\n";
+    return os;
+}
+
+void ArmyZE::check(int line) const {
+    for (int i=0; i<ARMY; ++i) at(i).check(line);
+    for (int i=0; i<ARMY-1; ++i)
+        if (at(i) >= at(i+1)) {
+            cerr << *this;
+            throw(logic_error("ArmyZE out of order at line " + to_string(line)));
+        }
+    if (at(-1) != CoordZ::MIN)
+        throw(logic_error("ArmyZE wrong bottom at line " + to_string(line)));
+    if (at(ARMY) != CoordZ::MAX)
+        throw(logic_error("ArmyZE wrong top at line " + to_string(line)));
+}
+
+ArmyZ& ArmyZ::operator=(ArmyZE const& army) {
     std::copy(army.begin(), army.end(), begin());
     return *this;
 }
 
-class ArmyPos: public ArmyE {
+class ArmyZPos: public ArmyZE {
   public:
-    void copy(Army const& army, int pos) {
+    void copy(ArmyZ const& army, int pos) {
         std::copy(army.begin(), army.end(), begin());
         pos_ = pos;
     }
-    void store(Coord const& val) {
+    void store(CoordZ const& val) {
         if (val > at(pos_+1)) {
             do {
                 at(pos_) = at(pos_+1);
@@ -367,39 +487,19 @@ class ArmyPos: public ArmyE {
     int pos_;
 };
 
-class ArmyMapper {
+class Army: public array<Coord, ARMY> {
   public:
-    ArmyMapper(Army const& army_symmetric) {
-        for (uint i=0; i<ARMY; ++i)
-            mapper_[army_symmetric[i].symmetric().pos()] = i;
+    Army() {}
+    explicit inline Army(ArmyZ const& army): Army{} {
+        for (int i=0; i<ARMY; ++i)
+            (*this)[i] = Coord{army[i]};
     }
-    uint8_t map(Coord const& pos) const PURE {
-        return mapper_[pos.pos()];
-    }
-  private:
-    array<uint8_t, Coord::MAX+1> mapper_;
+    NOINLINE void check(int line) const;
 };
 
-bool operator==(ArmyE const& l, Army const& r) {
-    for (int i=0; i<ARMY; ++i)
-        if (l.at(i) != r[i]) return false;
-    return true;
-}
-
-bool operator==(Army const& l, ArmyE const& r) {
-    for (int i=0; i<ARMY; ++i)
-        if (l[i] != r.at(i)) return false;
-    return true;
-}
-
-inline ostream& operator<<(ostream& os, Army const& army) {
-    army.print(os);
-    return os;
-}
-
-inline ostream& operator<<(ostream& os, ArmyE const& army) {
-    for (int i=-1; i<=ARMY; ++i)
-        os << army.at(i) << "\n";
+ostream& operator<<(ostream& os, Army const& army) {
+    for (auto const& pos: army)
+        os << pos << "\n";
     return os;
 }
 
@@ -412,14 +512,75 @@ void Army::check(int line) const {
         }
 }
 
-void ArmyE::check(int line) const {
-    for (auto const& pos: *this) pos.check(line);
-    for (int i=-1; i<ARMY; ++i)
-        if (at(i) >= at(i+1)) {
-            cerr << *this;
-            throw(logic_error("Army out of order at line " + to_string(line)));
-        }
+class ArmyPair {
+  public:
+    NOINLINE explicit ArmyPair(ArmyZ const& army);
+    inline ArmyPair(ArmyZ const& army, ArmyZ const& army_symmetric) :
+        normal_{army},
+        symmetric_{army_symmetric} { }
+    Army const& normal()    const FUNCTIONAL { return normal_; }
+    Army const& symmetric() const FUNCTIONAL { return symmetric_; }
+    inline void check(int line) const {
+        normal()   .check(line);
+        symmetric().check(line);
+    }
+    int symmetry() const { return normal_ == symmetric_ ? 0 : 1; }
+  private:
+    Army normal_, symmetric_;
+};
+
+ArmyPair::ArmyPair(ArmyZ const& army) {
+    for (int i=0; i < ARMY; ++i) {
+        auto& p = army[i].coord_pair();
+        normal_   [i] = p.normal();
+        symmetric_[i] = p.symmetric();
+    }
+    sort(symmetric_.begin(), symmetric_.end());
 }
+
+template<class T>
+class BoardTable {
+  public:
+    T&       operator[](Coord const& pos)       PURE { return data_[pos.pos()];}
+    T const& operator[](Coord const& pos) const PURE { return data_[pos.pos()];}
+    void fill(T value) { std::fill(data_.begin(), data_.end(), value); }
+    void set(Army const& army, T const& value) {
+        for (auto const& pos: army)
+            (*this)[pos] = value;
+    }
+  private:
+    array<T, Coord::MAX+1> data_;
+};
+
+class ArmyMapper {
+    friend class ArmyMapperPair;
+  public:
+    ArmyMapper(ArmyZ const& army_symmetric) {
+        for (uint i=0; i<ARMY; ++i)
+            mapper_[Coord{army_symmetric[i].symmetric()}] = i;
+    }
+    ArmyMapper(Army const& army_symmetric) {
+        for (uint i=0; i<ARMY; ++i)
+            mapper_[army_symmetric[i].symmetric()] = i;
+    }
+    uint8_t map(Coord const& pos) const PURE {
+        return mapper_[pos];
+    }
+  private:
+    ArmyMapper() {}
+    BoardTable<uint8_t> mapper_;
+};
+
+class ArmyMapperPair {
+  public:
+    explicit inline ArmyMapperPair(ArmyPair const& army_pair):
+        normal_{army_pair.symmetric()},
+        symmetric_{army_pair.normal()} {}
+    ArmyMapper const& normal()    const FUNCTIONAL { return normal_; }
+    ArmyMapper const& symmetric() const FUNCTIONAL { return symmetric_; }
+  private:
+    ArmyMapper normal_, symmetric_;
+};
 
 class SetStatistics {
   public:
@@ -457,15 +618,55 @@ void SetStatistics::show_stats(ostream& os) const {
         os << "Average retries: " << 1. * tries_ / hits_ << "\n";
 }
 
+class ReadWriteLock {
+  public:
+    void lock_read() {
+        unique_lock<mutex> lock(m);
+        cv.wait(lock, [this]{ return !writer; });
+        ++readers;
+    }
+    void unlock_read() {
+        unique_lock<mutex> lock(m);
+        if (--readers == 0) cv.notify_one();
+    }
+    void lock_write() {
+        unique_lock<mutex> lock(m);
+        cv.wait(lock, [this]{ return readers == 0 && !writer; });
+        writer = true;
+    }
+    void unlock_write() {
+        unique_lock<mutex> lock(m);
+        writer = false;
+        cv.notify_all();
+    }
+    void lock_upgrade() {
+        unique_lock<mutex> lock(m);
+        --readers;
+        cv.wait(lock, [this]{ return readers == 0 && !writer; });
+        writer = true;
+    }
+    void lock_downgrade() {
+        unique_lock<mutex> lock(m);
+        writer = false;
+        ++readers;
+        cv.notify_all();
+    }
+  private:
+    uint readers;
+    condition_variable cv;
+    mutex m;
+    bool writer;
+};
+
 using ArmyId = uint32_t;
 STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
 STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
 
-class ArmySet: public SetStatistics {
+class ArmyZSet: public SetStatistics {
   public:
-    ArmySet(ArmyId size = 1);
-    ~ArmySet();
+    ArmyZSet(ArmyId size = 1);
+    ~ArmyZSet();
     void clear(ArmyId size = 1);
     void drop_hash() {
         delete [] values_;
@@ -479,29 +680,29 @@ class ArmySet: public SetStatistics {
         return limit_;
     }
 #if CHECK
-    Army const& at(ArmyId i) const {
-        if (i >= used1_) throw(logic_error("Army id " + to_string(i) + " out of range of set"));
+    ArmyZ const& at(ArmyId i) const {
+        if (i >= used1_) throw(logic_error("ArmyZ id " + to_string(i) + " out of range of set"));
         return armies_[i];
     }
 #else  // CHECK
-    Army const& at(ArmyId i) const PURE { return armies_[i]; }
+    ArmyZ const& at(ArmyId i) const PURE { return armies_[i]; }
 #endif // CHECK
-    inline ArmyId insert(Army  const& value);
-    inline ArmyId insert(ArmyE const& value);
-    ArmyId find(Army const& value) const PURE;
-    Army const* begin() const PURE { return &armies_[1]; }
-    Army const* end()   const PURE { return &armies_[used1_]; }
+    inline ArmyId insert(ArmyZ  const& value);
+    inline ArmyId insert(ArmyZE const& value);
+    ArmyId find(ArmyZ const& value) const PURE;
+    ArmyZ const* begin() const PURE { return &armies_[1]; }
+    ArmyZ const* end()   const PURE { return &armies_[used1_]; }
 
     void print(ostream& os) const;
     // Non copyable
-    ArmySet(ArmySet const&) = delete;
-    ArmySet& operator=(ArmySet const&) = delete;
+    ArmyZSet(ArmyZSet const&) = delete;
+    ArmyZSet& operator=(ArmyZSet const&) = delete;
 
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
     NOINLINE void resize();
-    inline ArmyId _insert(Army  const& value, ArmyId hash, bool is_resize);
-    inline ArmyId _insert(ArmyE const& value, ArmyId hash, bool is_resize);
+    inline ArmyId _insert(ArmyZ  const& value, ArmyId hash, bool is_resize);
+    inline ArmyId _insert(ArmyZE const& value, ArmyId hash, bool is_resize);
 
     mutex exclude_;
     ArmyId size_;
@@ -509,10 +710,10 @@ class ArmySet: public SetStatistics {
     ArmyId used1_;
     ArmyId limit_;
     ArmyId* values_;
-    Army* armies_;
+    ArmyZ* armies_;
 };
 
-inline ostream& operator<<(ostream& os, ArmySet const& set) {
+inline ostream& operator<<(ostream& os, ArmyZSet const& set) {
     set.print(os);
     return os;
 }
@@ -521,28 +722,25 @@ inline ostream& operator<<(ostream& os, ArmySet const& set) {
 class Board {
   public:
     Board() {}
-    Board(Army const& blue, Army const& red): blue_{blue}, red_{red} {}
+    Board(ArmyZ const& blue, ArmyZ const& red): blue_{blue}, red_{red} {}
     void move(Move const& move_);
     void move(Move const& move_, bool blue_to_move);
-    Army& blue() { return blue_; }
-    Army& red()  { return red_; }
-    Army const& blue() const FUNCTIONAL { return blue_; }
-    Army const& red()  const FUNCTIONAL { return red_; }
-    void check(int line) const {
+    ArmyZ& blue() { return blue_; }
+    ArmyZ& red()  { return red_; }
+    ArmyZ const& blue() const FUNCTIONAL { return blue_; }
+    ArmyZ const& red()  const FUNCTIONAL { return red_; }
+    inline void check(int line) const {
         blue_.check(line);
-        red_.check(line);
+        red_ .check(line);
     }
     int min_moves(bool blue_to_move) const PURE;
     int min_moves() const PURE {
         return min(min_moves(true), min_moves(false));
     }
-    inline Board symmetric() const PURE {
-        return Board{blue().symmetric(), red().symmetric()};
-    }
     void svg(ostream& os, uint scale, uint marging) const;
 
   private:
-    Army blue_, red_;
+    ArmyZ blue_, red_;
 
     friend bool operator==(Board const& l, Board const& r) {
         return l.blue() == r.blue() && l.red() == r.red();
@@ -560,9 +758,9 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
         os << "L " << margin + X * scale << " " << margin + y * scale << " ";
     }
     os << "'           stroke='black' />\n";
-    for (Coord const& pos: blue())
+    for (auto const& pos: blue())
         pos.svg(os, BLUE, scale);
-    for (Coord const& pos: red())
+    for (auto const& pos: red())
         pos.svg(os, RED,  scale);
 }
 
@@ -741,8 +939,8 @@ class BoardSet {
         size_ += result;
         return result;
     }
-    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red);
-    bool insert(Board const& board, ArmySet& armies_to_move, ArmySet& armies_opponent, int nr_moves) {
+    bool insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red);
+    bool insert(Board const& board, ArmyZSet& armies_to_move, ArmyZSet& armies_opponent, int nr_moves) {
         int blue_to_move = nr_moves & 1;
         return blue_to_move ?
             insert(board, armies_to_move, armies_opponent) :
@@ -758,14 +956,14 @@ class BoardSet {
         if (blue_id >= top_) return false;
         return cat(blue_id).find(red_id, symmetry);
     }
-    bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE;
-    bool find(Board const& board, ArmySet& armies_to_move, ArmySet& armies_opponent, int nr_moves) const PURE {
+    bool find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet const& armies_red) const PURE;
+    bool find(Board const& board, ArmyZSet& armies_to_move, ArmyZSet& armies_opponent, int nr_moves) const PURE {
         int blue_to_move = nr_moves & 1;
         return blue_to_move ?
             find(board, armies_to_move, armies_opponent) :
             find(board, armies_opponent, armies_to_move);
     }
-    bool solve(ArmyId solution_id, Army const& solution) {
+    bool solve(ArmyId solution_id, ArmyZ const& solution) {
         lock_guard<mutex> lock{exclude_};
         if (solution_id_) return false;
         solution_id_ = solution_id;
@@ -773,7 +971,7 @@ class BoardSet {
         return true;
     }
     ArmyId solution_id() const PURE { return solution_id_; }
-    Army const& solution() const PURE { return solution_; }
+    ArmyZ const& solution() const PURE { return solution_; }
     // Non copyable
     BoardSet(BoardSet const&) = delete;
     BoardSet& operator=(BoardSet const&) = delete;
@@ -812,7 +1010,7 @@ class BoardSet {
     BoardSubSet* end()   PURE { return &subsets_[top_]; }
 
     mutex exclude_;
-    Army solution_;
+    ArmyZ solution_;
     ArmyId solution_id_;
     ArmyId size_;
     ArmyId capacity_;
@@ -879,54 +1077,45 @@ class Image {
     inline Image() {
         clear();
     }
-    inline Image(Army const& blue, Army const& red);
-    inline Image(ArmyE const& blue, Army const& red);
-    inline Image(Army const& blue, ArmyE const& red);
-    inline Image(Army const& army, Color color);
-    inline Image(ArmyE const& army, Color color);
+    inline Image(ArmyZ const& blue, ArmyZ const& red): Image{} {
+        set(blue, BLUE);
+        set(red,  RED);
+    }
+    inline Image(Army const& blue, Army const& red): Image{} {
+        set(blue, BLUE);
+        set(red,  RED);
+    }
     inline explicit Image(Board const& board): Image{board.blue(), board.red()} {}
-    inline explicit Image(Army  const& blue): Image{blue, BLUE} {}
-    inline explicit Image(ArmyE const& blue): Image{blue, BLUE} {}
+    inline explicit Image(ArmyZ const& army, Color color = BLUE): Image{} {
+        set(army, color);
+    }
     void print(ostream& os) const;
     inline void clear();
-    Color get(Coord const& pos) const PURE { return board_[pos.index()]; }
-    Color get(int x, int y) const PURE { return get(Coord{x,y}); }
-    void  set(Coord const& pos, Color c) { board_[pos.index()] = c; }
-    void  set(int x, int y, Color c) { set(Coord{x,y}, c); }
+    inline Color get(Coord const& pos) const PURE { return image_[pos.index()]; }
+    inline Color get(int x, int y) const PURE { return get(Coord{x,y}); }
+    inline void  set(Coord const& pos, Color c) { image_[pos.index()] = c; }
+    inline void  set(CoordZ const& pos, Color c) { image_[Coord{pos}.index()] = c; }
+    inline void  set(int x, int y, Color c) { set(Coord{x,y}, c); }
+    inline void  set(ArmyZ const& army, Color c) {
+        for (auto const& pos: army)
+            set(pos, c);
+    }
+    inline void  set(Army const& army, Color c) {
+        for (auto const& pos: army)
+            set(pos, c);
+    }
+    Image& operator=(Image const& image) {
+        std::copy(image.begin(), image.end(), begin());
+        return *this;
+    }
   private:
-    array<Color, Coord::SIZE> board_;
+    Color* begin() FUNCTIONAL { return &image_[0]; }
+    Color* end  () FUNCTIONAL { return &image_[0]; }
+    Color const* begin() const FUNCTIONAL { return &image_[Coord::SIZE]; }
+    Color const* end  () const FUNCTIONAL { return &image_[Coord::SIZE]; }
+
+    array<Color, Coord::SIZE> image_;
 };
-
-Image::Image(Army const& blue, Army const& red) : Image{} {
-    for (auto const& pos: blue)
-        set(pos, BLUE);
-    for (auto const& pos: red)
-        set(pos, RED);
-}
-
-Image::Image(ArmyE const& blue, Army const& red) : Image{} {
-    for (auto const& pos: blue)
-        set(pos, BLUE);
-    for (auto const& pos: red)
-        set(pos, RED);
-}
-
-Image::Image(Army const& army, Color color) : Image{} {
-    for (auto const& pos: army)
-        set(pos, color);
-}
-
-Image::Image(ArmyE const& army, Color color) : Image{} {
-    for (auto const& pos: army)
-        set(pos, color);
-}
-
-Image::Image(Army const& blue, ArmyE const& red) : Image{} {
-    for (auto const& pos: blue)
-        set(pos, BLUE);
-    for (int i=0; i<ARMY; ++i)
-        set(red.at(i), RED);
-}
 
 void Image::print(ostream& os) const {
     os << "+";
@@ -960,7 +1149,7 @@ inline ostream& operator<<(ostream& os, Board const& board) {
     return os;
 }
 
-void ArmySet::print(ostream& os) const {
+void ArmyZSet::print(ostream& os) const {
     os << "[";
     for (ArmyId i=0; i < max_size(); ++i)
         os << " " << values_[i];
@@ -970,20 +1159,20 @@ void ArmySet::print(ostream& os) const {
     }
 }
 
-class FullMove: public vector<Coord> {
+class FullMove: public vector<CoordZ> {
   public:
     FullMove() {}
     FullMove(Board const& from, Board const& to, Color color=COLORS);
     string str() const PURE;
   private:
-    static Move army_diff(Army const& army_from, Army const& army_to);
+    static Move army_diff(ArmyZ const& army_from, ArmyZ const& army_to);
 
     void move_expand(Board const& board_from, Board const& board_to, Move const& move);
 };
 
-Move FullMove::army_diff(Army const& army_from, Army const& army_to) {
-    ArmyE const from{army_from};
-    ArmyE const to{army_to};
+Move FullMove::army_diff(ArmyZ const& army_from, ArmyZ const& army_to) {
+    ArmyZE const from{army_from};
+    ArmyZE const to{army_to};
 
     Move result;
     int i = 0;
@@ -1004,7 +1193,7 @@ Move FullMove::army_diff(Army const& army_from, Army const& army_to) {
         }
     }
     if (diffs == 0)
-        result.from = result.to = Coord{-1, -1};
+        result.from = result.to = CoordZ::MIN;
     else if (diffs > 2)
         throw(logic_error("Multimove"));
     return result;
@@ -1012,13 +1201,14 @@ Move FullMove::army_diff(Army const& army_from, Army const& army_to) {
 
 void FullMove::move_expand(Board const& board_from, Board const& board_to, Move const& move) {
     emplace_back(move.from);
+    Coord from{move.from};
+    Coord to  {move.to};
     if (move.from.parity() != move.to.parity()) {
-        // Must be a slide.
-        emplace_back(move.to);
-        // Check though
-        for (auto step: Coord::moves())
-            if (move.to == Coord{move.from, step}) return;
+        // Must be a slide. Check though
+        for (auto const& step: Coord::moves())
+            if (to == Coord{from, step}) return;
         throw(logic_error("Move is not a slide but has different parity"));
+        emplace_back(move.to);
     }
 
     // Must be a jump
@@ -1026,7 +1216,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     if (CLOSED_LOOP) image.set(move.from, EMPTY);
     array<Coord, ARMY*2*MOVES+(1+MOVES)> reachable;
     array<int, ARMY*2*MOVES+(1+MOVES)> previous;
-    reachable[0] = move.from;
+    reachable[0] = from;
     int nr_reachable = 1;
     for (int i=0; i < nr_reachable; ++i) {
         for (auto direction: Coord::moves()) {
@@ -1037,7 +1227,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
             image.set(target, COLORS);
             previous [nr_reachable] = i;
             reachable[nr_reachable] = target;
-            if (target == move.to) {
+            if (target == to) {
                 array<Coord, ARMY*2*MOVES+(1+MOVES)> trace;
                 int t = 0;
                 while (nr_reachable) {
@@ -1090,7 +1280,7 @@ class Svg {
     static uint const SCALE = 20;
 
     static string const solution_file() FUNCTIONAL {
-        return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(MOVES) + ".html";
+        return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "ArmyZ" + to_string(ARMY) + "Rule" + to_string(MOVES) + ".html";
     }
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
     void parameters(uint x, uint y, uint army, uint rule);
@@ -1113,24 +1303,6 @@ inline ostream& operator<<(ostream& os, Svg const& svg) {
     os << svg.str();
     return os;
 }
-
-template<class T>
-class BoardTable {
-  public:
-    T&       operator[](Coord const& pos)       PURE { return data_[pos.pos()];}
-    T const& operator[](Coord const& pos) const PURE { return data_[pos.pos()];}
-    void fill(T value) { std::fill(data_.begin(), data_.end(), value); }
-    void set(Army const& army, T const& value) {
-        for (auto const& pos: army)
-            (*this)[pos] = value;
-    }
-    void set(ArmyE const& army, T const& value) {
-        for (auto const& pos: army)
-            (*this)[pos] = value;
-    }
-  private:
-    array<T, Coord::MAX+1> data_;
-};
 
 using ParityCount = array<int, 4>;
 class Tables {
@@ -1161,8 +1333,23 @@ class Tables {
     inline Parity parity(Coord const& pos) const PURE {
         return parity_[pos];
     }
+    inline Parity parity(CoordZ const& pos) const PURE {
+        return parityZ_[pos];
+    }
     inline Coord symmetric(Coord const& pos) const PURE {
         return symmetric_[pos];
+    }
+    inline CoordZ symmetric(CoordZ const& pos) const PURE {
+        return symmetricZ_[pos];
+    }
+    inline CoordZ coord(Coord const& pos) const PURE {
+        return coordZ_[pos];
+    }
+    inline CoordPair const& coord_pair(CoordZ const& pos) const PURE {
+        return coord_pair_[pos];
+    }
+    inline Coord coord(CoordZ const& pos) const PURE {
+        return coord_pair(pos).normal();
     }
     // The folowing methods in Tables really only PURE. However they are only
     // ever applied to the constant tables so the access global memory that
@@ -1214,6 +1401,10 @@ class Tables {
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
     BoardTable<Parity> parity_;
+    BoardTable<CoordZ> coordZ_;
+    BoardZTable<CoordPair> coord_pair_;
+    BoardZTable<CoordZ> symmetricZ_;
+    BoardZTable<Parity> parityZ_;
     Board start_;
     Image start_image_;
 };
@@ -1249,8 +1440,9 @@ Tables::Tables() {
 
     // Fill base
     base_red_.fill(0);
-    auto& red  = start_.red();
-    auto& blue = start_.blue();
+    Army blue, red;
+    auto& blueZ = start_.blue();
+    auto& redZ  = start_.red();
     int d = 0;
     int a = ARMY;
     int i = 0;
@@ -1261,8 +1453,10 @@ Tables::Tables() {
         int y = d-x;
         // cout << "[" << x << ", " << y << "]\n";
         while (n--) {
-            blue[i] = Coord{x, y};
-            red[i]  = Coord{X-1-x, Y-1-y};
+            blueZ[i] = CoordZ{x, y};
+            blue [i] = Coord {x, y};
+            redZ[i]  = CoordZ{X-1-x, Y-1-y};
+            red [i]  = Coord {X-1-x, Y-1-y};
             base_red_[red[i]] = 1;
             ++i;
             --x;
@@ -1270,8 +1464,8 @@ Tables::Tables() {
         }
         d++;
     }
-    sort(blue.begin(), blue.end());
-    sort(red.begin(),  red.end());
+    sort(blueZ.begin(), blueZ.end());
+    sort(redZ.begin(),  redZ.end());
     for (auto const& pos: blue)
         if (base_red_[pos]) throw(logic_error("Red and blue overlap"));
 
@@ -1281,7 +1475,12 @@ Tables::Tables() {
         Norm d = infinity_;
         Parity y_parity = y%2*2;
         for (int x=0; x < X; ++x) {
-            auto pos = Coord{x, y};
+            auto pos  = Coord {x, y};
+            auto posZ = CoordZ{x, y};
+            coordZ_[pos] = posZ;
+            symmetricZ_[posZ] = CoordZ{y, x};
+            symmetric_ [pos ] = Coord {y, x};
+            coord_pair_[posZ] = CoordPair{pos, Coord{y, x}};
             start_image_.set(pos, EMPTY);
             for (int i=0; i<ARMY; ++i) {
                 Norm d1 = norm(pos, red[i]);
@@ -1289,8 +1488,8 @@ Tables::Tables() {
             }
             distance_base_red_[pos] = d > 2 ? d-2 : 0;
             edge_red_[pos] = d == 1;
-            parity_[pos] = y_parity + x % 2;
-            symmetric_[pos] = Coord(y, x);
+            parity_ [pos]  = y_parity + x % 2;
+            parityZ_[posZ] = y_parity + x % 2;
         }
     }
     for (int x=-1; x <= X; ++x) {
@@ -1368,6 +1567,17 @@ void Tables::print_parity_count(ostream& os) const {
 
 STATIC Tables const tables;
 
+CoordZ CoordZ::symmetric() const {
+    return tables.symmetric(*this);
+}
+
+CoordPair const& CoordZ::coord_pair() const {
+    return tables.coord_pair(*this);
+}
+
+CoordZ::CoordZ(Coord const& pos) : CoordZ{tables.coord(pos)} {}
+Coord::Coord (CoordZ const& pos) : Coord {tables.coord(pos)} {}
+
 Moves const& Coord::moves() {
     return tables.moves();
 }
@@ -1376,30 +1586,34 @@ Coord Coord::symmetric() const {
     return tables.symmetric(*this);
 }
 
+Parity CoordZ::parity() const {
+    return tables.parity(*this);
+}
+
 Parity Coord::parity() const {
     return tables.parity(*this);
 }
 
-ArmySet::ArmySet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
+ArmyZSet::ArmyZSet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
     if (limit_ >= ARMY_HIGHBIT)
-        throw(overflow_error("Army size too large"));
+        throw(overflow_error("ArmyZ size too large"));
     values_ = new ArmyId[size];
     for (ArmyId i=0; i<size; ++i) values_[i] = 0;
-    armies_ = new Army[limit_+1];
+    armies_ = new ArmyZ[limit_+1];
 }
 
-ArmySet::~ArmySet() {
+ArmyZSet::~ArmyZSet() {
     delete [] armies_;
     if (values_) delete [] values_;
 }
 
-void ArmySet::clear(ArmyId size) {
+void ArmyZSet::clear(ArmyId size) {
     stats_reset();
     ArmyId new_limit = FACTOR(size);
     if (new_limit >= ARMY_HIGHBIT)
-        throw(overflow_error("Army size grew too large"));
+        throw(overflow_error("ArmyZ size grew too large"));
     auto new_values = new ArmyId[size];
-    auto new_armies = new Army[new_limit+1];
+    auto new_armies = new ArmyZ[new_limit+1];
     if (values_) delete [] values_;
     values_ = new_values;
     delete [] armies_;
@@ -1411,7 +1625,7 @@ void ArmySet::clear(ArmyId size) {
     used1_ = 1;
 }
 
-ArmyId ArmySet::insert(Army  const& value) {
+ArmyId ArmyZSet::insert(ArmyZ  const& value) {
     // cout << "Insert:\n" << Image{value};
     // Take hash calculation out of the mutex
     ArmyId hash = value.hash();
@@ -1420,7 +1634,7 @@ ArmyId ArmySet::insert(Army  const& value) {
     // cout << "i=" << i << "\n\n";
     return i;
 }
-ArmyId ArmySet::insert(ArmyE const& value) {
+ArmyId ArmyZSet::insert(ArmyZE const& value) {
     // cout << "Insert:\n" << Image{value};
     // Take hash calculation out of the mutex
     ArmyId hash = value.hash();
@@ -1430,7 +1644,7 @@ ArmyId ArmySet::insert(ArmyE const& value) {
     return i;
 }
 
-ArmyId ArmySet::_insert(Army const& value, ArmyId hash, bool is_resize) {
+ArmyId ArmyZSet::_insert(ArmyZ const& value, ArmyId hash, bool is_resize) {
     if (used1_ > limit_) resize();
     ArmyId pos = hash & mask_;
     ArmyId offset = 0;
@@ -1457,7 +1671,7 @@ ArmyId ArmySet::_insert(Army const& value, ArmyId hash, bool is_resize) {
     }
 }
 
-ArmyId ArmySet::_insert(ArmyE const& value, ArmyId hash, bool is_resize) {
+ArmyId ArmyZSet::_insert(ArmyZE const& value, ArmyId hash, bool is_resize) {
     if (used1_ > limit_) resize();
     ArmyId pos = hash & mask_;
     ArmyId offset = 0;
@@ -1484,23 +1698,23 @@ ArmyId ArmySet::_insert(ArmyE const& value, ArmyId hash, bool is_resize) {
     }
 }
 
-ArmyId ArmySet::find(Army const& army) const {
+ArmyId ArmyZSet::find(ArmyZ const& army) const {
     ArmyId pos = army.hash() & mask_;
     uint offset = 0;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
         ArmyId i = values_[pos];
         if (i == 0) return 0;
-        Army& a = armies_[i];
+        ArmyZ& a = armies_[i];
         if (a == army) return i;
         ++offset;
         pos = (pos + offset) & mask_;
     }
 }
 
-void ArmySet::resize() {
+void ArmyZSet::resize() {
     if (size_ >= ARMY_HIGHBIT)
-        throw(overflow_error("Army size grew too large"));
+        throw(overflow_error("ArmyZ size grew too large"));
     auto old_values = values_;
     auto old_armies = armies_;
     auto old_used1  = used1_;
@@ -1508,7 +1722,7 @@ void ArmySet::resize() {
     // cout << "Resize: " << size_ << "\n";
     values_ = new ArmyId[size_];
     limit_ = FACTOR(size_);
-    armies_ = new Army[limit_+1];
+    armies_ = new ArmyZ[limit_+1];
     delete [] old_values;
     mask_ = size_-1;
     used1_ = 1;
@@ -1518,13 +1732,13 @@ void ArmySet::resize() {
     delete [] old_armies;
 }
 
-bool BoardSet::insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) {
-    Army const& blue = board.blue();
+bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red) {
+    ArmyZ const& blue = board.blue();
     auto blue_symmetric = blue.symmetric();
     int blue_symmetry = cmp(blue, blue_symmetric);
     auto blue_id = armies_blue.insert(blue_symmetry >= 0 ? blue : blue_symmetric);
 
-    Army const& red  = board.red();
+    ArmyZ const& red  = board.red();
     auto red_symmetric = red.symmetric();
     int red_symmetry = cmp(red, red_symmetric);
     auto red_id = armies_red.insert(red_symmetry >= 0 ? red : red_symmetric);
@@ -1533,14 +1747,14 @@ bool BoardSet::insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_
     return insert(blue_id, red_id, symmetry);
 }
 
-bool BoardSet::find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const {
-    Army const& blue = board.blue();
+bool BoardSet::find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet const& armies_red) const {
+    ArmyZ const& blue = board.blue();
     auto blue_symmetric = blue.symmetric();
     int blue_symmetry = cmp(blue, blue_symmetric);
     auto blue_id = armies_blue.find(blue_symmetry >= 0 ? blue : blue_symmetric);
     if (blue_id == 0) return false;
 
-    Army const& red = board.red();
+    ArmyZ const& red = board.red();
     auto red_symmetric = red.symmetric();
     int red_symmetry = cmp(red, red_symmetric);
     auto red_id = armies_red.find(red_symmetry >= 0 ? red : red_symmetric);
@@ -1551,7 +1765,7 @@ bool BoardSet::find(Board const& board, ArmySet const& armies_blue, ArmySet cons
 }
 
 void Image::clear() {
-    board_ = tables.start_image().board_;
+    image_ = tables.start_image().image_;
 }
 
 int Board::min_moves(bool blue_to_move) const {
@@ -1562,13 +1776,16 @@ int Board::min_moves(bool blue_to_move) const {
     int off_base_from = 0;
     ParityCount parity_count_from = tables.parity_count();
     int edge_count_from = 0;
-    for (auto const& b: blue()) {
+
+    Army blue_{blue()};
+    Army red_ {red()};
+    for (auto const& b: blue_) {
         --parity_count_from[b.parity()];
         if (tables.base_red(b)) continue;
         ++off_base_from;
         edge_count_from += tables.edge_red(b);
         Ndistance_red |= tables.Ndistance_base_red(b);
-        for (auto const& r: red())
+        for (auto const& r: red_)
             Ndistance_army |= tables.Ndistance(r, b);
     }
     int slides = 0;
@@ -1649,7 +1866,7 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
         "    <table>\n"
         "      <tr><th align='left'>X</th><td>" << x << "</td></tr>\n"
         "      <tr><th align='left'>Y</th><td>" << y << "</td></tr>\n"
-        "      <tr><th align='left'>Army</th><td>" << army << "</td></tr>\n"
+        "      <tr><th align='left'>ArmyZ</th><td>" << army << "</td></tr>\n"
         "      <tr><th align='left'>Rule</th><td>" << rule << "-move</td></tr>\n"
         "      <tr><th align='left'>Bound</th><td> &ge; " << tables.min_moves() << " moves</td></tr>\n"
         "      <tr><th align='left'>Heuristics</th><td>";
@@ -1666,7 +1883,7 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
 
 void Svg::move(FullMove const& move) {
     out_ << "      <polyline points='";
-    for (Coord const& pos: move) {
+    for (auto const& pos: move) {
         out_ << pos.x() * scale_ + scale_/2 + margin_ << "," << pos.y() * scale_ + scale_/2 + margin_ << " ";
     }
     out_ << "' stroke='black' stroke-width='" << scale_/10 << "' fill='none' marker-end='url(#arrowhead)' />\n";
@@ -1831,12 +2048,13 @@ BoardTable<uint8_t>const *dummy_backtrack = nullptr;
 
 uint64_t _make_all_moves(BoardSet& boards_from,
                          BoardSet& boards_to,
-                         ArmySet const& moving_armies,
-                         ArmySet const& opponent_armies,
-                         ArmySet& moved_armies,
+                         ArmyZSet const& moving_armies,
+                         ArmyZSet const& opponent_armies,
+                         ArmyZSet& moved_armies,
                          int nr_moves,
                          bool backtrack,
-                         BoardTable<uint8_t> const& red_backtrack) {
+                         BoardTable<uint8_t> const& red_backtrack,
+                         BoardTable<uint8_t> const& red_backtrack_symmetric) {
     auto start = chrono::steady_clock::now();
 
     vector<future<uint64_t>> results;
@@ -1876,11 +2094,11 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                      (launch::async, thread_red_moves_backtrack,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-                      ref(red_backtrack), nr_moves));
+                      ref(red_backtrack), ref(red_backtrack_symmetric), nr_moves));
             late = thread_red_moves_backtrack
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
-                 red_backtrack, nr_moves);
+                 red_backtrack, red_backtrack_symmetric, nr_moves);
         } else {
             for (uint i=1; i < nr_threads; ++i)
                 results.emplace_back
@@ -1915,26 +2133,27 @@ uint64_t _make_all_moves(BoardSet& boards_from,
 NOINLINE uint64_t
 make_all_moves(BoardSet& boards_from,
                BoardSet& boards_to,
-               ArmySet const& moving_armies,
-               ArmySet const& opponent_armies,
-               ArmySet& moved_armies,
+               ArmyZSet const& moving_armies,
+               ArmyZSet const& opponent_armies,
+               ArmyZSet& moved_armies,
                int nr_moves) {
     return _make_all_moves(boards_from, boards_to,
                            moving_armies, opponent_armies, moved_armies,
-                           nr_moves, false, *dummy_backtrack);
+                           nr_moves, false, *dummy_backtrack, *dummy_backtrack);
 }
 
 NOINLINE uint64_t
 make_all_moves_backtrack(BoardSet& boards_from,
                          BoardSet& boards_to,
-                         ArmySet const& moving_armies,
-                         ArmySet const& opponent_armies,
-                         ArmySet& moved_armies,
+                         ArmyZSet const& moving_armies,
+                         ArmyZSet const& opponent_armies,
+                         ArmyZSet& moved_armies,
                          int nr_moves,
-                         BoardTable<uint8_t> const& red_backtrack) {
+                         BoardTable<uint8_t> const& red_backtrack,
+                         BoardTable<uint8_t> const& red_backtrack_symmetric) {
     return _make_all_moves(boards_from, boards_to,
                            moving_armies, opponent_armies, moved_armies,
-                           nr_moves, true, red_backtrack);
+                           nr_moves, true, red_backtrack, red_backtrack_symmetric);
 }
 
 void play() {
@@ -1946,7 +2165,7 @@ void play() {
         // cout << board.symmetric();
 
         BoardSet board_set[2];
-        ArmySet  army_set[3];
+        ArmyZSet  army_set[3];
         board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
 
         make_all_moves(board_set[0], board_set[1],
@@ -1964,10 +2183,10 @@ void play() {
     }
 }
 
-bool solve(Board const& board, int nr_moves, Army& red_army) {
+bool solve(Board const& board, int nr_moves, ArmyZ& red_army) {
     auto start_solve = chrono::steady_clock::now();
     array<BoardSet, 2> board_set;
-    array<ArmySet, 3>  army_set;
+    array<ArmyZSet, 3>  army_set;
     board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
     cout << setw(14) << "set " << nr_moves << " done (" << HOSTNAME << ", ";
     if (balance >= 0)
@@ -2008,23 +2227,27 @@ bool solve(Board const& board, int nr_moves, Army& red_army) {
 }
 
 void backtrack(Board const& board, int nr_moves,
-               Army const& last_red_army) {
+               ArmyZ const& last_red_army) {
     cout << "Start backtracking\n";
 
     auto start_solve = chrono::steady_clock::now();
     vector<unique_ptr<BoardSet>> board_set;
     board_set.reserve(nr_moves+1);
-    vector<unique_ptr<ArmySet>>  army_set;
+    vector<unique_ptr<ArmyZSet>>  army_set;
     army_set.reserve(nr_moves+2);
 
     board_set.emplace_back(new BoardSet(true));
-    army_set.emplace_back(new ArmySet);
-    army_set.emplace_back(new ArmySet);
+    army_set.emplace_back(new ArmyZSet);
+    army_set.emplace_back(new ArmyZSet);
     board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves);
 
+    ArmyPair const last_army{last_red_army};
     BoardTable<uint8_t> red_backtrack{};
     red_backtrack.fill(0);
-    red_backtrack.set(last_red_army, 2);
+    red_backtrack.set(last_army.normal(), 2);
+    BoardTable<uint8_t> red_backtrack_symmetric{};
+    red_backtrack.fill(0);
+    red_backtrack.set(last_army.symmetric(), 2);
 
     cout << setw(14) << "set " << nr_moves << " done" << endl;
     for (int i=0; nr_moves>0; --nr_moves, ++i) {
@@ -2032,7 +2255,7 @@ void backtrack(Board const& board, int nr_moves,
         auto& boards_from = *board_set[i];
         auto& boards_to   = *board_set[i+1];
 
-        army_set.emplace_back(new ArmySet);
+        army_set.emplace_back(new ArmyZSet);
         auto const& moving_armies   = *army_set[i];
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies        = *army_set[i+2];
@@ -2040,7 +2263,7 @@ void backtrack(Board const& board, int nr_moves,
         make_all_moves_backtrack
             (boards_from, boards_to,
              moving_armies, opponent_armies, moved_armies,
-             nr_moves, red_backtrack);
+             nr_moves, red_backtrack, red_backtrack_symmetric);
 
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
@@ -2051,7 +2274,7 @@ void backtrack(Board const& board, int nr_moves,
 
     // Do some sanity checking
     BoardSet const& final_board_set = *board_set.back();
-    ArmySet const& final_army_set = *army_set.back();
+    ArmyZSet const& final_army_set = *army_set.back();
 
     // There should be only 1 blue army completely on the red base
     if (final_army_set.size() != 1)
@@ -2100,27 +2323,27 @@ void backtrack(Board const& board, int nr_moves,
     for (int nr_moves = 2*board_set.size()+3;
          board_set.size() != 0;
          --nr_moves, board_set.pop_back(), army_set.pop_back()) {
-        BoardSet board_froms;
-        // Set keep on board_tos to suppress solution printing
+        BoardSet boards_from;
+        // Set keep on boards_to to suppress solution printing
         // We don't care about the implied late free since it is tiny and scoped
-        BoardSet board_tos{true};
+        BoardSet boards_to{true};
         BoardSet const& moved_boards = *board_set[board_set.size()-1];
-        ArmySet  to_armies;
-        ArmySet const& moving_armies   = *army_set[army_set.size()-1];
-        ArmySet const& opponent_armies = *army_set[army_set.size()-2];
-        ArmySet const& moved_armies    = *army_set[army_set.size()-3];
+        ArmyZSet  to_armies;
+        ArmyZSet const& moving_armies   = *army_set[army_set.size()-1];
+        ArmyZSet const& opponent_armies = *army_set[army_set.size()-2];
+        ArmyZSet const& moved_armies    = *army_set[army_set.size()-3];
 
-        board_froms.insert(blue_id, red_id, skewed ? -1 : 0);
+        boards_from.insert(blue_id, red_id, skewed ? -1 : 0);
         int blue_to_move = nr_moves & 1;
         if (blue_to_move) {
-            thread_blue_moves(board_froms, board_tos,
+            thread_blue_moves(boards_from, boards_to,
                               moving_armies, opponent_armies, to_armies,
                               nr_moves);
             while (true) {
-                BoardSubSetRef subset{board_tos};
+                BoardSubSetRef subset{boards_to};
                 ArmyId b_id = subset.id();
                 if (b_id == 0) break;
-                Army const& blue_army = to_armies.at(b_id);
+                ArmyZ const& blue_army = to_armies.at(b_id);
                 blue_id = moved_armies.find(blue_army);
                 if (blue_id == 0) continue;
                 BoardSubSet const& red_armies = subset.armies();
@@ -2143,14 +2366,14 @@ void backtrack(Board const& board, int nr_moves,
             throw(logic_error("Blue backtrack failure"));
           BLUE_DONE:;
         } else {
-            thread_red_moves(board_froms, board_tos,
+            thread_red_moves(boards_from, boards_to,
                              moving_armies, opponent_armies, to_armies,
                              nr_moves);
-            BoardSubSet const& red_armies = board_tos.cat(blue_id);
+            BoardSubSet const& red_armies = boards_to.cat(blue_id);
             for (auto const& red_value: red_armies) {
                 if (red_value == 0) continue;
                 skewed = BoardSubSet::split(red_value, red_id) != 0;
-                Army const& red_army = to_armies.at(red_id);
+                ArmyZ const& red_army = to_armies.at(red_id);
                 red_id = moved_armies.find(red_army);
                 if (red_id == 0) continue;
                 if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
@@ -2273,7 +2496,7 @@ void my_main(int argc, char const* const* argv) {
         play();
         return;
     }
-    Army red_army;
+    ArmyZ red_army;
     if (!solve(start_board, nr_moves, red_army)) return;
     backtrack(start_board, nr_moves, red_army);
 }
