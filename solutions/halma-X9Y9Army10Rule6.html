@@ -2,12 +2,15 @@
   <body>
    <h1>30 moves</h1>
     <table>
-      <tr><th>X</th><td>9</td></tr>
-      <tr><th>Y</th><td>9</td></tr>
-      <tr><th>Army</th><td>10</td></tr>
-      <tr><th>Rule</th><td>6-move</td></tr>
+      <tr><th align='left'>X</th><td>9</td></tr>
+      <tr><th align='left'>Y</th><td>9</td></tr>
+      <tr><th align='left'>ArmyZ</th><td>10</td></tr>
+      <tr><th align='left'>Rule</th><td>6-move</td></tr>
+      <tr><th align='left'>Bound</th><td> &ge; 27 moves</td></tr>
+      <tr><th align='left'>Heuristics</th><td>Balance 0, delay -4</td>
+      <tr><th align='left'>Host</th><td>hp</td></tr>
+      <tr><th align='left'>Threads</th><td>4</td></tr>
     </table>
-    Balance 0, delay -1<br />
     <svg height='200' width='200'>
       <defs>
         <marker id='arrowhead' markerWidth='3' markerHeight='4' 
@@ -937,5 +940,37 @@
       <circle cx='120' cy='140' r='7' fill='red' />
       <circle cx='140' cy='140' r='7' fill='red' />
     </svg>
+    <p>
+      <font color='red'>h7-h6</font>,
+      <font color='blue'>b2-b4</font>,
+      <font color='red'>i6-g6</font>,
+      <font color='blue'>a4-c4</font>,
+      <font color='red'>g9-g7-g5</font>,
+      <font color='blue'>b4-d4</font>,
+      <font color='red'>g6-f7</font>,
+      <font color='blue'>a3-c3-c5-e3</font>,
+      <font color='red'>h9-h7-h5-f5</font>,
+      <font color='blue'>a1-a3-c3</font>,
+      <font color='red'>f5-f4</font>,
+      <font color='blue'>b3-d3-f3-f5-h5-h7-h9</font>,
+      <font color='red'>f9-h7-h5-f5-f3-d3-d5</font>,
+      <font color='blue'>d1-b3-d3-f3-f5-h5-h7-f9</font>,
+      <font color='red'>i9-g9-g7-e7</font>,
+      <font color='blue'>b1-d1-b3-d3-f3-f5-h5-h7</font>,
+      <font color='red'>e7-e6</font>,
+      <font color='blue'>c3-c5-e5-e7-g7-g9-i9</font>,
+      <font color='red'>i8-i6-g6-g4-e4-c6</font>,
+      <font color='blue'>c1-c3-c5-e5-e7-g7-g9</font>,
+      <font color='red'>i7-g7-e7-e5-c5-c3</font>,
+      <font color='blue'>e3-c5-e5-e7-g7-i7</font>,
+      <font color='red'>d5-d3-b5</font>,
+      <font color='blue'>c4-e4-g4-g6-i6-i8</font>,
+      <font color='red'>h8-f8-f6-d6-b6-b4-d2-b2</font>,
+      <font color='blue'>c2-c4-e4-g4-g6-i6</font>,
+      <font color='red'>g8-g7</font>,
+      <font color='blue'>a2-c2-c4-e4-g4-g6-g8</font>,
+      <font color='red'>c3-c4</font>,
+      <font color='blue'>d4-b4-b6-d6-f6-f8-h8</font>
+    </p>
   </body>
 </html>

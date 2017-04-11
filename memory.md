@@ -1276,6 +1276,22 @@ Minimum possible number of moves: 45
      0 s, set 18 done,         0 boards /        0 armies       0 (  254 MB)
   4821 s, no solution
 
+          set 49 done (nas, no heuristics)
+     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
+     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
+     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
+     5 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
+    45 s, set 43 done,  64228527 boards /    11884 armies    9589 (  667 MB)
+    89 s, set 42 done,  74418075 boards /    27116 armies    2744 (  790 MB)
+   279 s, set 41 done, 361710211 boards /   217512 armies   13339 ( 3198 MB)
+   439 s, set 40 done, 204451594 boards /    43572 armies    4692 ( 3123 MB)
+   985 s, set 39 done, 790838475 boards /  2553497 armies   18150 ( 7609 MB)
+   934 s, set 38 done, 247016643 boards /    33602 armies    7351 ( 7468 MB)
+  1217 s, set 37 done, 971718999 boards / 18086135 armies   28918 (11174 MB)
+  1237 s, set 36 done, 232461917 boards /   200445 armies    1159 ( 7959 MB)
+killed
+
 BALANCE 0 DELAY 0 49
 Minimum possible number of moves: 45
            set 49 done (nas)
@@ -2216,33 +2232,3 @@ Move 24
 |. . . . . X O O O |
 |. . . . . O O O O |
 +------------------+
-
-
-BUG: 4x4 army 6 8 rule, threads 1 (0 seems repeatable too)
-
-Minimum possible number of moves: 11
-          set 26 done (nas, no heuristics)
-     0 s, set 25 done,         6 boards /        6 armies       6 (   25 MB)
-     0 s, set 24 done,        61 boards /       12 armies       5 (   25 MB)
-     0 s, set 23 done,       395 boards /       94 armies      32 (   25 MB)
-     0 s, set 22 done,      2542 boards /      120 armies      21 (   25 MB)
-     0 s, set 21 done,      8957 boards /      527 armies      74 (   25 MB)
-     0 s, set 20 done,     32774 boards /      620 armies      52 (  226 MB)
-     0 s, set 19 done,     74873 boards /     1618 armies     120 (  226 MB)
-     0 s, set 18 done,    179154 boards /     1812 armies      98 (  226 MB)
-     0 s, set 17 done,    294849 boards /     3050 armies     162 (  227 MB)
-     0 s, set 16 done,    490320 boards /     3232 armies     151 (  227 MB)
-     1 s, set 15 done,    601320 boards /     3784 armies     186 (  228 MB)
-     1 s, set 14 done,    740715 boards /     3965 armies     186 (  228 MB)
-     1 s, set 13 done,    352746 boards /     1748 armies      88 (  228 MB)
-==================================
-+--------+
-|. . . X |
-|X X X O |
-|X X O O |
-|. O O O |
-+--------+
-Solution!
-     1 s, set 12 done,    362314 boards /     3923 armies      92 (  228 MB)
-     0 s, set 11 done,         0 boards /        0 armies       0 (  227 MB)
-     7 s, no solution

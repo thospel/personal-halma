@@ -7,12 +7,17 @@ uint64_t NAME(BoardSet& boards_from,
 #if BACKTRACK && !BLUE_TO_MOVE
               BoardTable<uint8_t> const& backtrack,
               BoardTable<uint8_t> const& backtrack_symmetric,
+              int solution_moves,
 #endif // BACKTRACK && !BLUE_TO_MOVE
               int available_moves) {
 #if !BLUE_TO_MOVE
-    int balance_moves = max(available_moves/2 + balance_delay - ARMY, 0);
-    BalanceMask balance_mask = make_balance_mask(balance_min-balance_moves, balance_max+balance_moves);
-    balance_mask = ~balance_mask;
+    BalanceMask balance_mask;
+    if (balance >= 0) {
+        int balance_moves = max(available_moves/2 + balance_delay - ARMY, 0);
+        balance_mask = make_balance_mask(balance_min-balance_moves, balance_max+balance_moves);
+        balance_mask = ~balance_mask;
+    } else
+        balance_mask = 0;
     ParityCount balance_count_from, balance_count;
 #endif
 
@@ -120,7 +125,7 @@ uint64_t NAME(BoardSet& boards_from,
             }
 #endif // BACKTRACK
 
-            if (BALANCE >= 0) {
+            if (BALANCE && balance_mask) {
                 fill(balance_count_from.begin(), balance_count_from.end(), 0);
                 for (auto const&pos: red)
                     ++balance_count_from[pos.parity()];
@@ -153,7 +158,7 @@ uint64_t NAME(BoardSet& boards_from,
                 int backtrack_count_symmetric = backtrack_count_symmetric_from + backtrack_symmetric[soldier];
 # endif // BACKTRACK
 
-                if (BALANCE >= 0) {
+                if (BALANCE && balance_mask) {
                     balance_count = balance_count_from;
                     --balance_count[soldier.parity()];
                 }
@@ -231,17 +236,29 @@ uint64_t NAME(BoardSet& boards_from,
                         needed_moves = 2*blue_moves;
 #else // BLUE_TO_MOVE
 # if BACKTRACK
-                        if (backtrack_count - backtrack[val] >= available_moves &&
-                            backtrack_count_symmetric - backtrack_symmetric[val] >= available_moves) continue;
+                        if (backtrack_count - backtrack[val] >= solution_moves &&
+                            backtrack_count_symmetric - backtrack_symmetric[val] >= solution_moves) {
+                            if (VERBOSE) {
+                                cout << "   Move " << soldier << " to " << val << "\n";
+                                cout << "   Prune backtrack: bactrack " << backtrack_count - backtrack[val] << " >= " << solution_moves << " && backtrack_count_symmetric " << backtrack_count_symmetric - backtrack_symmetric[val] << " >= " << solution_moves << "\n";
+                            }
+                          continue;
+                        }
 # endif // BACKTRACK
 
-                        if (BALANCE >= 0) {
+                        if (BALANCE && balance_mask) {
                             auto balance_c = balance_count;
                             ++balance_c[val.parity()];
                             BalanceMask balance_bits = 0;
                             for (auto b: balance_c)
                                 balance_bits |= static_cast<BalanceMask>(1) << b;
-                            if (balance_bits & balance_mask) continue;
+                            if (balance_bits & balance_mask) {
+                                if (VERBOSE) {
+                                    cout << "   Move " << soldier << " to " << val << "\n";
+                                    cout << "   Prune unbalanced: " << balance_min << " <= " << balance_c << " <= " << balance_max << "\n";
+                                }
+                                continue;
+                            }
                         }
 
                         // We won't notice an increase in army distance, but
@@ -259,7 +276,7 @@ uint64_t NAME(BoardSet& boards_from,
                         if (needed_moves >= available_moves) {
                             if (VERBOSE) {
                                 cout << "   Move " << soldier << " to " << val << "\n";
-                                cout << "   Prune " << needed_moves << " > " << available_moves-1 << "\n";
+                                cout << "   Prune game length: " << needed_moves << " > " << available_moves-1 << "\n";
                             }
                             continue;
                         }
@@ -284,7 +301,7 @@ uint64_t NAME(BoardSet& boards_from,
                     if (boards_to.insert(moved_id, red_id, symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, BLUE);
-                        cout << "   Blue id " << moved_id << "\n" << image;
+                        cout << "   Inserted Blue id " << moved_id << "\n" << image;
                         image.set(val, EMPTY);
                     }
 #else  // BLUE_TO_MOVE
@@ -293,7 +310,7 @@ uint64_t NAME(BoardSet& boards_from,
                     if (boards_to.insert(blue_id, moved_id, symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, RED);
-                        cout << "   Red id " << moved_id << "\n" << image;
+                        cout << "   Inserted Red id " << moved_id << "\n" << image;
                         image.set(val, EMPTY);
                     }
 #endif // BLUE_TO_MOVE
