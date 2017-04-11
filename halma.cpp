@@ -64,19 +64,11 @@ int  const BALANCE  = -1;
 
 #define CHECK   0
 #define VERBOSE	0
-#define PLAY    0
 
-#if !PLAY
 int const X = 9;
 int const Y = 9;
 int const MOVES = 6;
 int const ARMY = 10;
-#else  // !PLAY
-int const X = 9;
-int const Y = 9;
-int const MOVES = 6;
-int const ARMY = 10;
-#endif // !PLAY
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -518,12 +510,15 @@ inline ostream& operator<<(ostream& os, ArmySet const& set) {
 }
 
 // Board as two Armies
+class FullMove;
 class Board {
   public:
     Board() {}
     Board(Army const& blue, Army const& red): blue_{blue}, red_{red} {}
     void move(Move const& move_);
     void move(Move const& move_, bool blue_to_move);
+    inline void move(FullMove const& move_);
+    inline void move(FullMove const& move_, bool blue_to_move);
     Army& blue() { return blue_; }
     Army& red()  { return red_; }
     Army const& blue() const FUNCTIONAL { return blue_; }
@@ -973,13 +968,61 @@ void ArmySet::print(ostream& os) const {
 class FullMove: public vector<Coord> {
   public:
     FullMove() {}
+    FullMove(char const* str);
+    FullMove(string const& str) : FullMove{str.c_str()} {}
     FullMove(Board const& from, Board const& to, Color color=COLORS);
     string str() const PURE;
+    Coord from() const PURE;
+    Coord to()   const PURE;
+    Move move() const PURE;
   private:
     static Move army_diff(Army const& army_from, Army const& army_to);
 
     void move_expand(Board const& board_from, Board const& board_to, Move const& move);
 };
+
+FullMove::FullMove(char const* str): FullMove{} {
+    auto ptr = str;
+    if (!ptr[0]) return;
+    while (true) {
+        char ch = *ptr++;
+        if (ch < letters[0] || ch >= letters[X]) break;
+        int x = ch - 'a';
+        int y = 0;
+        while (true) {
+            ch = *ptr++;
+            if (ch < '0' || ch > '9') break;
+            y = y * 10 + ch - '0';
+            if (y > Y) break;
+        }
+        --y;
+        if (y < 0 || y >= Y) break;
+        emplace_back(x, y);
+        if (!ch) return;
+        if (ch != '-') break;
+    }
+    throw(logic_error("Could not parse full move '" + string(str) + "'"));
+}
+
+inline ostream& operator<<(ostream& os, FullMove const& move) {
+    os << move.str();
+    return os;
+}
+
+Coord FullMove::from() const {
+    if (size() == 0) throw(logic_error("Empty full_move"));
+    return (*this)[0];
+}
+
+Coord FullMove::to()   const {
+    if (size() == 0) throw(logic_error("Empty full_move"));
+    return (*this)[size()-1];
+}
+
+Move FullMove::move() const {
+    if (size() == 0) throw(logic_error("Empty full_move"));
+    return Move{(*this)[0], (*this)[size()-1]};
+}
 
 Move FullMove::army_diff(Army const& army_from, Army const& army_to) {
     ArmyE const from{army_from};
@@ -1085,6 +1128,34 @@ string FullMove::str() const {
     return result;
 }
 
+class FullMoves: public vector<FullMove> {
+  public:
+    FullMoves() {}
+    template<class T>
+    FullMoves(std::initializer_list<T> l): FullMoves{} {
+        reserve(l.size());
+        for (auto const& elem: l)
+            emplace_back(elem);
+    }
+    void c_print(ostream& os, string const& indent) {
+        os << indent << "{\n";
+        for (auto const& move: *this) 
+            os << indent << "    \"" << move << "\",\n";
+        os << indent << "}";
+    }
+    void c_print(ostream& os) {
+        c_print(os, "");
+    }
+};
+
+inline ostream& operator<<(ostream& os, FullMoves const& moves) {
+    if (moves.empty()) throw(logic_error("Empty full move"));
+    os << moves[0];
+    for (size_t i=1; i<moves.size(); ++i)
+        os << ", " << moves[i];
+    return os;
+}
+
 class Svg {
   public:
     static uint const SCALE = 20;
@@ -1097,6 +1168,7 @@ class Svg {
     void game(vector<Board> const& boards);
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
+    void html(FullMoves const& full_moves);
     void html_header(uint nr_moves);
     void html_footer();
     void header();
@@ -1614,6 +1686,14 @@ void Board::move(Move const& move_) {
     throw(logic_error("Move not found"));
 }
 
+void Board::move(FullMove const& move_, bool blue_to_move) {
+    move(move_.move(), blue_to_move);
+}
+
+void Board::move(FullMove const& move_) {
+    move(move_.move());
+}
+
 void Svg::html_header(uint nr_moves) {
     out_ <<
         "<html>\n"
@@ -1674,28 +1754,35 @@ void Svg::move(FullMove const& move) {
 
 void Svg::game(vector<Board> const& boards) {
     parameters(X, Y, ARMY, MOVES);
-    string moves_string;
-    int color_index = boards.size() % 2;
-    string color_font[] = {
-        "      <font color='" + font_color(BLUE) + "'>",
-        "      <font color='" + font_color(RED ) + "'>",
-    };
+    FullMoves full_moves;
     for (size_t i = 0; i < boards.size(); ++i) {
         header();
         auto const& board_from = boards[i];
         board(board_from);
         if (i < boards.size()-1) {
             auto const& board_to = boards[i+1];
-            FullMove full_move{board_from, board_to};
-            move(full_move);
-            moves_string += color_font[color_index];
-            moves_string += full_move.str();
-            moves_string += "</font>,\n";
-            color_index = !color_index;
+            full_moves.emplace_back(board_from, board_to);
+            move(full_moves.back());
         }
         footer();
     }
-    if (boards.size() > 1) {
+    html(full_moves);
+}
+
+void Svg::html(FullMoves const& full_moves) {
+    int color_index = full_moves.size() % 2;
+    string color_font[] = {
+        "      <font color='" + font_color(RED ) + "'>",
+        "      <font color='" + font_color(BLUE) + "'>",
+    };
+    string moves_string;
+    for (auto const& full_move: full_moves) {
+        moves_string += color_font[color_index];
+        moves_string += full_move.str();
+        moves_string += "</font>,\n";
+        color_index = !color_index;
+    }
+    if (full_moves.size()) {
         moves_string.pop_back();
         moves_string.pop_back();
         out_ << "    <p>\n" << moves_string << "\n    </p>\n";
@@ -1754,41 +1841,6 @@ class GetOpt {
             return ch;
         }
     }
-};
-
-// The classic 30 solution
-// Used to check the code, especially the pruning
-Move const game30[] = {
-    {{2,1}, {3,1}},
-    {{7,7}, {7,5}},
-    {{3,0}, {3,2}},
-    {{8,5}, {6,5}},
-    {{0,2}, {4,2}},
-    {{6,8}, {6,4}},
-    {{0,1}, {4,3}},
-    {{7,6}, {5,6}},
-    {{4,3}, {5,3}},
-    {{8,8}, {4,6}},
-    {{3,2}, {2,3}},
-    {{6,5}, {0,1}},
-    {{0,3}, {4,5}},
-    {{8,7}, {0,3}},
-    {{0,0}, {2,4}},
-    {{5,8}, {3,0}},
-    {{2,4}, {3,4}},
-    {{4,6}, {0,0}},
-    {{1,1}, {7,7}},
-    {{8,6}, {0,2}},
-    {{2,0}, {6,6}},
-    {{7,5}, {1,1}},
-    {{1,2}, {1,3}},
-    {{6,7}, {2,1}},
-    {{1,0}, {5,4}},
-    {{6,4}, {2,0}},
-    {{5,4}, {5,5}},
-    {{5,6}, {1,0}},
-    {{4,5}, {8,7}},
-    {{7,8}, {1,2}},
 };
 
 // When this is used it should not be accessed.
@@ -1937,10 +1989,49 @@ make_all_moves_backtrack(BoardSet& boards_from,
                            nr_moves, true, red_backtrack);
 }
 
-void play() {
+void play(bool print_moves=false) {
     auto board = tables.start();
+    Board previous_board;
+    if (print_moves) previous_board = board;
 
-    int nr_moves = 30;
+    FullMoves moves;
+
+    // The classic 30 solution
+    // Used to check the code, especially the pruning
+    FullMoves game30 {
+        "g8-f8",
+            "b2-b4",
+            "f9-f7",
+            "a4-c4",
+            "i7-g7-e7",
+            "c1-c3-c5",
+            "i8-g8-e8-e6",
+            "b3-b5-d3",
+            "e6-d6",
+            "a1-c1-c3-e3",
+            "f7-g6",
+            "c4-c6-e6-e8-g8-i8",
+            "i6-g8-e8-e6-c6-c4-e2-e4",
+            "a2-a4-c4-c6-e6-e8-g8-i6",
+            "i9-i7-g7-g5",
+            "d1-b3-b5-d5-d7-f7-f9",
+            "g5-f5",
+            "e3-e5-g5-g7-i7-i9",
+            "h8-h6-f6-f4-d4-d2-b2",
+            "a3-c1-c3-e3-e5-g5-g7-i7",
+            "g9-e9-g7-g5-e5-e3-c3",
+            "b4-d2-d4-f4-f6-h6-h8",
+            "h7-h6",
+            "c2-c4-c6-e6-e8-g8",
+            "h9-h7-h5-f7-d7-d5",
+            "c5-e5-g5-g7-g9",
+            "d5-d4",
+            "d3-d5-d7-f7-h5-h7-h9",
+            "e4-c4-c2-a2",
+            "b1-b3-d3-d5-d7-f7-h5-h7",
+            };
+
+    int nr_moves = game30.size();
     for (auto& move: game30) {
         cout << board;
         // cout << board.symmetric();
@@ -1954,13 +2045,21 @@ void play() {
 
         cout << "===============================\n";
         --nr_moves;
-        board.move(move.mirror());
+        board.move(move);
         if (board_set[1].find(board, army_set[1], army_set[2], nr_moves)) {
             cout << "Good\n";
         } else {
             cout << "Bad\n";
         }
         // cout << board;
+        if (print_moves) {
+            moves.emplace_back(previous_board, board);
+            previous_board = board;
+        }
+    }
+    if (print_moves) {
+        moves.c_print(cout);
+        cout << ";\n";
     }
 }
 
@@ -2209,12 +2308,14 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:", argv);
+    GetOpt options("b:B:t:p", argv);
     long long int val;
+    bool replay = false;
     while (options.next())
         switch (options.option()) {
             case 'b': balance       = atoi(options.arg()); break;
             case 'B': balance_delay = atoi(options.arg()); break;
+            case 'p': replay = true; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -2269,10 +2370,11 @@ void my_main(int argc, char const* const* argv) {
 
     get_memory(true);
 
-    if (PLAY) {
+    if (replay) {
         play();
         return;
     }
+
     Army red_army;
     if (!solve(start_board, nr_moves, red_army)) return;
     backtrack(start_board, nr_moves, red_army);
