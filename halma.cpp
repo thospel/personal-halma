@@ -59,10 +59,10 @@ bool const CLOSED_LOOP = false;
 bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
 // bool const DOUBLE_CROSS = true;
-int  const BALANCE  = -1;
+bool  const BALANCE  = true;
 // 0 means let C++ decide
 
-#define CHECK   1
+#define CHECK   0
 #define VERBOSE	0
 
 int const X = 9;
@@ -1228,6 +1228,14 @@ class BoardTable {
 };
 
 using ParityCount = array<int, 4>;
+
+inline ostream& operator<<(ostream& os, ParityCount const& parity_count) {
+    os << "[ ";
+    for (auto p: parity_count) os << p << " ";
+    os << "]";
+    return os;
+}
+
 class Tables {
   public:
     Tables();
@@ -1910,7 +1918,7 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                          ArmySet const& opponent_armies,
                          ArmySet& moved_armies,
                          int nr_moves,
-                         bool backtrack,
+                         int solution_moves,
                          BoardTable<uint8_t> const& red_backtrack) {
     auto start = chrono::steady_clock::now();
 
@@ -1918,7 +1926,7 @@ uint64_t _make_all_moves(BoardSet& boards_from,
     uint64_t late;
     int blue_to_move = nr_moves & 1;
     if (blue_to_move) {
-        if (backtrack) {
+        if (solution_moves > 0) {
             for (uint i=1; i < nr_threads; ++i)
                 results.emplace_back
                     (async
@@ -1944,18 +1952,18 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                  nr_moves);
         }
     } else {
-        if (backtrack) {
+        if (solution_moves > 0) {
             for (uint i=1; i < nr_threads; ++i)
                 results.emplace_back
                     (async
                      (launch::async, thread_red_moves_backtrack,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-                      ref(red_backtrack), nr_moves));
+                      ref(red_backtrack), solution_moves, nr_moves));
             late = thread_red_moves_backtrack
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
-                 red_backtrack, nr_moves);
+                 red_backtrack, solution_moves, nr_moves);
         } else {
             for (uint i=1; i < nr_threads; ++i)
                 results.emplace_back
@@ -1996,7 +2004,7 @@ make_all_moves(BoardSet& boards_from,
                int nr_moves) {
     return _make_all_moves(boards_from, boards_to,
                            moving_armies, opponent_armies, moved_armies,
-                           nr_moves, false, *dummy_backtrack);
+                           nr_moves, 0, *dummy_backtrack);
 }
 
 NOINLINE uint64_t
@@ -2005,11 +2013,11 @@ make_all_moves_backtrack(BoardSet& boards_from,
                          ArmySet const& moving_armies,
                          ArmySet const& opponent_armies,
                          ArmySet& moved_armies,
-                         int nr_moves,
+                         int nr_moves, int solution_moves,
                          BoardTable<uint8_t> const& red_backtrack) {
     return _make_all_moves(boards_from, boards_to,
                            moving_armies, opponent_armies, moved_armies,
-                           nr_moves, true, red_backtrack);
+                           nr_moves, solution_moves, red_backtrack);
 }
 
 void play(bool print_moves=false) {
@@ -2018,11 +2026,29 @@ void play(bool print_moves=false) {
     if (print_moves) previous_board = board;
 
     FullMoves moves;
-
-    // The classic 30 solution
-    // Used to check the code, especially the pruning
-    FullMoves game30 {
-        "g8-f8",
+    FullMoves game;
+    if (X == 4 && Y == 4 && ARMY == 6 && MOVES == 8) {
+        game = FullMoves{
+            "c4-a4",
+            "c1-d1",
+            "d4-c4",
+            "b2-d4",
+            "c4-b3",
+            "a2-c4",
+            "b4-b2",
+            "a3-b4",
+            "d3-c2",
+            "b1-d3",
+            "c3-a3",
+            "a1-c3",
+            "d2-c1",
+            "d1-d2",
+        };
+    } else if (X == 9 && Y == 9 && ARMY == 10 && MOVES == 6) {
+        // The classic 30 solution
+        // Used to check the code, especially the pruning
+        game = FullMoves{
+            "g8-f8",
             "b2-b4",
             "f9-f7",
             "a4-c4",
@@ -2052,10 +2078,13 @@ void play(bool print_moves=false) {
             "d3-d5-d7-f7-h5-h7-h9",
             "e4-c4-c2-a2",
             "b1-b3-d3-d5-d7-f7-h5-h7",
-            };
+        };
+    } else {
+        throw(logic_error("No hardcoded replay game"));
+    }
 
-    int nr_moves = game30.size();
-    for (auto& move: game30) {
+    int nr_moves = game.size();
+    for (auto& move: game) {
         cout << board;
         // cout << board.symmetric();
 
@@ -2086,7 +2115,7 @@ void play(bool print_moves=false) {
     }
 }
 
-bool solve(Board const& board, int nr_moves, Army& red_army) {
+int solve(Board const& board, int nr_moves, Army& red_army) {
     auto start_solve = chrono::steady_clock::now();
     array<BoardSet, 2> board_set;
     array<ArmySet, 3>  army_set;
@@ -2099,7 +2128,8 @@ bool solve(Board const& board, int nr_moves, Army& red_army) {
     cout << ")" << endl;
 
     ArmyId red_id = 0;
-    for (int i=0; nr_moves>0; --nr_moves, ++i) {
+    int i;
+    for (i=0; nr_moves>0; --nr_moves, ++i) {
         auto& boards_from = board_set[ i    % 2];
         auto& boards_to   = board_set[(i+1) % 2];
         boards_to.clear();
@@ -2117,25 +2147,26 @@ bool solve(Board const& board, int nr_moves, Army& red_army) {
             auto stop_solve = chrono::steady_clock::now();
             auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
             cout << setw(6) << duration << " s, no solution" << endl;
-            return false;
+            return -1;
         }
         if (boards_to.solution_id()) {
             red_id = boards_to.solution_id();
             red_army = boards_to.solution();
-            --nr_moves;
+            if (nr_moves > 1)
+                cout << "Unexpected early solution. Bailing out\n";
+            ++i;
             break;
         }
     }
     auto stop_solve = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
     cout << setw(6) << duration << " s, solved" << endl;
-    if (nr_moves) cout << "Unexpected early solution. Bailing out\n";
 
     if (red_id == 0) throw(logic_error("Solved without solution"));
-    return true;
+    return i;
 }
 
-void backtrack(Board const& board, int nr_moves,
+void backtrack(Board const& board, int nr_moves, int solution_moves,
                Army const& last_red_army) {
     cout << "Start backtracking\n";
 
@@ -2155,7 +2186,7 @@ void backtrack(Board const& board, int nr_moves,
     red_backtrack.set(last_red_army, 2);
 
     cout << setw(14) << "set " << nr_moves << " done" << endl;
-    for (int i=0; nr_moves>0; --nr_moves, ++i) {
+    for (int i=0; solution_moves>0; --nr_moves, --solution_moves, ++i) {
         board_set.emplace_back(new BoardSet(true));
         auto& boards_from = *board_set[i];
         auto& boards_to   = *board_set[i+1];
@@ -2168,7 +2199,7 @@ void backtrack(Board const& board, int nr_moves,
         make_all_moves_backtrack
             (boards_from, boards_to,
              moving_armies, opponent_armies, moved_armies,
-             nr_moves, red_backtrack);
+             nr_moves, solution_moves, red_backtrack);
 
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
@@ -2181,17 +2212,25 @@ void backtrack(Board const& board, int nr_moves,
     BoardSet const& final_board_set = *board_set.back();
     ArmySet const& final_army_set = *army_set.back();
 
-    // There should be only 1 blue army completely on the red base
-    if (final_army_set.size() != 1)
-        throw(logic_error("More than 1 final blue army"));
-    ArmyId blue_id = final_board_set.back_id();
-    if (blue_id != 1)
-        throw(logic_error("Unexpected blue army id"));
+    ArmyId blue_id;
+    if (nr_moves == solution_moves) {
+        // There should be only 1 blue army completely on the red base
+        if (final_army_set.size() != 1)
+            throw(logic_error("More than 1 final blue army"));
+        blue_id = final_board_set.back_id();
+        if (blue_id != 1)
+            throw(logic_error("Unexpected blue army id"));
+        // There should be only 1 final board
+        if (final_board_set.size() != 1)
+            throw(logic_error("More than 1 solution while backtracking"));
+    } else {
+        Army blue_army = tables.start().red();
+        blue_id = final_army_set.find(blue_army);
+        if (blue_id == 0)
+            throw(logic_error("Could not find final blue army"));
+    }
 
-    // There should be only 1 final board
-    if (final_board_set.size() != 1)
-        throw(logic_error("More than 1 solution while backtracking"));
-    BoardSubSet const& final_subset = final_board_set.cat(1);
+    BoardSubSet const& final_subset = final_board_set.cat(blue_id);
     if (final_subset.size() != 1)
         throw(logic_error("More than 1 final red army"));
     ArmyId red_value = 0;
@@ -2211,6 +2250,9 @@ void backtrack(Board const& board, int nr_moves,
     // And it was stored without flip
     if (skewed)
         throw(logic_error("Unexpected red army skewed"));
+
+    // It's probably more useful to generate a FullMove sequence
+    // instead of a board sequence. Punt for now. --Note
 
     vector<Board> boards;
     // Reserve nr_moves+1 boards
@@ -2465,8 +2507,9 @@ void my_main(int argc, char const* const* argv) {
     }
 
     Army red_army;
-    if (!solve(start_board, nr_moves, red_army)) return;
-    backtrack(start_board, nr_moves, red_army);
+    int solution_moves = solve(start_board, nr_moves, red_army);
+    if (solution_moves < 0) return;
+    backtrack(start_board, nr_moves, solution_moves, red_army);
 }
 
 int main(int argc, char const* const* argv) {
