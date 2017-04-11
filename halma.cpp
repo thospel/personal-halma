@@ -62,7 +62,7 @@ bool const PASS = false;
 int  const BALANCE  = -1;
 // 0 means let C++ decide
 
-#define CHECK   0
+#define CHECK   1
 #define VERBOSE	0
 
 int const X = 9;
@@ -237,13 +237,6 @@ void Coord::svg(ostream& os, Color color, uint scale) const {
     os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
 }
 
-struct Move {
-    Coord from, to;
-    Move mirror() const PURE {
-        return Move{from.mirror(), to.mirror()};
-    }
-};
-
 class ArmyE;
 // Army as a set of Coord
 class Army: public array<Coord, ARMY> {
@@ -350,8 +343,7 @@ class ArmyPos: public ArmyE {
                 --pos_;
             } while (val < at(pos_-1));
         }
-        // if (pos_ < 0) throw(logic_error("Negative pos_"));
-        if (pos_ < 0) abort();
+        if (pos_ < 0) throw(logic_error("Negative pos_"));
         if (pos_ >= ARMY) throw(logic_error("Excessive pos_"));
         at(pos_) = val;
     }
@@ -507,6 +499,69 @@ class ArmySet: public SetStatistics {
 inline ostream& operator<<(ostream& os, ArmySet const& set) {
     set.print(os);
     return os;
+}
+
+struct Move {
+    Move() {}
+    Move(Coord const& from_, Coord const& to_): from{from_}, to{to_} {}
+    Move(Army const& army_from, Army const& army_to);
+    Move(Army const& army_from, Army const& army_to, int& diff);
+
+    Move mirror() const PURE {
+        return Move{from.mirror(), to.mirror()};
+    }
+
+    Coord from, to;
+};
+
+Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} {
+    ArmyE const fromE{army_from};
+    ArmyE const toE  {army_to};
+
+    int i = 0;
+    int j = 0;
+    int diffs = 0;
+    while (i < ARMY || j < ARMY) {
+        if (fromE.at(i) == toE.at(j)) {
+            ++i;
+            ++j;
+        } else if (fromE.at(i) < toE.at(j)) {
+            from = fromE.at(i);
+            ++i;
+            ++diffs;
+        } else {
+            to = toE.at(j);
+            ++j;
+            ++diffs;
+        }
+    }
+    if (diffs > 2)
+        throw(logic_error("Multimove"));
+    if (diffs == 1)
+        throw(logic_error("Move going nowhere"));
+}
+
+Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1}, to{-1, -1} {
+    ArmyE const fromE{army_from};
+    ArmyE const toE  {army_to};
+
+    int i = 0;
+    int j = 0;
+    diffs = 0;
+    while (i < ARMY || j < ARMY) {
+        if (fromE.at(i) == toE.at(j)) {
+            ++i;
+            ++j;
+        } else if (fromE.at(i) < toE.at(j)) {
+            from = fromE.at(i);
+            ++i;
+            ++diffs;
+        } else {
+            to = toE.at(j);
+            ++j;
+            ++diffs;
+        }
+    }
 }
 
 // Board as two Armies
@@ -976,8 +1031,6 @@ class FullMove: public vector<Coord> {
     Coord to()   const PURE;
     Move move() const PURE;
   private:
-    static Move army_diff(Army const& army_from, Army const& army_to);
-
     void move_expand(Board const& board_from, Board const& board_to, Move const& move);
 };
 
@@ -1022,35 +1075,6 @@ Coord FullMove::to()   const {
 Move FullMove::move() const {
     if (size() == 0) throw(logic_error("Empty full_move"));
     return Move{(*this)[0], (*this)[size()-1]};
-}
-
-Move FullMove::army_diff(Army const& army_from, Army const& army_to) {
-    ArmyE const from{army_from};
-    ArmyE const to{army_to};
-
-    Move result;
-    int i = 0;
-    int j = 0;
-    int diffs = 0;
-    while (i < ARMY || j < ARMY) {
-        if (from.at(i) == to.at(j)) {
-            ++i;
-            ++j;
-        } else if (from.at(i) < to.at(j)) {
-            result.from = from.at(i);
-            ++i;
-            ++diffs;
-        } else {
-            result.to = to.at(j);
-            ++j;
-            ++diffs;
-        }
-    }
-    if (diffs == 0)
-        result.from = result.to = Coord{-1, -1};
-    else if (diffs > 2)
-        throw(logic_error("Multimove"));
-    return result;
 }
 
 void FullMove::move_expand(Board const& board_from, Board const& board_to, Move const& move) {
@@ -1101,14 +1125,13 @@ FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) 
     bool red_diff  = board_from.red()  !=  board_to.red();
     if (blue_diff && red_diff) throw(logic_error("Both players move"));
 
-    Move move;
     if (blue_diff) {
-        move = army_diff(board_from.blue(), board_to.blue());
+        Move move{board_from.blue(), board_to.blue()};
         move_expand(board_from, board_to, move);
         return;
     }
     if (red_diff) {
-        move = army_diff(board_from.red(),  board_to.red());
+        Move move{board_from.red(), board_to.red()};
         move_expand(board_from, board_to, move);
         return;
     }
@@ -1139,7 +1162,7 @@ class FullMoves: public vector<FullMove> {
     }
     void c_print(ostream& os, string const& indent) {
         os << indent << "{\n";
-        for (auto const& move: *this) 
+        for (auto const& move: *this)
             os << indent << "    \"" << move << "\",\n";
         os << indent << "}";
     }
@@ -2074,7 +2097,8 @@ bool solve(Board const& board, int nr_moves, Army& red_army) {
     else
         cout << "no heuristics";
     cout << ")" << endl;
-    auto const& final_boards_to   = board_set[nr_moves % 2];
+
+    ArmyId red_id = 0;
     for (int i=0; nr_moves>0; --nr_moves, ++i) {
         auto& boards_from = board_set[ i    % 2];
         auto& boards_to   = board_set[(i+1) % 2];
@@ -2095,14 +2119,19 @@ bool solve(Board const& board, int nr_moves, Army& red_army) {
             cout << setw(6) << duration << " s, no solution" << endl;
             return false;
         }
+        if (boards_to.solution_id()) {
+            red_id = boards_to.solution_id();
+            red_army = boards_to.solution();
+            --nr_moves;
+            break;
+        }
     }
     auto stop_solve = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
     cout << setw(6) << duration << " s, solved" << endl;
+    if (nr_moves) cout << "Unexpected early solution. Bailing out\n";
 
-    ArmyId red_id = final_boards_to.solution_id();
     if (red_id == 0) throw(logic_error("Solved without solution"));
-    red_army = final_boards_to.solution();
     return true;
 }
 
@@ -2188,13 +2217,16 @@ void backtrack(Board const& board, int nr_moves,
     size_t board_pos = board_set.size();
     boards.resize(board_pos);
     boards[--board_pos] = Board{final_army_set.at(blue_id), last_red_army};
-    bool opponent_flipped = false;
 
     if (false) {
+        cout << "Initial\n";
         cout << "Blue: " << blue_id << ", Red: " << red_id << ", skewed=" << skewed << "\n";
         cout << boards[board_pos];
     }
 
+    bool opponent_flipped  = false;
+    bool blue_symmetry = true;
+    bool red_symmetry  = false;
     board_set.pop_back();
     for (int nr_moves = 2*board_set.size()+3;
          board_set.size() != 0;
@@ -2229,12 +2261,41 @@ void backtrack(Board const& board, int nr_moves,
                     skewed = BoardSubSet::split(red_value, r_id) != 0;
                     if (r_id != red_id) continue;
                     if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
-                        opponent_flipped ^= skewed;
+
+                        auto blue_army_symmetric = blue_army.symmetric();
+                        blue_symmetry = blue_army == blue_army_symmetric;
                         --board_pos;
-                        boards[board_pos] = Board{
-                            opponent_flipped ? blue_army.symmetric() : blue_army,
-                            boards[board_pos+1].red()};
-                        // cout << "Found blue:\n" << boards[board_pos];
+                        if (red_symmetry && !blue_symmetry) {
+                            // If the opponent is symmetric we lost
+                            // track of the oreientation and can
+                            // only recover by trying both
+                            try {
+                                boards[board_pos] = Board{
+                                    blue_army,
+                                    boards[board_pos+1].red()};
+                                FullMove{boards[board_pos+1], boards[board_pos], BLUE};
+                                opponent_flipped = false;
+                            } catch(exception& e) {
+                                try {
+                                    boards[board_pos] = Board{
+                                        blue_army_symmetric,
+                                        boards[board_pos+1].red()};
+                                    FullMove{boards[board_pos+1], boards[board_pos], BLUE};
+                                    opponent_flipped = true;
+                                } catch(exception& e) {
+                                    throw(logic_error("No orientation works"));
+                                }
+                            }
+                        } else {
+                            opponent_flipped ^= skewed;
+                            boards[board_pos] = Board{
+                                opponent_flipped ? blue_army_symmetric : blue_army,
+                                boards[board_pos+1].red()};
+                        }
+                        if (false) {
+                            cout << "Found blue:\n" << Image{blue_army, BLUE} << boards[board_pos] << "skewed=" << skewed << "\n";
+                            FullMove{boards[board_pos+1], boards[board_pos], BLUE};
+                        }
                         goto BLUE_DONE;
                     }
                 }
@@ -2253,12 +2314,40 @@ void backtrack(Board const& board, int nr_moves,
                 red_id = moved_armies.find(red_army);
                 if (red_id == 0) continue;
                 if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
-                    opponent_flipped ^= skewed;
+                    auto red_army_symmetric = red_army.symmetric();
+                    red_symmetry = red_army == red_army_symmetric;
                     --board_pos;
-                    boards[board_pos] = Board{
-                        boards[board_pos+1].blue(),
-                        opponent_flipped ? red_army.symmetric() : red_army};
-                    // cout << "Found red:\n" << boards[board_pos];
+                    if (blue_symmetry && !red_symmetry) {
+                        // If the opponent is symmetric we lost
+                        // track of the oreientation and can
+                        // only recover by trying both
+                        try {
+                            boards[board_pos] = Board{
+                                boards[board_pos+1].blue(),
+                                red_army};
+                            FullMove{boards[board_pos+1], boards[board_pos], RED};
+                            opponent_flipped = false;
+                        } catch(exception& e) {
+                            try {
+                                boards[board_pos] = Board{
+                                    boards[board_pos+1].blue(),
+                                    red_army_symmetric};
+                                FullMove{boards[board_pos+1], boards[board_pos], RED};
+                                opponent_flipped = true;
+                            } catch(exception& e) {
+                                throw(logic_error("No orientation works"));
+                            }
+                        }
+                    } else {
+                        opponent_flipped ^= skewed;
+                        boards[board_pos] = Board{
+                            boards[board_pos+1].blue(),
+                            opponent_flipped ? red_army_symmetric : red_army};
+                    }
+                    if (false) {
+                        cout << "Found red:\n" << Image{red_army, RED} << boards[board_pos] << "skewed=" << skewed << "\n";
+                        FullMove{boards[board_pos+1], boards[board_pos], RED};
+                    }
                     goto RED_DONE;
                 }
             }
