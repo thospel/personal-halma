@@ -240,7 +240,7 @@ uint64_t NAME(BoardSet& boards_from,
                             for (auto const& r: red)
                                 Ndistance_a |= tables.Ndistance(val, r);
                         }
-                        int const distance_red  = __builtin_clz(Ndistance_red);
+                        int const distance_red  = __builtin_clz(Ndistance_r);
                         int const distance_army = __builtin_clz(Ndistance_a);
                         int const pre_moves = min(distance_army / 2, distance_red);
                         --parity_c[val.parity()];
