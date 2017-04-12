@@ -60,8 +60,8 @@ bool const CLOSED_LOOP = false;
 bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
 // bool const DOUBLE_CROSS = true;
-bool  const BALANCE  = true;
-// 0 means let C++ decide
+bool const BALANCE  = true;
+bool const JUMP_ONLY_BLUE = true;
 
 #define CHECK   0
 #define VERBOSE	0
@@ -86,8 +86,13 @@ int balance = -1;
 int balance_delay = 0;
 int balance_min, balance_max;
 
+#define STRINGIFY(x) _STRINGIFY(x)
+#define _STRINGIFY(x) #x
+string VCS_COMMIT{STRINGIFY(COMMIT)};
+
 // There is no fundamental limit. Just make up *SOME* bound
 uint const THREADS_MAX = 256;
+// 0 means let C++ decide
 uint nr_threads = 0;
 
 const char letters[] = "abcdefghijklmnopqrstuvwxyz";
@@ -131,7 +136,6 @@ string get_memory(bool set_base_mem) {
 }
 
 using Norm = uint8_t;
-using Parity = uint8_t;
 using Nbits = uint;
 int const NBITS = std::numeric_limits<Nbits>::digits;
 Nbits const NLEFT = static_cast<Nbits>(1) << (NBITS-1);
@@ -164,8 +168,49 @@ inline string font_color(Color color) {
     }
 }
 
+using Parity = uint8_t;
+using ParityCount = array<int, 4>;
+
+inline ostream& operator<<(ostream& os, ParityCount const& parity_count) {
+    os << "[ ";
+    for (auto p: parity_count) os << p << " ";
+    os << "]";
+    return os;
+}
+
+template<class T>
+class Pair {
+  public:
+    inline Pair() {}
+    inline Pair(T const& normal, T const& symmetric):
+        normal_{normal}, symmetric_{symmetric} {}
+    inline Pair(T const& normal) : Pair{normal, normal.symmetric()} {}
+    inline T const& normal() const FUNCTIONAL {
+        return normal_;
+    }
+    inline T const& symmetric() const FUNCTIONAL {
+        return symmetric_;
+    }
+    template<class X>
+    void fill(X const& value) {
+        std::fill(normal_.begin(), normal_.end(), value);
+        std::fill(symmetric_.begin(), symmetric_.end(), value);
+    }
+    inline T& _normal() FUNCTIONAL {
+        return normal_;
+    }
+    inline T& _symmetric() FUNCTIONAL {
+        return symmetric_;
+    }
+  private:
+    T normal_, symmetric_;
+};
+
 class Coord;
-class CoordPair;
+using CoordPair  = Pair<Coord>;
+using ParityPair = Pair<Parity>;
+using ParityCountPair = Pair<ParityCount>;
+
 class CoordZ {
   public:
     using value_type = uint8_t;
@@ -256,6 +301,11 @@ class Coord {
     int x() const PURE { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
     int y() const PURE { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
     inline Parity parity() const PURE;
+    inline uint8_t base_red() const PURE;
+    inline uint8_t edge_red() const PURE;
+    inline Norm distance_base_red() const PURE;
+    inline Nbits Ndistance_base_red() const PURE;
+
     int pos()     const PURE { return pos_; }
     uint index()  const PURE { return OFFSET+ pos_; }
     uint index2() const PURE { return MAX+pos_; }
@@ -292,20 +342,6 @@ inline ostream& operator<<(ostream& os, Coord const& pos) {
 void CoordZ::svg(ostream& os, Color color, uint scale) const {
     os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
 }
-
-struct CoordPair {
-    CoordPair() {}
-    CoordPair(Coord const& normal, Coord const& symmetric):
-        normal_{normal}, symmetric_{symmetric} {}
-    CoordPair(Coord const& normal) : CoordPair{normal, normal.symmetric()} {}
-    inline Coord const& normal() const FUNCTIONAL {
-        return normal_;
-    }
-    inline Coord const& symmetric() const FUNCTIONAL {
-        return symmetric_;
-    }
-    Coord normal_, symmetric_;
-};
 
 class ArmyZE;
 // ArmyZ as a set of CoordZ
@@ -1404,15 +1440,6 @@ inline ostream& operator<<(ostream& os, Svg const& svg) {
     return os;
 }
 
-using ParityCount = array<int, 4>;
-
-inline ostream& operator<<(ostream& os, ParityCount const& parity_count) {
-    os << "[ ";
-    for (auto p: parity_count) os << p << " ";
-    os << "]";
-    return os;
-}
-
 class Tables {
   public:
     Tables();
@@ -1423,11 +1450,11 @@ class Tables {
     inline Norm distance(Coord const& left, Coord const& right) const PURE {
         return distance_[right.pos() - left.pos() + Coord::MAX];
     }
-    inline Norm distance_base_red(Coord const& pos) const PURE {
-        return distance_base_red_[pos];
-    }
     inline Nbits Ndistance(Coord const& left, Coord const& right) const PURE {
         return NLEFT >> distance(left, right);
+    }
+    inline Norm distance_base_red(Coord const& pos) const PURE {
+        return distance_base_red_[pos];
     }
     inline Nbits Ndistance_base_red(Coord const& pos) const PURE {
         return NLEFT >> distance_base_red(pos);
@@ -1438,11 +1465,23 @@ class Tables {
     inline uint8_t edge_red(Coord const& pos) const PURE {
         return edge_red_[pos];
     }
+    inline ParityPair const& parity_pair(Coord const& pos) const PURE {
+        return parity_pair_[pos];
+    }
     inline Parity parity(Coord const& pos) const PURE {
-        return parity_[pos];
+        return parity_pair(pos).normal();
+    }
+    inline Parity parity_symmetric(Coord const& pos) const PURE {
+        return parity_pair(pos).symmetric();
+    }
+    inline ParityPair const& parity_pair(CoordZ const& pos) const PURE {
+        return parity_pairZ_[pos];
     }
     inline Parity parity(CoordZ const& pos) const PURE {
-        return parityZ_[pos];
+        return parity_pair(pos).normal();
+    }
+    inline Parity parity_symmetric(CoordZ const& pos) const PURE {
+        return parity_pair(pos).symmetric();
     }
     inline Coord symmetric(Coord const& pos) const PURE {
         return symmetric_[pos];
@@ -1462,8 +1501,14 @@ class Tables {
     // The folowing methods in Tables really only PURE. However they are only
     // ever applied to the constant tables so the access global memory that
     // never changes making them effectively FUNCTIONAL
+    inline ParityCountPair const& parity_count_pair() const FUNCTIONAL {
+        return parity_count_pair_;
+    }
     inline ParityCount const& parity_count() const FUNCTIONAL {
-        return parity_count_;
+        return parity_count_pair().normal();
+    }
+    inline ParityCount const& parity_count_symmetric() const FUNCTIONAL {
+        return parity_count_pair().symmetric();
     }
     Norm infinity() const FUNCTIONAL { return infinity_; }
     Moves const& moves() const FUNCTIONAL { return moves_; }
@@ -1498,7 +1543,7 @@ class Tables {
         print_parity_count(cout);
     }
   private:
-    ParityCount parity_count_;
+    ParityCountPair parity_count_pair_;
     uint min_moves_;
     Moves moves_;
     Norm infinity_;
@@ -1508,11 +1553,11 @@ class Tables {
     BoardTable<Norm> distance_base_red_;
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
-    BoardTable<Parity> parity_;
+    BoardTable <ParityPair> parity_pair_;
+    BoardZTable<ParityPair> parity_pairZ_;
     BoardTable<CoordZ> coordZ_;
-    BoardZTable<CoordPair> coord_pair_;
     BoardZTable<CoordZ> symmetricZ_;
-    BoardZTable<Parity> parityZ_;
+    BoardZTable<CoordPair> coord_pair_;
     Board start_;
     Image start_image_;
 };
@@ -1581,7 +1626,7 @@ Tables::Tables() {
         start_image_.set(-1, y, COLORS);
         start_image_.set( X, y, COLORS);
         Norm d = infinity_;
-        Parity y_parity = y%2*2;
+        Parity y_parity = y%2;
         for (int x=0; x < X; ++x) {
             auto pos  = Coord {x, y};
             auto posZ = CoordZ{x, y};
@@ -1596,8 +1641,13 @@ Tables::Tables() {
             }
             distance_base_red_[pos] = d > 2 ? d-2 : 0;
             edge_red_[pos] = d == 1;
-            parity_ [pos]  = y_parity + x % 2;
-            parityZ_[posZ] = y_parity + x % 2;
+            Parity x_parity = x % 2;
+            parity_pair_ [pos]  = ParityPair(
+                2*y_parity + x_parity, 
+                2*x_parity + y_parity);
+            parity_pairZ_[posZ] = ParityPair(
+                2*y_parity + x_parity, 
+                2*x_parity + y_parity);
         }
     }
     for (int x=-1; x <= X; ++x) {
@@ -1605,9 +1655,12 @@ Tables::Tables() {
         start_image_.set(x,  Y, COLORS);
     }
 
-    fill(parity_count_.begin(), parity_count_.end(), 0);
-    for (auto const& r: red)
-        ++parity_count_[parity(r)];
+    parity_count_pair_.fill(0);
+    for (auto const& r: red) {
+        auto& p = parity_pair(r);
+        ++parity_count_pair_._normal   ()[p.normal   ()];
+        ++parity_count_pair_._symmetric()[p.symmetric()];
+    }
 
     min_moves_ = start_.min_moves();
 }
@@ -1668,7 +1721,7 @@ void Tables::print_symmetric(ostream& os) const {
 }
 
 void Tables::print_parity_count(ostream& os) const {
-    for (auto c: parity_count_)
+    for (auto c: parity_count())
         os << " " << c;
     os << "\n";
 }
@@ -1700,6 +1753,20 @@ Parity CoordZ::parity() const {
 
 Parity Coord::parity() const {
     return tables.parity(*this);
+}
+
+uint8_t Coord::base_red() const {
+    return tables.base_red(*this);
+}
+uint8_t Coord::edge_red() const {
+    return tables.edge_red(*this);
+}
+
+Norm Coord::distance_base_red() const {
+    return tables.distance_base_red(*this);
+}
+Nbits Coord::Ndistance_base_red() const {
+    return tables.Ndistance_base_red(*this);
 }
 
 ArmyZSet::ArmyZSet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
@@ -1889,10 +1956,10 @@ int Board::min_moves(bool blue_to_move) const {
     Army red_ {red()};
     for (auto const& b: blue_) {
         --parity_count_from[b.parity()];
-        if (tables.base_red(b)) continue;
+        if (b.base_red()) continue;
         ++off_base_from;
-        edge_count_from += tables.edge_red(b);
-        Ndistance_red |= tables.Ndistance_base_red(b);
+        edge_count_from += b.edge_red();
+        Ndistance_red |= b.Ndistance_base_red();
         for (auto const& r: red_)
             Ndistance_army |= tables.Ndistance(r, b);
     }
@@ -1992,8 +2059,9 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
         out_ << "Balance " << balance << ", delay " << balance_delay;
     out_ <<
         "</td>\n"
-        "      <tr><th align='left'>Host</th><td>" << HOSTNAME << "</td></tr>\n"
         "      <tr><th align='left'>Threads</th><td>" << nr_threads << "</td></tr>\n"
+        "      <tr><th align='left'>Commit</th><td>" << VCS_COMMIT << "</td></tr>\n"
+        "      <tr><th align='left'>Host</th><td>" << HOSTNAME << "</td></tr>\n"
         "    </table>\n";
 }
 
@@ -2716,6 +2784,7 @@ void my_main(int argc, char const* const* argv) {
     balance_max = (ARMY+3) / 4 + balance;
     if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
 
+    cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
     if (false) {
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";

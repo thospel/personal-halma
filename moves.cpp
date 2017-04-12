@@ -25,31 +25,31 @@ uint64_t NAME(BoardSet& boards_from,
     while (true) {
         BoardSubSetRef subset{boards_from};
 
-        ArmyId blue_id = subset.id();
+        ArmyId const blue_id = subset.id();
         if (blue_id == 0) break;
         if (VERBOSE) cout << "Processing blue " << blue_id << "\n";
         ArmyZ const& bZ = BLUE_TO_MOVE ?
             moving_armies.at(blue_id) :
             opponent_armies.at(blue_id);
 #if BLUE_TO_MOVE
-        ArmyZ bZ_symmetric = bZ.symmetric();
-        ArmyPair const b{bZ, bZ_symmetric};
-        if (CHECK) b.check(__LINE__);
-        ArmyMapperPair const b_mapper{b};
+        ArmyZ const bZ_symmetric = bZ.symmetric();
+        ArmyPair const blue_pair{bZ, bZ_symmetric};
+        if (CHECK) blue_pair.check(__LINE__);
+        ArmyMapperPair const b_mapper{blue_pair};
 #else  // BLUE_TO_MOVE
-        ArmyPair const b{bZ};
-        if (CHECK) b.check(__LINE__);
+        ArmyPair const blue_pair{bZ};
+        if (CHECK) blue_pair.check(__LINE__);
         // Will return 0 for symmetric or 1 for asymmetric
-        int b_symmetry = b.symmetry();
+        int b_symmetry = blue_pair.symmetry();
 #endif  // BLUE_TO_MOVE
 
         BoardSubSet const& red_armies = subset.armies();
         for (auto const& red_value: red_armies) {
             if (red_value == 0) continue;
             ArmyId red_id;
-            auto symmetry = BoardSubSet::split(red_value, red_id);
+            auto const symmetry = BoardSubSet::split(red_value, red_id);
             if (VERBOSE) cout << " Sub Processing red " << red_id << "," << symmetry << "\n";
-            Army const& blue         = symmetry ? b.symmetric() : b.normal();
+            Army const& blue         = symmetry ? blue_pair.symmetric() : blue_pair.normal();
 #if BLUE_TO_MOVE
             ArmyMapper const& mapper = symmetry ? b_mapper.symmetric() : b_mapper.normal();
 #else  // BLUE_TO_MOVE
@@ -74,10 +74,10 @@ uint64_t NAME(BoardSet& boards_from,
             int edge_count_from = 0;
             for (auto const& b: blue) {
                 --parity_count_from[b.parity()];
-                if (tables.base_red(b)) continue;
+                if (b.base_red()) continue;
                 ++off_base_from;
-                edge_count_from += tables.edge_red(b);
-                Ndistance_red |= tables.Ndistance_base_red(b);
+                edge_count_from += b.edge_red();
+                Ndistance_red |= b.Ndistance_base_red();
                 for (auto const& r: red)
                     Ndistance_army |= tables.Ndistance(r, b);
             }
@@ -106,7 +106,7 @@ uint64_t NAME(BoardSet& boards_from,
             }
 
 #if BLUE_TO_MOVE
-            int red_symmetry = rZ.symmetry();
+            int const red_symmetry = rZ.symmetry();
             Army const& army             = blue;
             ArmyZ const& armyZ           = symmetry ? bZ_symmetric : bZ;
             ArmyZ const& armyZ_symmetric = symmetry ? bZ : bZ_symmetric;
@@ -146,11 +146,11 @@ uint64_t NAME(BoardSet& boards_from,
                 armyESymmetric.copy(armyZ_symmetric, mapper.map(soldier));
 #if BLUE_TO_MOVE
                 auto off_base = off_base_from;
-                off_base += tables.base_red(soldier);
+                off_base += soldier.base_red();
                 ParityCount parity_count = parity_count_from;
                 ++parity_count[soldier.parity()];
                 auto edge_count = edge_count_from;
-                edge_count -= tables.edge_red(soldier);
+                edge_count -= soldier.edge_red();
 #else
 
 # if BACKTRACK
@@ -206,7 +206,7 @@ uint64_t NAME(BoardSet& boards_from,
                         auto parity_c = parity_count;
                         auto edge_c   = edge_count;
 
-                        if (tables.base_red(val)) {
+                        if (val.base_red()) {
                             --off;
                             if (off == 0) {
 #if !BACKTRACK
@@ -220,8 +220,8 @@ uint64_t NAME(BoardSet& boards_from,
                                 goto SOLUTION;
                             }
                         } else {
-                            edge_c += tables.edge_red(val);
-                            Ndistance_r |=  tables.Ndistance_base_red(val);
+                            edge_c += val.edge_red();
+                            Ndistance_r |=  val.Ndistance_base_red();
                             for (auto const& r: red)
                                 Ndistance_a |= tables.Ndistance(val, r);
                         }
@@ -265,7 +265,7 @@ uint64_t NAME(BoardSet& boards_from,
                         // these are rare and will be discovered in the late
                         // prune
                         for (auto const& b: blue) {
-                            if (tables.base_red(b)) continue;
+                            if (b.base_red()) continue;
                             Ndistance_a |= tables.Ndistance(val, b);
                         }
                         int distance_army = __builtin_clz(Ndistance_a);
@@ -291,24 +291,24 @@ uint64_t NAME(BoardSet& boards_from,
                     if (CHECK) armyE.check(__LINE__);
                     armyESymmetric.store(valZ.symmetric());
                     if (CHECK) armyESymmetric.check(__LINE__);
-                    int symmetry = cmp(armyE, armyESymmetric);
-                    auto moved_id = moved_armies.insert(symmetry >= 0 ? armyE : armyESymmetric);
+                    int result_symmetry = cmp(armyE, armyESymmetric);
+                    auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric);
                     if (CHECK && moved_id == 0)
                         throw(logic_error("ArmyZ Insert returns 0"));
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
-                    symmetry *= red_symmetry;
-                    if (boards_to.insert(moved_id, red_id, symmetry) && VERBOSE) {
-                        // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                    result_symmetry *= red_symmetry;
+                    if (boards_to.insert(moved_id, red_id, result_symmetry) && VERBOSE) {
+                        // cout << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, BLUE);
                         cout << "   Inserted Blue id " << moved_id << "\n" << image;
                         image.set(val, EMPTY);
                     }
 #else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
-                    symmetry *= blue_symmetry;
-                    if (boards_to.insert(blue_id, moved_id, symmetry) && VERBOSE) {
-                        // cout << "   symmetry=" << symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                    result_symmetry *= blue_symmetry;
+                    if (boards_to.insert(blue_id, moved_id, result_symmetry) && VERBOSE) {
+                        // cout << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, RED);
                         cout << "   Inserted Red id " << moved_id << "\n" << image;
                         image.set(val, EMPTY);

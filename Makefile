@@ -9,6 +9,8 @@ CXX := ccache $(CXX)
 # CXXFLAGS := $(CXXFLAGS) -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 # LDLIBS := $(LDLIBS) -l:libtcmalloc_minimal.so.4
 
+CXXFLAGS := $(CXXFLAGS) -DCOMMIT=`git rev-parse HEAD`
+
 all: halma
 
 halma.o: halma.cpp moves.cpp Makefile
