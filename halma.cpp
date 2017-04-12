@@ -178,6 +178,13 @@ inline ostream& operator<<(ostream& os, ParityCount const& parity_count) {
     return os;
 }
 
+inline int min_slides(ParityCount const& parity_count) PURE;
+int min_slides(ParityCount const& parity_count) {
+    int slides = 0;
+    for (auto pc: parity_count) slides += max(pc, 0);
+    return slides;
+}
+
 template<class T>
 class Pair {
   public:
@@ -209,7 +216,6 @@ class Pair {
 class Coord;
 using CoordPair  = Pair<Coord>;
 using ParityPair = Pair<Parity>;
-using ParityCountPair = Pair<ParityCount>;
 
 class CoordZ {
   public:
@@ -301,6 +307,7 @@ class Coord {
     int x() const PURE { return (pos_+(X+(Y-1)*ROW)) % ROW - X; }
     int y() const PURE { return (pos_+(X+(Y-1)*ROW)) / ROW - (Y-1); }
     inline Parity parity() const PURE;
+    inline uint8_t base_blue() const PURE;
     inline uint8_t base_red() const PURE;
     inline uint8_t edge_red() const PURE;
     inline Norm distance_base_red() const PURE;
@@ -1179,6 +1186,9 @@ class Image {
     inline explicit Image(ArmyZ const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
+    inline explicit Image(Army const& army, Color color = BLUE): Image{} {
+        set(army, color);
+    }
     void print(ostream& os) const;
     inline void clear();
     inline Color get(Coord const& pos) const PURE { return image_[pos.index()]; }
@@ -1459,6 +1469,9 @@ class Tables {
     inline Nbits Ndistance_base_red(Coord const& pos) const PURE {
         return NLEFT >> distance_base_red(pos);
     }
+    inline uint8_t base_blue(Coord const& pos) const PURE {
+        return base_red_[pos];
+    }
     inline uint8_t base_red(Coord const& pos) const PURE {
         return base_red_[pos];
     }
@@ -1501,14 +1514,8 @@ class Tables {
     // The folowing methods in Tables really only PURE. However they are only
     // ever applied to the constant tables so the access global memory that
     // never changes making them effectively FUNCTIONAL
-    inline ParityCountPair const& parity_count_pair() const FUNCTIONAL {
-        return parity_count_pair_;
-    }
     inline ParityCount const& parity_count() const FUNCTIONAL {
-        return parity_count_pair().normal();
-    }
-    inline ParityCount const& parity_count_symmetric() const FUNCTIONAL {
-        return parity_count_pair().symmetric();
+        return parity_count_;
     }
     Norm infinity() const FUNCTIONAL { return infinity_; }
     Moves const& moves() const FUNCTIONAL { return moves_; }
@@ -1522,6 +1529,10 @@ class Tables {
     inline void print_distance_base_red() const {
         print_distance_base_red(cout);
     }
+    void print_base_blue(ostream& os) const;
+    void print_base_blue() const {
+        print_base_blue(cout);
+    }
     void print_base_red(ostream& os) const;
     void print_base_red() const {
         print_base_red(cout);
@@ -1534,16 +1545,24 @@ class Tables {
     void print_parity() const {
         print_parity(cout);
     }
+    void print_parity_symmetric(ostream& os) const;
+    void print_parity_symmetric() const {
+        print_parity_symmetric(cout);
+    }
     void print_symmetric(ostream& os) const;
     void print_symmetric() const {
         print_symmetric(cout);
     }
-    void print_parity_count(ostream& os) const;
-    void print_parity_count() const {
-        print_parity_count(cout);
+    void print_blue_parity_count(ostream& os) const;
+    void print_blue_parity_count() const {
+        print_blue_parity_count(cout);
+    }
+    void print_red_parity_count(ostream& os) const;
+    void print_red_parity_count() const {
+        print_red_parity_count(cout);
     }
   private:
-    ParityCountPair parity_count_pair_;
+    ParityCount parity_count_;
     uint min_moves_;
     Moves moves_;
     Norm infinity_;
@@ -1551,6 +1570,7 @@ class Tables {
     array<Norm, 2*Coord::MAX+1> norm_;
     array<Norm, 2*Coord::MAX+1> distance_;
     BoardTable<Norm> distance_base_red_;
+    BoardTable<uint8_t> base_blue_;
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
     BoardTable <ParityPair> parity_pair_;
@@ -1592,7 +1612,8 @@ Tables::Tables() {
     ++infinity_;
 
     // Fill base
-    base_red_.fill(0);
+    base_blue_.fill(0);
+    base_red_ .fill(0);
     Army blue, red;
     auto& blueZ = start_.blue();
     auto& redZ  = start_.red();
@@ -1610,7 +1631,8 @@ Tables::Tables() {
             blue [i] = Coord {x, y};
             redZ[i]  = CoordZ{X-1-x, Y-1-y};
             red [i]  = Coord {X-1-x, Y-1-y};
-            base_red_[red[i]] = 1;
+            base_blue_[blue[i]] = 1;
+            base_red_ [red [i]] = 1;
             ++i;
             --x;
             ++y;
@@ -1643,10 +1665,10 @@ Tables::Tables() {
             edge_red_[pos] = d == 1;
             Parity x_parity = x % 2;
             parity_pair_ [pos]  = ParityPair(
-                2*y_parity + x_parity, 
+                2*y_parity + x_parity,
                 2*x_parity + y_parity);
             parity_pairZ_[posZ] = ParityPair(
-                2*y_parity + x_parity, 
+                2*y_parity + x_parity,
                 2*x_parity + y_parity);
         }
     }
@@ -1655,12 +1677,9 @@ Tables::Tables() {
         start_image_.set(x,  Y, COLORS);
     }
 
-    parity_count_pair_.fill(0);
-    for (auto const& r: red) {
-        auto& p = parity_pair(r);
-        ++parity_count_pair_._normal   ()[p.normal   ()];
-        ++parity_count_pair_._symmetric()[p.symmetric()];
-    }
+    parity_count_.fill(0);
+    for (auto const& r: red)
+        ++parity_count_[r.parity()];
 
     min_moves_ = start_.min_moves();
 }
@@ -1690,6 +1709,16 @@ void Tables::print_base_red(ostream& os) const {
     }
 }
 
+void Tables::print_base_blue(ostream& os) const {
+    for (int y=0; y < Y; ++y) {
+        for (int x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(base_blue(pos));
+        }
+        os << "\n";
+    }
+}
+
 void Tables::print_edge_red(ostream& os) const {
     for (int y=0; y < Y; ++y) {
         for (int x=0; x < X; ++x) {
@@ -1710,6 +1739,16 @@ void Tables::print_parity(ostream& os) const {
     }
 }
 
+void Tables::print_parity_symmetric(ostream& os) const {
+    for (int y=0; y < Y; ++y) {
+        for (int x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(parity_symmetric(pos));
+        }
+        os << "\n";
+    }
+}
+
 void Tables::print_symmetric(ostream& os) const {
     for (int y=0; y < Y; ++y) {
         for (int x=0; x < X; ++x) {
@@ -1720,7 +1759,13 @@ void Tables::print_symmetric(ostream& os) const {
     }
 }
 
-void Tables::print_parity_count(ostream& os) const {
+void Tables::print_blue_parity_count(ostream& os) const {
+    for (auto c: parity_count())
+        os << " " << c;
+    os << "\n";
+}
+
+void Tables::print_red_parity_count(ostream& os) const {
     for (auto c: parity_count())
         os << " " << c;
     os << "\n";
@@ -1755,9 +1800,14 @@ Parity Coord::parity() const {
     return tables.parity(*this);
 }
 
+uint8_t Coord::base_blue() const {
+    return tables.base_blue(*this);
+}
+
 uint8_t Coord::base_red() const {
     return tables.base_red(*this);
 }
+
 uint8_t Coord::edge_red() const {
     return tables.edge_red(*this);
 }
@@ -2801,10 +2851,14 @@ void my_main(int argc, char const* const* argv) {
         tables.print_edge_red();
         cout << "Parity:\n";
         tables.print_parity();
+        cout << "Parity Symmetric:\n";
+        tables.print_parity_symmetric();
         cout << "Symmetric:\n";
         tables.print_symmetric();
+        cout << "Blue Base parity count:\n";
+        tables.print_blue_parity_count();
         cout << "Red Base parity count:\n";
-        tables.print_parity_count();
+        tables.print_red_parity_count();
     }
 
     int needed_moves = tables.min_moves();

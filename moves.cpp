@@ -43,17 +43,44 @@ uint64_t NAME(BoardSet& boards_from,
         int b_symmetry = blue_pair.symmetry();
 #endif  // BLUE_TO_MOVE
 
+        Nbits Ndistance_red = NLEFT >> tables.infinity();
+        int off_base_from   = 0;
+        int edge_count_from = 0;
+        ParityCount parity_blue = tables.parity_count();
+        for (auto const& b: blue_pair.normal()) {
+            --parity_blue[b.parity()];
+            if (b.base_red()) continue;
+            ++off_base_from;
+            edge_count_from += b.edge_red();
+            Ndistance_red |= b.Ndistance_base_red();
+        }
+        int const distance_red = __builtin_clz(Ndistance_red);
+#if BLUE_TO_MOVE
+        ParityCount const parity_blue_symmetric = {
+            parity_blue[0],
+            parity_blue[2],
+            parity_blue[1],
+            parity_blue[3],
+        };
+#endif // BLUE_TO_MOVE
+        int const slides = min_slides(parity_blue);
+
         BoardSubSet const& red_armies = subset.armies();
         for (auto const& red_value: red_armies) {
             if (red_value == 0) continue;
             ArmyId red_id;
             auto const symmetry = BoardSubSet::split(red_value, red_id);
             if (VERBOSE) cout << " Sub Processing red " << red_id << "," << symmetry << "\n";
-            Army const& blue         = symmetry ? blue_pair.symmetric() : blue_pair.normal();
+            Army const& blue =
+                symmetry ? blue_pair.symmetric() : blue_pair.normal();
 #if BLUE_TO_MOVE
-            ArmyMapper const& mapper = symmetry ? b_mapper.symmetric() : b_mapper.normal();
+            ParityCount const& parity_count_from =
+                symmetry ? parity_blue_symmetric : parity_blue;
+            ArmyMapper const& mapper =
+                symmetry ? b_mapper.symmetric() : b_mapper.normal();
 #else  // BLUE_TO_MOVE
-            int  blue_symmetry       = symmetry ? -b_symmetry : b_symmetry;
+            int  blue_symmetry =
+                symmetry ? -b_symmetry : b_symmetry;
 #endif // BLUE_TO_MOVE
 
             ArmyZ const& rZ = BLUE_TO_MOVE ?
@@ -67,25 +94,13 @@ uint64_t NAME(BoardSet& boards_from,
             cout << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image;
 #endif // VERBOSE
 
-            Nbits Ndistance_army, Ndistance_red;
-            Ndistance_army = Ndistance_red = NLEFT >> tables.infinity();
-            int off_base_from = 0;
-            ParityCount parity_count_from = tables.parity_count();
-            int edge_count_from = 0;
+            Nbits Ndistance_army = NLEFT >> tables.infinity();
             for (auto const& b: blue) {
-                --parity_count_from[b.parity()];
                 if (b.base_red()) continue;
-                ++off_base_from;
-                edge_count_from += b.edge_red();
-                Ndistance_red |= b.Ndistance_base_red();
                 for (auto const& r: red)
                     Ndistance_army |= tables.Ndistance(r, b);
             }
-            int slides = 0;
-            for (auto tc: parity_count_from)
-                slides += max(tc, 0);
-            int distance_army = __builtin_clz(Ndistance_army);
-            int distance_red  = __builtin_clz(Ndistance_red);
+            int const distance_army = __builtin_clz(Ndistance_army);
 
             if (VERBOSE) {
                 cout << "  Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
@@ -225,13 +240,11 @@ uint64_t NAME(BoardSet& boards_from,
                             for (auto const& r: red)
                                 Ndistance_a |= tables.Ndistance(val, r);
                         }
-                        int distance_red  = __builtin_clz(Ndistance_red);
-                        int distance_army = __builtin_clz(Ndistance_a);
-                        int pre_moves = min(distance_army / 2, distance_red);
+                        int const distance_red  = __builtin_clz(Ndistance_red);
+                        int const distance_army = __builtin_clz(Ndistance_a);
+                        int const pre_moves = min(distance_army / 2, distance_red);
                         --parity_c[val.parity()];
-                        int slides = 0;
-                        for (auto tc: parity_c)
-                            slides += max(tc, 0);
+                        int const slides = min_slides(parity_c);
                         int blue_moves = pre_moves + max(slides-pre_moves-edge_c, 0) + off;
                         needed_moves = 2*blue_moves;
 #else // BLUE_TO_MOVE
