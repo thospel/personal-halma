@@ -65,10 +65,10 @@ bool const BALANCE  = true;
 #define CHECK   0
 #define VERBOSE	0
 
-int const X = 3;
-int const Y = 3;
+int const X = 9;
+int const Y = 9;
 int const RULES = 6;
-int const ARMY = 1;
+int const ARMY = 10;
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -721,7 +721,8 @@ class ArmyZSet: public SetStatistics {
 #endif // CHECK
     inline ArmyId insert(ArmyZ  const& value);
     inline ArmyId insert(ArmyZE const& value);
-    ArmyId find(ArmyZ const& value) const PURE;
+    ArmyId find(ArmyZ  const& value) const PURE;
+    ArmyId find(ArmyZE const& value) const PURE;
     ArmyZ const* begin() const PURE { return &armies_[1]; }
     ArmyZ const* end()   const PURE { return &armies_[used1_]; }
 
@@ -813,8 +814,6 @@ Move::Move(ArmyZ const& army_from, ArmyZ const& army_to, int& diffs): from{-1,-1
     }
 }
 
-using Moves = vector<Move>;
-
 // Board as two Armies
 class FullMove;
 class Image;
@@ -839,8 +838,6 @@ class Board {
         return min(min_nr_moves(true), min_nr_moves(false));
     }
     void svg(ostream& os, uint scale, uint marging) const;
-    Moves moves(Coord from, Image& image);
-    inline Moves moves(Coord from);
 
   private:
     ArmyZ blue_, red_;
@@ -1263,47 +1260,6 @@ void ArmyZSet::print(ostream& os) const {
     for (ArmyId i=1; i < used1_; ++i) {
         os << "Army " << i << "\n" << Image{armies_[i]};
     }
-}
-
-Moves Board::moves(Coord from) {
-    Image image;
-    return moves(from, image);
-}
-
-Moves Board::moves(Coord from, Image& image) {
-    Moves result;
-
-    array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
-
-    Color color = image.get(from);
-    image.set(from, EMPTY);
-
-    // Jumps
-    reachable[0] = from;
-    int nr_reachable = 1;
-    if (!CLOSED_LOOP) image.set(from, COLORS);
-    for (int i=0; i < nr_reachable; ++i) {
-        for (auto move: Coord::directions()) {
-            Coord jumpee{reachable[i], move};
-            if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
-            Coord target{jumpee, move};
-            if (image.get(target) != EMPTY) continue;
-            image.set(target, COLORS);
-            reachable[nr_reachable++] = target;
-        }
-    }
-    for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
-        image.set(reachable[i], EMPTY);
-
-    // Slides
-    for (auto move: Coord::directions()) {
-        Coord target{from, move};
-        if (image.get(target) != EMPTY) continue;
-        reachable[nr_reachable++] = target;
-    }
-    image.set(from, color);
-
-    return result;
 }
 
 class FullMove: public vector<CoordZ> {
@@ -1984,6 +1940,20 @@ ArmyId ArmyZSet::find(ArmyZ const& army) const {
     }
 }
 
+ArmyId ArmyZSet::find(ArmyZE const& army) const {
+    ArmyId pos = army.hash() & mask_;
+    uint offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        ArmyId i = values_[pos];
+        if (i == 0) return 0;
+        ArmyZ& a = armies_[i];
+        if (a == army) return i;
+        ++offset;
+        pos = (pos + offset) & mask_;
+    }
+}
+
 void ArmyZSet::resize() {
     if (size_ >= ARMY_HIGHBIT)
         throw(overflow_error("ArmyZ size grew too large"));
@@ -2146,14 +2116,28 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
         "    <table>\n"
         "      <tr><th align='left'>X</th><td>" << x << "</td></tr>\n"
         "      <tr><th align='left'>Y</th><td>" << y << "</td></tr>\n"
-        "      <tr><th align='left'>ArmyZ</th><td>" << army << "</td></tr>\n"
+        "      <tr><th align='left'>Army</th><td>" << army << "</td></tr>\n"
         "      <tr><th align='left'>Rule</th><td>" << rule << "-move</td></tr>\n"
         "      <tr><th align='left'>Bound</th><td> &ge; " << tables.min_nr_moves() << " moves</td></tr>\n"
         "      <tr><th align='left'>Heuristics</th><td>";
-    if (balance < 0)
+    bool heuristics = false;
+    if (balance >= 0) {
+        if (heuristics) out_ << "<br />\n";
+        heuristics = true;
+        out_ << "balance=" << balance << ", delay=" << balance_delay;
+    }
+    if (prune_slide) {
+        if (heuristics) out_ << "<br />\n";
+        heuristics = true;
+        out_ << "prune slides";
+    }
+    if (prune_jump) {
+        if (heuristics) out_ << "<br />\n";
+        heuristics = true;
+        out_ << "prune jumps";
+    }
+    if (!heuristics)
         out_ << "None\n";
-    else
-        out_ << "Balance " << balance << ", delay " << balance_delay;
     out_ <<
         "</td>\n"
         "      <tr><th align='left'>Threads</th><td>" << nr_threads << "</td></tr>\n"
@@ -2511,11 +2495,22 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
     array<BoardSet, 2> board_set;
     array<ArmyZSet, 3>  army_set;
     board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
-    cout << setw(14) << "set " << setw(2) << nr_moves << " done (" << HOSTNAME << ", ";
-    if (balance >= 0)
-        cout << "balance=" << balance << ", delay=" << balance_delay;
-    else
-        cout << "no heuristics";
+    cout << setw(14) << "set " << setw(2) << nr_moves << " done (" << HOSTNAME;
+    bool heuristics = false;
+    if (balance >= 0) {
+        heuristics = true;
+        cout << ", balance=" << balance << ", delay=" << balance_delay;
+    }
+    if (prune_slide) {
+        heuristics = true;
+        cout << ", prune slides";
+    }
+    if (prune_jump) {
+        heuristics = true;
+        cout << ", prune jumps";
+    }
+    if (!heuristics)
+        cout << ", no heuristics";
     cout << ")" << endl;
 
     ArmyId red_id = 0;
@@ -2660,6 +2655,9 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     if (skewed)
         throw(logic_error("Unexpected red army skewed"));
 
+    ArmyZ blueZ = final_army_set.at(blue_id);
+    ArmyZ redZ  = last_red_army;
+
     // It's probably more useful to generate a FullMove sequence
     // instead of a board sequence. Punt for now. --Note
 
@@ -2667,7 +2665,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     // Reserve nr_moves+1 boards
     size_t board_pos = board_set.size();
     boards.resize(board_pos);
-    boards[--board_pos] = Board{final_army_set.at(blue_id), last_red_army};
+    boards[--board_pos] = Board{blueZ, redZ};
 
     if (false) {
         cout << "Initial\n";
@@ -2675,146 +2673,98 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         cout << boards[board_pos];
     }
 
-    bool opponent_flipped  = false;
-    bool blue_symmetry = true;
-    bool red_symmetry  = false;
     board_set.pop_back();
-    for (int nr_moves = 2*board_set.size()+3;
-         board_set.size() != 0;
-         --nr_moves, board_set.pop_back(), army_set.pop_back()) {
-        BoardSet boards_from;
-        // Set keep on boards_to to suppress solution printing
-        // We don't care about the implied late free since it is tiny and scoped
-        BoardSet boards_to{true};
-        BoardSet const& moved_boards = *board_set[board_set.size()-1];
-        ArmyZSet  to_armies;
-        ArmyZSet const& moving_armies   = *army_set[army_set.size()-1];
-        ArmyZSet const& opponent_armies = *army_set[army_set.size()-2];
-        ArmyZSet const& moved_armies    = *army_set[army_set.size()-3];
+    army_set.pop_back();
+    army_set.pop_back();
 
-        boards_from.insert(blue_id, red_id, skewed ? -1 : 0);
-        int blue_to_move = nr_moves & 1;
-        if (blue_to_move) {
-            thread_blue_moves(boards_from, boards_to,
-                              moving_armies, opponent_armies, to_armies,
-                              nr_moves);
-            while (true) {
-                BoardSubSetRef subset{boards_to};
-                ArmyId b_id = subset.id();
-                if (b_id == 0) break;
-                ArmyZ const& blue_army = to_armies.at(b_id);
-                blue_id = moved_armies.find(blue_army);
-                if (blue_id == 0) continue;
-                BoardSubSet const& red_armies = subset.armies();
-                for (auto const& red_value: red_armies) {
-                    if (red_value == 0) continue;
-                    ArmyId r_id;
-                    skewed = BoardSubSet::split(red_value, r_id) != 0;
-                    if (r_id != red_id) continue;
-                    if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
-                        --board_pos;
-                        if (SYMMETRY && X == Y) {
-                            auto blue_army_symmetric = blue_army.symmetric();
-                            blue_symmetry = blue_army == blue_army_symmetric;
-                            if (red_symmetry && !blue_symmetry) {
-                                // If the opponent is symmetric we lost
-                                // track of the oreientation and can
-                                // only recover by trying both
-                                try {
-                                    boards[board_pos] = Board{
-                                        blue_army,
-                                        boards[board_pos+1].red()};
-                                    FullMove{boards[board_pos+1], boards[board_pos], BLUE};
-                                    opponent_flipped = false;
-                                } catch(exception& e) {
-                                    try {
-                                        boards[board_pos] = Board{
-                                            blue_army_symmetric,
-                                            boards[board_pos+1].red()};
-                                        FullMove{boards[board_pos+1], boards[board_pos], BLUE};
-                                        opponent_flipped = true;
-                                    } catch(exception& e) {
-                                        throw(logic_error("No orientation works"));
-                                    }
-                                }
-                            } else {
-                                opponent_flipped ^= skewed;
-                                boards[board_pos] = Board{
-                                    opponent_flipped ? blue_army_symmetric : blue_army,
-                                    boards[board_pos+1].red()};
-                            }
-                        } else
-                            boards[board_pos] = Board{
-                                blue_army,
-                                boards[board_pos+1].red()};
-                        if (false) {
-                            cout << "Found blue:\n" << Image{blue_army, BLUE} << boards[board_pos] << "skewed=" << skewed << "\n";
-                            FullMove{boards[board_pos+1], boards[board_pos], BLUE};
-                        }
-                        goto BLUE_DONE;
-                    }
+    ArmyZ blueSymmetricZ = blueZ.symmetric();
+    ArmyZ redSymmetricZ  = redZ.symmetric();
+    int blue_symmetry = cmp(blueZ, blueSymmetricZ);
+    int red_symmetry  = cmp(redZ , redSymmetricZ);
+
+    Image image{blueZ, redZ};
+    ArmyZPos armyE, armySymmetricE;
+    for (int blue_to_move = 1;
+         board_set.size() != 0;
+         blue_to_move = 1-blue_to_move, board_set.pop_back(), army_set.pop_back()) {
+        // cout << "Current image:\n" << image;
+        BoardSet const& back_boards   = *board_set.back();
+        ArmyZSet const& back_armies   = *army_set.back();
+
+        ArmyZ const& armyZ          = blue_to_move ? blueZ          : redZ;
+        ArmyZ const& armySymmetricZ = blue_to_move ? blueSymmetricZ : redSymmetricZ;
+        ArmyMapper const& mapper{armySymmetricZ};
+        Army army{armyZ};
+        for (int a=0; a<ARMY; ++a) {
+            auto const soldier = army[a];
+            image.set(soldier, EMPTY);
+            armyE         .copy(armyZ         , a);
+            armySymmetricE.copy(armySymmetricZ, mapper.map(soldier));
+            array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
+
+            // Jumps
+            reachable[0] = soldier;
+            int nr_reachable = 1;
+            if (!CLOSED_LOOP) image.set(soldier, COLORS);
+            for (int i=0; i < nr_reachable; ++i) {
+                for (auto move: Coord::directions()) {
+                    Coord jumpee{reachable[i], move};
+                    if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+                    Coord target{jumpee, move};
+                    if (image.get(target) != EMPTY) continue;
+                    image.set(target, COLORS);
+                    reachable[nr_reachable++] = target;
                 }
             }
-            throw(logic_error("Blue backtrack failure"));
-          BLUE_DONE:;
-        } else {
-            thread_red_moves(boards_from, boards_to,
-                             moving_armies, opponent_armies, to_armies,
-                             nr_moves);
-            BoardSubSet const& red_armies = boards_to.cat(blue_id);
-            for (auto const& red_value: red_armies) {
-                if (red_value == 0) continue;
-                skewed = BoardSubSet::split(red_value, red_id) != 0;
-                ArmyZ const& red_army = to_armies.at(red_id);
-                red_id = moved_armies.find(red_army);
-                if (red_id == 0) continue;
-                if (moved_boards.find(blue_id, red_id, skewed ? -1 : 0)) {
-                    --board_pos;
-                    if (SYMMETRY && X == Y) {
-                        auto red_army_symmetric = red_army.symmetric();
-                        red_symmetry = red_army == red_army_symmetric;
-                        if (blue_symmetry && !red_symmetry) {
-                            // If the opponent is symmetric we lost
-                            // track of the oreientation and can
-                            // only recover by trying both
-                            try {
-                                boards[board_pos] = Board{
-                                    boards[board_pos+1].blue(),
-                                    red_army};
-                                FullMove{boards[board_pos+1], boards[board_pos], RED};
-                                opponent_flipped = false;
-                            } catch(exception& e) {
-                                try {
-                                    boards[board_pos] = Board{
-                                        boards[board_pos+1].blue(),
-                                        red_army_symmetric};
-                                    FullMove{boards[board_pos+1], boards[board_pos], RED};
-                                    opponent_flipped = true;
-                                } catch(exception& e) {
-                                    throw(logic_error("No orientation works"));
-                                }
-                            }
-                        } else {
-                            opponent_flipped ^= skewed;
-                            boards[board_pos] = Board{
-                                boards[board_pos+1].blue(),
-                                opponent_flipped ? red_army_symmetric : red_army};
-                        }
-                    } else
-                        boards[board_pos] = Board{
-                            boards[board_pos+1].blue(),
-                            red_army};
-                    if (false) {
-                        cout << "Found red:\n" << Image{red_army, RED} << boards[board_pos] << "skewed=" << skewed << "\n";
-                        FullMove{boards[board_pos+1], boards[board_pos], RED};
-                    }
-                    goto RED_DONE;
-                }
+            for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
+                image.set(reachable[i], EMPTY);
+
+            // Slides
+            for (auto move: Coord::directions()) {
+                Coord target{soldier, move};
+                if (image.get(target) != EMPTY) continue;
+                reachable[nr_reachable++] = target;
             }
-            throw(logic_error("Red backtrack failure"));
-          RED_DONE:;
+
+            for (int i=1; i < nr_reachable; ++i) {
+                auto const val = reachable[i];
+                CoordZ valZ{val};
+                armyE         .store(valZ);
+                armySymmetricE.store(valZ.symmetric());
+                if (blue_to_move) {
+                    blue_symmetry = cmp(armyE, armySymmetricE);
+                    blue_id = back_armies.find(blue_symmetry >= 0 ? armyE : armySymmetricE);
+                    if (blue_id == 0) continue;
+                    int symmetry = blue_symmetry * red_symmetry;
+                    auto board_id = back_boards.find(blue_id, red_id, symmetry);
+                    if (board_id == 0) continue;
+                    image.set(val,     BLUE);
+                    blueZ          = armyE;
+                    blueSymmetricZ = armySymmetricE;
+                } else {
+                    red_symmetry = cmp(armyE, armySymmetricE);
+                    red_id = back_armies.find(red_symmetry >= 0 ? armyE : armySymmetricE);
+                    if (red_id == 0) continue;
+                    int symmetry = red_symmetry * blue_symmetry;
+                    auto board_id = back_boards.find(blue_id, red_id, symmetry);
+                    if (board_id == 0) continue;
+                    image.set(val,     RED);
+                    redZ          = armyE;
+                    redSymmetricZ = armySymmetricE;
+                }
+                goto MOVE_DONE;
+            }
+            image.set(soldier, blue_to_move ? BLUE : RED);
         }
+        cerr << "Blue:\n" << blueZ;
+        cerr << "Red:\n" << redZ;
+        cerr << "Failure board:\n" << image;
+        throw(logic_error("Could not identify backtracking move"));
+      MOVE_DONE:
+        boards[--board_pos] = Board{blueZ, redZ};
     }
+    // cout << "Final image:\n" << image;
+
     for (size_t i = 0; i < boards.size(); ++i)
         cout << "Move " << i << "\n" << boards[i];
 
