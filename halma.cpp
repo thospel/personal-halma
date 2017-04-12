@@ -61,15 +61,14 @@ bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
 // bool const DOUBLE_CROSS = true;
 bool const BALANCE  = true;
-bool const JUMP_ONLY_BLUE = true;
 
 #define CHECK   0
 #define VERBOSE	0
 
-int const X = 9;
-int const Y = 9;
-int const MOVES = 6;
-int const ARMY = 10;
+int const X = 3;
+int const Y = 3;
+int const RULES = 6;
+int const ARMY = 1;
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -86,6 +85,8 @@ int balance = -1;
 int balance_delay = 0;
 int balance_min, balance_max;
 
+bool prune_slide = false;
+bool prune_jump  = false;
 #define STRINGIFY(x) _STRINGIFY(x)
 #define _STRINGIFY(x) #x
 string VCS_COMMIT{STRINGIFY(COMMIT)};
@@ -289,7 +290,7 @@ class BoardZTable {
 };
 
 using Diff = Coord;
-using Moves = array<Diff, MOVES>;
+using Rules = array<Diff, RULES>;
 using CoordVal = int16_t;
 class Coord {
   private:
@@ -298,7 +299,7 @@ class Coord {
     static int const SIZE = (Y+1)*ROW+X+2;
     static int const MAX  = (Y-1)*ROW+X-1;
 
-    static inline Moves const& moves();
+    static inline Rules const& directions();
 
     Coord() {}
     explicit inline Coord(CoordZ const& pos);
@@ -812,16 +813,19 @@ Move::Move(ArmyZ const& army_from, ArmyZ const& army_to, int& diffs): from{-1,-1
     }
 }
 
+using Moves = vector<Move>;
+
 // Board as two Armies
 class FullMove;
+class Image;
 class Board {
   public:
     Board() {}
     Board(ArmyZ const& blue, ArmyZ const& red): blue_{blue}, red_{red} {}
-    void move(Move const& move_);
-    void move(Move const& move_, bool blue_to_move);
-    inline void move(FullMove const& move_);
-    inline void move(FullMove const& move_, bool blue_to_move);
+    void do_move(Move const& move_);
+    void do_move(Move const& move_, bool blue_to_move);
+    inline void do_move(FullMove const& move_);
+    inline void do_move(FullMove const& move_, bool blue_to_move);
     ArmyZ& blue() { return blue_; }
     ArmyZ& red()  { return red_; }
     ArmyZ const& blue() const FUNCTIONAL { return blue_; }
@@ -830,11 +834,13 @@ class Board {
         blue_.check(line);
         red_ .check(line);
     }
-    int min_moves(bool blue_to_move) const PURE;
-    int min_moves() const PURE {
-        return min(min_moves(true), min_moves(false));
+    int min_nr_moves(bool blue_to_move) const PURE;
+    int min_nr_moves() const PURE {
+        return min(min_nr_moves(true), min_nr_moves(false));
     }
     void svg(ostream& os, uint scale, uint marging) const;
+    Moves moves(Coord from, Image& image);
+    inline Moves moves(Coord from);
 
   private:
     ArmyZ blue_, red_;
@@ -1259,6 +1265,47 @@ void ArmyZSet::print(ostream& os) const {
     }
 }
 
+Moves Board::moves(Coord from) {
+    Image image;
+    return moves(from, image);
+}
+
+Moves Board::moves(Coord from, Image& image) {
+    Moves result;
+
+    array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
+
+    Color color = image.get(from);
+    image.set(from, EMPTY);
+
+    // Jumps
+    reachable[0] = from;
+    int nr_reachable = 1;
+    if (!CLOSED_LOOP) image.set(from, COLORS);
+    for (int i=0; i < nr_reachable; ++i) {
+        for (auto move: Coord::directions()) {
+            Coord jumpee{reachable[i], move};
+            if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+            Coord target{jumpee, move};
+            if (image.get(target) != EMPTY) continue;
+            image.set(target, COLORS);
+            reachable[nr_reachable++] = target;
+        }
+    }
+    for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
+        image.set(reachable[i], EMPTY);
+
+    // Slides
+    for (auto move: Coord::directions()) {
+        Coord target{from, move};
+        if (image.get(target) != EMPTY) continue;
+        reachable[nr_reachable++] = target;
+    }
+    image.set(from, color);
+
+    return result;
+}
+
 class FullMove: public vector<CoordZ> {
   public:
     FullMove() {}
@@ -1324,7 +1371,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     if (move.from.parity() != move.to.parity()) {
         // Must be a slide. Check though
         emplace_back(move.to);
-        for (auto const& step: Coord::moves())
+        for (auto const& step: Coord::directions())
             if (to == Coord{from, step}) return;
         throw(logic_error("Move is not a slide but has different parity"));
     }
@@ -1332,12 +1379,12 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     // Must be a jump
     Image image{board_from};
     if (CLOSED_LOOP) image.set(move.from, EMPTY);
-    array<Coord, ARMY*2*MOVES+(1+MOVES)> reachable;
-    array<int, ARMY*2*MOVES+(1+MOVES)> previous;
+    array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
+    array<int, ARMY*2*RULES+(1+RULES)> previous;
     reachable[0] = from;
     int nr_reachable = 1;
     for (int i=0; i < nr_reachable; ++i) {
-        for (auto direction: Coord::moves()) {
+        for (auto direction: Coord::directions()) {
             Coord jumpee{reachable[i], direction};
             if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
             Coord target{jumpee, direction};
@@ -1346,7 +1393,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
             previous [nr_reachable] = i;
             reachable[nr_reachable] = target;
             if (target == to) {
-                array<Coord, ARMY*2*MOVES+(1+MOVES)> trace;
+                array<Coord, ARMY*2*RULES+(1+RULES)> trace;
                 int t = 0;
                 while (nr_reachable) {
                     trace[t++] = reachable[nr_reachable];
@@ -1425,7 +1472,7 @@ class Svg {
     static uint const SCALE = 20;
 
     static string const solution_file() FUNCTIONAL {
-        return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(MOVES) + ".html";
+        return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + ".html";
     }
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
     void parameters(uint x, uint y, uint army, uint rule);
@@ -1453,7 +1500,7 @@ inline ostream& operator<<(ostream& os, Svg const& svg) {
 class Tables {
   public:
     Tables();
-    uint min_moves() const PURE { return min_moves_; }
+    uint min_nr_moves() const PURE { return min_nr_moves_; }
     inline Norm norm(Coord const& left, Coord const& right) const PURE {
         return norm_[right.pos() - left.pos() + Coord::MAX];
     }
@@ -1470,7 +1517,7 @@ class Tables {
         return NLEFT >> distance_base_red(pos);
     }
     inline uint8_t base_blue(Coord const& pos) const PURE {
-        return base_red_[pos];
+        return base_blue_[pos];
     }
     inline uint8_t base_red(Coord const& pos) const PURE {
         return base_red_[pos];
@@ -1518,12 +1565,12 @@ class Tables {
         return parity_count_;
     }
     Norm infinity() const FUNCTIONAL { return infinity_; }
-    Moves const& moves() const FUNCTIONAL { return moves_; }
+    Rules const& directions() const FUNCTIONAL { return directions_; }
     Board const& start() const FUNCTIONAL { return start_; }
     Image const& start_image() const FUNCTIONAL { return start_image_; }
-    void print_moves(ostream& os) const;
-    void print_moves() const {
-        print_moves(cout);
+    void print_directions(ostream& os) const;
+    void print_directions() const {
+        print_directions(cout);
     }
     void print_distance_base_red(ostream& os) const;
     inline void print_distance_base_red() const {
@@ -1563,8 +1610,8 @@ class Tables {
     }
   private:
     ParityCount parity_count_;
-    uint min_moves_;
-    Moves moves_;
+    uint min_nr_moves_;
+    Rules directions_;
     Norm infinity_;
     BoardTable<Coord> symmetric_;
     array<Norm, 2*Coord::MAX+1> norm_;
@@ -1584,7 +1631,7 @@ class Tables {
 
 Tables::Tables() {
     fill(norm_.begin(), norm_.end(), std::numeric_limits<Norm>::max());
-    int move = 0;
+    int rule = 0;
     infinity_ = 0;
     for (int y=1-Y; y < Y; ++y) {
         int ay = abs(y);
@@ -1592,21 +1639,21 @@ Tables::Tables() {
             int ax = abs(x);
             auto diff = Diff{x,y};
             Norm n =
-                MOVES == 8 ? max(ax, ay) :
-                MOVES == 6 ? (ax+ay+abs(x+y))/2 :
-                MOVES == 4 ? ax+ay :
-                throw(logic_error("Unknown move " + to_string(MOVES)));
+                RULES == 8 ? max(ax, ay) :
+                RULES == 6 ? (ax+ay+abs(x+y))/2 :
+                RULES == 4 ? ax+ay :
+                throw(logic_error("Unknown rule " + to_string(RULES)));
             norm_[diff.index2()] = n;
             distance_[diff.index2()] = n <= 2 ? 0 : n-2;
             infinity_ = max(infinity_, n);
             if (n == 1) {
-                if (move >= MOVES) throw(logic_error("too many moves"));
-                moves_[move++] = diff;
+                if (rule >= RULES) throw(logic_error("too many moves"));
+                directions_[rule++] = diff;
             }
         }
     }
-    if (move < MOVES) throw(logic_error("too few moves"));
-    sort(moves_.begin(), moves_.end());
+    if (rule < RULES) throw(logic_error("too few directions"));
+    sort(directions_.begin(), directions_.end());
     if (infinity_ >= NBITS)
         throw(logic_error("Max distance does not fit in Nbits"));
     ++infinity_;
@@ -1681,12 +1728,12 @@ Tables::Tables() {
     for (auto const& r: red)
         ++parity_count_[r.parity()];
 
-    min_moves_ = start_.min_moves();
+    min_nr_moves_ = start_.min_nr_moves();
 }
 
-void Tables::print_moves(ostream& os) const {
-    for (int i=0; i<MOVES; ++i)
-        os << moves_[i] << "\n";
+void Tables::print_directions(ostream& os) const {
+    for (int i=0; i<RULES; ++i)
+        os << directions_[i] << "\n";
 }
 
 void Tables::print_distance_base_red(ostream& os) const {
@@ -1784,8 +1831,8 @@ CoordPair const& CoordZ::coord_pair() const {
 CoordZ::CoordZ(Coord const& pos) : CoordZ{tables.coord(pos)} {}
 Coord::Coord (CoordZ const& pos) : Coord {tables.coord(pos)} {}
 
-Moves const& Coord::moves() {
-    return tables.moves();
+Rules const& Coord::directions() {
+    return tables.directions();
 }
 
 Coord Coord::symmetric() const {
@@ -1993,7 +2040,7 @@ void Image::clear() {
     image_ = tables.start_image().image_;
 }
 
-int Board::min_moves(bool blue_to_move) const {
+int Board::min_nr_moves(bool blue_to_move) const {
     blue_to_move = blue_to_move ? true : false;
 
     Nbits Ndistance_army, Ndistance_red;
@@ -2031,7 +2078,7 @@ int Board::min_moves(bool blue_to_move) const {
     return needed_moves;
 }
 
-void Board::move(Move const& move_, bool blue_to_move) {
+void Board::do_move(Move const& move_, bool blue_to_move) {
     auto& army = blue_to_move ? blue() : red();
     auto pos = equal_range(army.begin(), army.end(), move_.from);
     if (pos.first == pos.second)
@@ -2040,7 +2087,7 @@ void Board::move(Move const& move_, bool blue_to_move) {
     sort(army.begin(), army.end());
 }
 
-void Board::move(Move const& move_) {
+void Board::do_move(Move const& move_) {
     auto pos = equal_range(blue().begin(), blue().end(), move_.from);
     if (pos.first != pos.second) {
         *pos.first = move_.to;
@@ -2056,12 +2103,12 @@ void Board::move(Move const& move_) {
     throw(logic_error("Move not found"));
 }
 
-void Board::move(FullMove const& move_, bool blue_to_move) {
-    move(move_.move(), blue_to_move);
+void Board::do_move(FullMove const& move_, bool blue_to_move) {
+    do_move(move_.move(), blue_to_move);
 }
 
-void Board::move(FullMove const& move_) {
-    move(move_.move());
+void Board::do_move(FullMove const& move_) {
+    do_move(move_.move());
 }
 
 void Svg::html_header(uint nr_moves) {
@@ -2101,7 +2148,7 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
         "      <tr><th align='left'>Y</th><td>" << y << "</td></tr>\n"
         "      <tr><th align='left'>ArmyZ</th><td>" << army << "</td></tr>\n"
         "      <tr><th align='left'>Rule</th><td>" << rule << "-move</td></tr>\n"
-        "      <tr><th align='left'>Bound</th><td> &ge; " << tables.min_moves() << " moves</td></tr>\n"
+        "      <tr><th align='left'>Bound</th><td> &ge; " << tables.min_nr_moves() << " moves</td></tr>\n"
         "      <tr><th align='left'>Heuristics</th><td>";
     if (balance < 0)
         out_ << "None\n";
@@ -2124,7 +2171,7 @@ void Svg::move(FullMove const& move) {
 }
 
 void Svg::game(vector<Board> const& boards) {
-    parameters(X, Y, ARMY, MOVES);
+    parameters(X, Y, ARMY, RULES);
     FullMoves full_moves;
     for (size_t i = 0; i < boards.size(); ++i) {
         header();
@@ -2371,7 +2418,7 @@ void play(bool print_moves=false) {
 
     FullMoves moves;
     FullMoves game;
-    if (X == 4 && Y == 4 && ARMY == 6 && MOVES == 8) {
+    if (X == 4 && Y == 4 && ARMY == 6 && RULES == 8) {
         game = FullMoves{
             "c4-a4",
             "c1-d1",
@@ -2388,7 +2435,7 @@ void play(bool print_moves=false) {
             "d2-c1",
             "d1-d2",
         };
-    } else if (X == 9 && Y == 9 && ARMY == 10 && MOVES == 6) {
+    } else if (X == 9 && Y == 9 && ARMY == 10 && RULES == 6) {
         // The classic 30 solution
         // Used to check the code, especially the pruning
         game = FullMoves{
@@ -2441,7 +2488,7 @@ void play(bool print_moves=false) {
 
         cout << "===============================\n";
         --nr_moves;
-        board.move(move);
+        board.do_move(move);
         if (board_set[1].find(board, army_set[1], army_set[2], nr_moves)) {
             cout << "Good\n";
         } else {
@@ -2764,7 +2811,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
                     goto RED_DONE;
                 }
             }
-            throw(logic_error("Blue backtrack failure"));
+            throw(logic_error("Red backtrack failure"));
           RED_DONE:;
         }
     }
@@ -2810,7 +2857,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:p", argv);
+    GetOpt options("b:B:t:sjp", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -2818,6 +2865,8 @@ void my_main(int argc, char const* const* argv) {
             case 'b': balance       = atoi(options.arg()); break;
             case 'B': balance_delay = atoi(options.arg()); break;
             case 'p': replay = true; break;
+            case 's': prune_slide = true; break;
+            case 'j': prune_jump  = true; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -2827,7 +2876,7 @@ void my_main(int argc, char const* const* argv) {
               nr_threads = val;
               break;
             default:
-              cerr << "usage: " << argv[0] << " [-t threads] [-b balance] [-B balance_delay]\n";
+              cerr << "usage: " << argv[0] << " [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p]\n";
               exit(EXIT_FAILURE);
         }
     balance_min = ARMY     / 4 - balance;
@@ -2838,7 +2887,7 @@ void my_main(int argc, char const* const* argv) {
     auto start_board = tables.start();
     if (false) {
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
-        tables.print_moves();
+        tables.print_directions();
         cout << "Red:\n";
         cout << start_board.red();
         cout << "Blue:\n";
@@ -2861,7 +2910,7 @@ void my_main(int argc, char const* const* argv) {
         tables.print_red_parity_count();
     }
 
-    int needed_moves = tables.min_moves();
+    int needed_moves = tables.min_nr_moves();
     cout << "Minimum possible number of moves: " << needed_moves << "\n";
     int nr_moves = needed_moves;
     auto arg = options.next_arg();
