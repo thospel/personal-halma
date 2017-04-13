@@ -788,7 +788,7 @@ STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
 STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
 
-class ArmyZSet: public SetStatistics, public ReadWriteLock {
+class ArmyZSet: public SetStatistics {
   public:
     static ArmyId const INITIAL_SIZE = 2;
     ArmyZSet(ArmyId size = INITIAL_SIZE);
@@ -830,6 +830,7 @@ class ArmyZSet: public SetStatistics, public ReadWriteLock {
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
     NOINLINE void resize();
 
+    mutex exclude_;
     ArmyId size_;
     ArmyId mask_;
     ArmyId used1_;
@@ -1981,8 +1982,7 @@ ArmyId ArmyZSet::insert(ArmyZ  const& value) {
     // cout << "Insert:\n" << Image{value};
     // Take hash calculation out of the mutex
     ArmyId hash = value.hash();
-    lock_read();
-  RETRY:
+    lock_guard<mutex> lock{exclude_};
     // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
     if (used1_ > limit_) resize();
     ArmyId const mask = mask_;
@@ -1992,26 +1992,14 @@ ArmyId ArmyZSet::insert(ArmyZ  const& value) {
         // logger << "Try " << pos << " of " << size_ << "\n" << flush;
         ArmyId i = values_[pos];
         if (i == 0) {
-            lock_upgrade();
-            if (mask != mask_ || used1_ > limit_) {
-                lock_downgrade();
-                goto RETRY;
-            }
-            i = values_[pos];
-            // logger << "Values[" << pos << "] now " << i << "\n" << flush;
-            if (i == 0) {
                 ArmyId id = used1_++;
                 // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
                 values_[pos] = id;
                 armies_[id] = value;
-                unlock_write();
                 stats_update(offset);
                 return id;
-            } else
-                lock_downgrade();
         }
         if (armies_[i] == value) {
-            unlock_read();
             stats_update(offset);
             // cout << "Found duplicate " << hash << "\n";
             return i;
@@ -2025,8 +2013,7 @@ ArmyId ArmyZSet::insert(ArmyZE const& value) {
     // cout << "Insert:\n" << Image{value};
     // Take hash calculation out of the mutex
     ArmyId hash = value.hash();
-    lock_read();
-  RETRY:
+    lock_guard<mutex> lock{exclude_};
     // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
     if (used1_ > limit_) resize();
     ArmyId const mask = mask_;
@@ -2036,26 +2023,14 @@ ArmyId ArmyZSet::insert(ArmyZE const& value) {
         // logger << "Try " << pos << " of " << size_ << "\n" << flush;
         ArmyId i = values_[pos];
         if (i == 0) {
-            lock_upgrade();
-            if (mask != mask_ || used1_ > limit_) {
-                lock_downgrade();
-                goto RETRY;
-            }
-            i = values_[pos];
-            // logger << "Values[" << pos << "] now " << i << "\n" << flush;
-            if (i == 0) {
-                ArmyId id = used1_++;
-                // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
-                values_[pos] = id;
-                armies_[id] = value;
-                unlock_write();
-                stats_update(offset);
-                return id;
-            }
-            lock_downgrade();
+            ArmyId id = used1_++;
+            // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
+            values_[pos] = id;
+            armies_[id] = value;
+            stats_update(offset);
+            return id;
         }
         if (armies_[i] == value) {
-            unlock_read();
             stats_update(offset);
             // cout << "Found duplicate " << hash << "\n";
             return i;
@@ -2094,14 +2069,11 @@ ArmyId ArmyZSet::find(ArmyZE const& army) const {
 }
 
 void ArmyZSet::resize() {
-    lock_upgrade();
     // The upgrade temporarily dropped all locks so recheck size since another
     // thread can have done the resize at this point
     if (used1_ > limit_) {
-        if (size_ >= ARMY_HIGHBIT) {
-            unlock_write();
+        if (size_ >= ARMY_HIGHBIT)
             throw(overflow_error("ArmyZ size grew too large"));
-        }
         auto old_values = values_;
         auto old_armies = armies_;
         size_ *= 2;
@@ -2132,7 +2104,6 @@ void ArmyZSet::resize() {
         // logger << "Free  armies " << static_cast<void const *>(old_armies) << "\n";
         // logger << "Resize done\n" << flush;
     }
-    lock_downgrade();
 }
 
 bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red) {
