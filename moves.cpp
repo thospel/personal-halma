@@ -10,6 +10,8 @@ uint64_t NAME(BoardSet& boards_from,
               int solution_moves,
 #endif // BACKTRACK && !BLUE_TO_MOVE
               int available_moves) {
+    tid = ++tids;
+    // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
     BalanceMask balance_mask;
     if (balance >= 0) {
@@ -56,12 +58,12 @@ uint64_t NAME(BoardSet& boards_from,
         }
         int const distance_red = __builtin_clz(Ndistance_red);
 #if BLUE_TO_MOVE
-        ParityCount const parity_blue_symmetric = {
+        ParityCount const parity_blue_symmetric = {{
             parity_blue[0],
             parity_blue[2],
             parity_blue[1],
             parity_blue[3],
-        };
+        }};
 #endif // BLUE_TO_MOVE
         int const slides = min_slides(parity_blue);
 
@@ -290,7 +292,7 @@ uint64_t NAME(BoardSet& boards_from,
                         needed_moves = 2*blue_moves;
 #else // BLUE_TO_MOVE
 # if BACKTRACK
-                        if (backtrack_count - backtrack[val] >= solution_moves &&
+                        if (backtrack_count           - backtrack[val]           >= solution_moves &&
                             backtrack_count_symmetric - backtrack_symmetric[val] >= solution_moves) {
                             if (VERBOSE) {
                                 cout << "   Move " << soldier << " to " << val << "\n";
@@ -374,5 +376,6 @@ uint64_t NAME(BoardSet& boards_from,
             }
         }
     }
+    // logger << "Stopped (Set " << available_moves << ")\n" << flush;
     return late;
 }

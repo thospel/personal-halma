@@ -64,6 +64,7 @@ bool const BALANCE  = true;
 
 #define CHECK   0
 #define VERBOSE	0
+bool const LOCK_DEBUG = false;
 
 int const X = 9;
 int const Y = 9;
@@ -106,15 +107,29 @@ string HOSTNAME;
 
 uint64_t const murmur_multiplier = UINT64_C(0xc6a4a7935bd1e995);
 
-inline uint64_t murmur_mix(uint64_t v) {
+inline uint64_t murmur_mix(uint64_t v) FUNCTIONAL;
+uint64_t murmur_mix(uint64_t v) {
     v *= murmur_multiplier;
     return v ^ (v >> 47);
 }
 
-inline uint64_t hash64(uint64_t v) {
+inline uint64_t hash64(uint64_t v) FUNCTIONAL;
+uint64_t hash64(uint64_t v) {
     return murmur_mix(murmur_mix(v));
     // return murmur_mix(murmur_mix(murmur_mix(v)));
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
+}
+
+thread_local uint tid;
+atomic<uint> tids;
+inline uint thread_id();
+uint thread_id() {
+    return tid;
+}
+
+inline string thread_name();
+string thread_name() {
+    return to_string(thread_id());
 }
 
 NOINLINE string get_memory(bool set_base_mem = false);
@@ -135,6 +150,59 @@ string get_memory(bool set_base_mem) {
     if (mem >= 1000000) out << "(" << setw(5) << mem / 1000000  << " MB)";
     return out.str();
 }
+
+static mutex mutex_out_;
+class LogBuffer: public std::streambuf {
+  public:
+    size_t const BLOCK = 80;
+
+    LogBuffer(): prefix_{"Thread " + thread_name() + ": "} {
+        buffer_.resize(BLOCK);
+        setp(&buffer_[0], &buffer_[BLOCK]);
+    }
+    ~LogBuffer() {
+        sync();
+    }
+  protected:
+    int sync();
+    int overflow(int ch);
+  private:
+    string prefix_;
+    std::vector<char> buffer_;
+};
+
+int LogBuffer::overflow(int ch) {
+    if (ch == EOF) return ch;
+    int offset = pptr() - pbase();
+    auto size = buffer_.size() * 2;
+    buffer_.resize(size);
+    setp(&buffer_[0], &buffer_[size]);
+    pbump(offset+1);
+    buffer_[offset] = ch;
+    return ch;
+}
+
+int LogBuffer::sync() {
+    int size = pbase() - pptr();
+    if (size) {
+        {
+            std::lock_guard<std::mutex> lock{mutex_out_};
+            cout << prefix_;
+            cout.write(pbase(), pptr() - pbase());
+        }
+        pbump(size);
+    }
+    return 0;
+}
+
+class LogStream: public std::ostream {
+  public:
+    LogStream(): std::ostream{&buffer_} {}
+  private:
+    LogBuffer buffer_;
+};
+
+thread_local LogStream logger;
 
 using Norm = uint8_t;
 using Nbits = uint;
@@ -616,6 +684,7 @@ class ArmyMapperPair {
 
 class SetStatistics {
   public:
+    SetStatistics(): hits_{0}, misses_{0}, tries_{0} {}
     inline void stats_update(uint64_t offset) {
         if (!STATISTICS) return;
         if (offset) {
@@ -633,9 +702,9 @@ class SetStatistics {
         show_stats(cout);
     }
   private:
-    uint64_t hits_   = 0;
-    uint64_t misses_ = 0;
-    uint64_t tries_  = 0;
+    atomic<uint64_t> hits_;
+    atomic<uint64_t> misses_;
+    atomic<uint64_t> tries_;
 };
 
 void SetStatistics::show_stats(ostream& os) const {
@@ -653,41 +722,65 @@ void SetStatistics::show_stats(ostream& os) const {
 class ReadWriteLock {
   public:
     void lock_read() {
-        unique_lock<mutex> lock(m);
+        unique_lock<mutex> lock{m};
+        if (LOCK_DEBUG)
+            logger << "lock_read()\n" << flush;
         cv.wait(lock, [this]{ return !writer; });
         ++readers;
+        if (LOCK_DEBUG)
+            logger << "Got read lock()\n" << flush;
     }
     void unlock_read() {
-        unique_lock<mutex> lock(m);
+        unique_lock<mutex> lock{m};
+        if (LOCK_DEBUG)
+            logger << "unlock_read()\n" << flush;
         if (--readers == 0) cv.notify_one();
+        if (LOCK_DEBUG)
+            logger << "Dropped read lock()\n" << flush;
     }
     void lock_write() {
-        unique_lock<mutex> lock(m);
+        unique_lock<mutex> lock{m};
+        if (LOCK_DEBUG)
+            logger << "Lock_write()\n" << flush;
         cv.wait(lock, [this]{ return readers == 0 && !writer; });
         writer = true;
+        if (LOCK_DEBUG)
+            logger << "Got write lock()\n" << flush;
     }
     void unlock_write() {
-        unique_lock<mutex> lock(m);
+        unique_lock<mutex> lock{m};
+        if (LOCK_DEBUG)
+            logger << "Unlock_write()\n" << flush;
         writer = false;
         cv.notify_all();
+        if (LOCK_DEBUG)
+            logger << "Dropped write lock()\n" << flush;
     }
     void lock_upgrade() {
-        unique_lock<mutex> lock(m);
+        unique_lock<mutex> lock{m};
+        if (LOCK_DEBUG)
+            logger << "Lock_upgrade()\n" << flush;
         --readers;
         cv.wait(lock, [this]{ return readers == 0 && !writer; });
         writer = true;
+        if (LOCK_DEBUG)
+            logger << "Upgraded lock()\n" << flush;
     }
     void lock_downgrade() {
-        unique_lock<mutex> lock(m);
+        unique_lock<mutex> lock{m};
+        if (LOCK_DEBUG)
+            logger << "Lock_downgrade()\n" << flush;
         writer = false;
         ++readers;
         cv.notify_all();
+        if (LOCK_DEBUG)
+            logger << "Downgraded lock()\n" << flush;
     }
   private:
-    uint readers;
     condition_variable cv;
     mutex m;
-    bool writer;
+    uint readers = 0;
+    bool writer = false;
 };
 
 using ArmyId = uint32_t;
@@ -695,13 +788,15 @@ STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
 STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
 
-class ArmyZSet: public SetStatistics {
+class ArmyZSet: public SetStatistics, public ReadWriteLock {
   public:
-    ArmyZSet(ArmyId size = 1);
+    static ArmyId const INITIAL_SIZE = 2;
+    ArmyZSet(ArmyId size = INITIAL_SIZE);
     ~ArmyZSet();
-    void clear(ArmyId size = 1);
+    void clear(ArmyId size = INITIAL_SIZE);
     void drop_hash() {
         delete [] values_;
+        // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
         values_ = nullptr;
     }
     ArmyId size() const PURE { return used1_ - 1; }
@@ -734,10 +829,7 @@ class ArmyZSet: public SetStatistics {
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
     NOINLINE void resize();
-    inline ArmyId _insert(ArmyZ  const& value, ArmyId hash, bool is_resize);
-    inline ArmyId _insert(ArmyZE const& value, ArmyId hash, bool is_resize);
 
-    mutex exclude_;
     ArmyId size_;
     ArmyId mask_;
     ArmyId used1_;
@@ -986,7 +1078,7 @@ void BoardSubSet::resize() {
     auto old_size = mask_+1;
     ArmyId size = old_size*2;
     armies_ = new ArmyId[size];
-    // cout << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n";
+    // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n" << flush;
     if (MEMCHECK) nr_armies_ -= allocated();
     mask_ = size-1;
     if (MEMCHECK) nr_armies_ += allocated();
@@ -1012,7 +1104,8 @@ void BoardSubSet::print(ostream& os) const {
 class BoardSet {
     friend class BoardSubSetRef;
   public:
-    BoardSet(bool keep = false, ArmyId size = 1);
+    static ArmyId const INITIAL_SIZE = 32;
+    BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE);
     ~BoardSet() {
         for (auto& subset: *this)
             subset.destroy();
@@ -1021,7 +1114,7 @@ class BoardSet {
     }
     ArmyId subsets() const PURE { return top_ - from(); }
     ArmyId size() const PURE { return size_; }
-    void clear(ArmyId size = 1);
+    void clear(ArmyId size = INITIAL_SIZE);
     BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
     BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
     BoardSubSet const* begin() const PURE { return &subsets_[from()]; }
@@ -1098,7 +1191,7 @@ class BoardSet {
         auto old_subsets = subsets_;
         subsets_ = new BoardSubSet[capacity_*2];
         capacity_ *= 2;
-        // cout << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n";
+        // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n" << flush;
         copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
         if (!keep_) {
             top_ -= from_ - 1;
@@ -1189,10 +1282,12 @@ class Image {
     inline explicit Image(ArmyZ const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
+    inline explicit Image(ArmyZE const& army, Color color = BLUE): Image{} {
+        set(army, color);
+    }
     inline explicit Image(Army const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
-    void print(ostream& os) const;
     inline void clear();
     inline Color get(Coord const& pos) const PURE { return image_[pos.index()]; }
     inline Color get(int x, int y) const PURE { return get(Coord{x,y}); }
@@ -1203,10 +1298,15 @@ class Image {
         for (auto const& pos: army)
             set(pos, c);
     }
+    inline void  set(ArmyZE const& army, Color c) {
+        for (auto const& pos: army)
+            set(pos, c);
+    }
     inline void  set(Army const& army, Color c) {
         for (auto const& pos: army)
             set(pos, c);
     }
+    NOINLINE string str() const PURE;
     Image& operator=(Image const& image) {
         std::copy(image.begin(), image.end(), begin());
         return *this;
@@ -1220,35 +1320,39 @@ class Image {
     array<Color, Coord::SIZE> image_;
 };
 
-void Image::print(ostream& os) const {
-    os << "+";
-    for (int x=0; x < X; ++x) os << "--";
-    os << "+\n";
+string Image::str() const {
+    string result;
+    result.reserve((2*X+3)*(Y+2));
+    result += "+";
+    for (int x=0; x < X; ++x) result += "--";
+    result += "+\n";
 
     for (int y=0; y < Y; ++y) {
-        os << "|";
+        result += "|";
         for (int x=0; x < X; ++x) {
             auto c = get(x, y);
-            os << (c == EMPTY ? ". " :
+            result += (c == EMPTY ? ". " :
                    c == RED   ? "X " :
                    c == BLUE  ? "O " :
                    "? ");
         }
-        os << "|\n";
+        result += "|\n";
     }
 
-    os << "+";
-    for (int x=0; x < X; ++x) os << "--";
-    os << "+\n";
+    result += "+";
+    for (int x=0; x < X; ++x) result += "--";
+    result += "+\n";
+
+    return result;
 }
 
 inline ostream& operator<<(ostream& os, Image const& image) {
-    image.print(os);
+    os << image.str();
     return os;
 }
 
 inline ostream& operator<<(ostream& os, Board const& board) {
-    Image{board}.print(os);
+    os << Image{board};
     return os;
 }
 
@@ -1824,105 +1928,140 @@ Nbits Coord::Ndistance_base_red() const {
 
 ArmyZSet::ArmyZSet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
     if (limit_ >= ARMY_HIGHBIT)
-        throw(overflow_error("ArmyZ size too large"));
+        throw(overflow_error("ArmyZSet size too large"));
+    if (used1_ > limit_)
+        throw(logic_error("ArmyZSet initial size too small"));
     values_ = new ArmyId[size];
     for (ArmyId i=0; i<size; ++i) values_[i] = 0;
     armies_ = new ArmyZ[limit_+1];
+    // logger << "Create armies " << static_cast<void const *>(armies_) << "\n";
+    // logger << "Create values " << static_cast<void const *>(values_) << "\n";
+    // logger << flush;
 }
 
 ArmyZSet::~ArmyZSet() {
     delete [] armies_;
-    if (values_) delete [] values_;
+    // logger << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
+    if (values_) {
+        // logger << "Destroy values " << static_cast<void const *>(values_) << "\n";
+        delete [] values_;
+    }
+    // logger << flush;
 }
 
 void ArmyZSet::clear(ArmyId size) {
-    stats_reset();
     ArmyId new_limit = FACTOR(size);
     if (new_limit >= ARMY_HIGHBIT)
         throw(overflow_error("ArmyZ size grew too large"));
+    if (1 > limit_)
+        throw(logic_error("ArmyZSet clear size too small"));
+    // logger << "Clear\n";
     auto new_values = new ArmyId[size];
+    // logger << "New value " << static_cast<void const *>(new_values) << "\n";
     auto new_armies = new ArmyZ[new_limit+1];
-    if (values_) delete [] values_;
+    // logger << "New armies " << static_cast<void const *>(new_armies) << "\n";
+    if (values_) {
+        delete [] values_;
+        // logger << "delete old values " << static_cast<void const *>(values_) << "\n";
+    }
     values_ = new_values;
     delete [] armies_;
+    // logger << "delete old armies " << static_cast<void const *>(armies_) << "\n";
+    // logger << flush;
     armies_ = new_armies;
     for (ArmyId i=0; i<size; ++i) values_[i] = 0;
     size_ = size;
     mask_ = size-1;
     limit_ = new_limit;
     used1_ = 1;
+    stats_reset();
 }
 
 ArmyId ArmyZSet::insert(ArmyZ  const& value) {
     // cout << "Insert:\n" << Image{value};
     // Take hash calculation out of the mutex
     ArmyId hash = value.hash();
-    lock_guard<mutex> lock{exclude_};
-    ArmyId i = _insert(value, hash, false);
-    // cout << "i=" << i << "\n\n";
-    return i;
+    lock_read();
+  RETRY:
+    // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
+    if (used1_ > limit_) resize();
+    ArmyId const mask = mask_;
+    ArmyId pos = hash & mask;
+    ArmyId offset = 0;
+    while (true) {
+        // logger << "Try " << pos << " of " << size_ << "\n" << flush;
+        ArmyId i = values_[pos];
+        if (i == 0) {
+            lock_upgrade();
+            if (mask != mask_ || used1_ > limit_) {
+                lock_downgrade();
+                goto RETRY;
+            }
+            i = values_[pos];
+            // logger << "Values[" << pos << "] now " << i << "\n" << flush;
+            if (i == 0) {
+                ArmyId id = used1_++;
+                // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
+                values_[pos] = id;
+                armies_[id] = value;
+                unlock_write();
+                stats_update(offset);
+                return id;
+            } else
+                lock_downgrade();
+        }
+        if (armies_[i] == value) {
+            unlock_read();
+            stats_update(offset);
+            // cout << "Found duplicate " << hash << "\n";
+            return i;
+        }
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
 }
+
 ArmyId ArmyZSet::insert(ArmyZE const& value) {
     // cout << "Insert:\n" << Image{value};
     // Take hash calculation out of the mutex
     ArmyId hash = value.hash();
-    lock_guard<mutex> lock{exclude_};
-    ArmyId i = _insert(value, hash, false);
-    // cout << "i=" << i << "\n\n";
-    return i;
-}
-
-ArmyId ArmyZSet::_insert(ArmyZ const& value, ArmyId hash, bool is_resize) {
+    lock_read();
+  RETRY:
+    // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
     if (used1_ > limit_) resize();
-    ArmyId pos = hash & mask_;
+    ArmyId const mask = mask_;
+    ArmyId pos = hash & mask;
     ArmyId offset = 0;
     while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
+        // logger << "Try " << pos << " of " << size_ << "\n" << flush;
         ArmyId i = values_[pos];
         if (i == 0) {
-            values_[pos] = used1_;
-            armies_[used1_] = value;
-            ArmyId id = used1_++;
-            if (!is_resize) {
-                stats_update(offset);
-                // cout << "Found empty\n";
+            lock_upgrade();
+            if (mask != mask_ || used1_ > limit_) {
+                lock_downgrade();
+                goto RETRY;
             }
-            return id;
-        }
-        if (!is_resize && armies_[i] == value) {
-            // cout << "Found duplicate " << hash << "\n";
-            if (!is_resize) stats_update(offset);
-            return i;
-        }
-        ++offset;
-        pos = (pos + offset) & mask_;
-    }
-}
-
-ArmyId ArmyZSet::_insert(ArmyZE const& value, ArmyId hash, bool is_resize) {
-    if (used1_ > limit_) resize();
-    ArmyId pos = hash & mask_;
-    ArmyId offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        ArmyId i = values_[pos];
-        if (i == 0) {
-            values_[pos] = used1_;
-            armies_[used1_] = value;
-            ArmyId id = used1_++;
-            if (!is_resize) {
+            i = values_[pos];
+            // logger << "Values[" << pos << "] now " << i << "\n" << flush;
+            if (i == 0) {
+                ArmyId id = used1_++;
+                // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
+                values_[pos] = id;
+                armies_[id] = value;
+                unlock_write();
                 stats_update(offset);
-                // cout << "Found empty\n";
+                return id;
             }
-            return id;
+            lock_downgrade();
         }
-        if (!is_resize && armies_[i] == value) {
-            if (!is_resize) stats_update(offset);
+        if (armies_[i] == value) {
+            unlock_read();
+            stats_update(offset);
             // cout << "Found duplicate " << hash << "\n";
             return i;
         }
         ++offset;
-        pos = (pos + offset) & mask_;
+        pos = (pos + offset) & mask;
     }
 }
 
@@ -1955,23 +2094,45 @@ ArmyId ArmyZSet::find(ArmyZE const& army) const {
 }
 
 void ArmyZSet::resize() {
-    if (size_ >= ARMY_HIGHBIT)
-        throw(overflow_error("ArmyZ size grew too large"));
-    auto old_values = values_;
-    auto old_armies = armies_;
-    auto old_used1  = used1_;
-    size_ *= 2;
-    // cout << "Resize: " << size_ << "\n";
-    values_ = new ArmyId[size_];
-    limit_ = FACTOR(size_);
-    armies_ = new ArmyZ[limit_+1];
-    delete [] old_values;
-    mask_ = size_-1;
-    used1_ = 1;
-    for (ArmyId i = 0; i < size_; ++i) values_[i] = 0;
-    for (ArmyId i = 1; i < old_used1; ++i)
-        _insert(old_armies[i], old_armies[i].hash(), true);
-    delete [] old_armies;
+    lock_upgrade();
+    // The upgrade temporarily dropped all locks so recheck size since another
+    // thread can have done the resize at this point
+    if (used1_ > limit_) {
+        if (size_ >= ARMY_HIGHBIT) {
+            unlock_write();
+            throw(overflow_error("ArmyZ size grew too large"));
+        }
+        auto old_values = values_;
+        auto old_armies = armies_;
+        size_ *= 2;
+        // logger << "Resize ArmyZSet: new size=" << size_ << "\n" << flush;
+        values_ = new ArmyId[size_];
+        limit_ = FACTOR(size_);
+        armies_ = new ArmyZ[limit_+1];
+        delete [] old_values;
+        mask_ = size_-1;
+        for (ArmyId i = 0; i < size_; ++i) values_[i] = 0;
+        for (ArmyId i = 1; i < used1_; ++i) {
+            ArmyZ const& value = old_armies[i];
+            ArmyId hash = value.hash();
+            ArmyId pos = hash & mask_;
+            ArmyId offset = 0;
+            while (values_[pos]) {
+                ++offset;
+                pos = (pos + offset) & mask_;
+            }
+            values_[pos] = i;
+            armies_[i] = value;
+        }
+        delete [] old_armies;
+        // logger << "Resize ArmyZSet: new size=" << size_ << "\n";
+        // logger << "Alloc values " << static_cast<void const *>(values_) << " [" << size_ << "]\n";
+        // logger << "Alloc armies " << static_cast<void const *>(armies_) << " [" << limit_ + 1 << "]\n";
+        // logger << "Free  values " << static_cast<void const *>(old_values) << "\n";
+        // logger << "Free  armies " << static_cast<void const *>(old_armies) << "\n";
+        // logger << "Resize done\n" << flush;
+    }
+    lock_downgrade();
 }
 
 bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red) {
@@ -2294,6 +2455,7 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                          BoardTable<uint8_t> const& red_backtrack_symmetric) {
     auto start = chrono::steady_clock::now();
 
+    tids = 0;
     vector<future<uint64_t>> results;
     uint64_t late;
     int blue_to_move = nr_moves & 1;
@@ -2623,7 +2785,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
             throw(logic_error("More than 1 final blue army"));
         blue_id = final_board_set.back_id();
         if (blue_id != 1)
-            throw(logic_error("Unexpected blue army id"));
+            throw(logic_error("Unexpected blue army id " + to_string(blue_id)));
         // There should be only 1 final board
         if (final_board_set.size() != 1)
             throw(logic_error("More than 1 solution while backtracking"));
@@ -2650,7 +2812,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     // Backtracking forced the final red army to be last_red_army
     // So there can only be 1 final red army and it therefore has army id 1
     if (red_id != 1)
-        throw(logic_error("Unexpected red army id"));
+        throw(logic_error("Unexpected red army id " +to_string(red_id)));
     // And it was stored without flip
     if (skewed)
         throw(logic_error("Unexpected red army skewed"));
