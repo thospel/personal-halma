@@ -50,35 +50,36 @@ int const ARMY = 10;
      0 s, set  4 done,         0 boards /        0 armies =   0
     27 s, no solution
 
-          set 29 done
-     0 s, set 28 done,         7 boards /        7 armies =   1
-     0 s, set 27 done,        98 boards /        7 armies =  14
-     0 s, set 26 done,      1253 boards /       93 armies =  13
-     0 s, set 25 done,     15980 boards /       93 armies = 171
-     0 s, set 24 done,    115854 boards /      832 armies = 139
-     0 s, set 23 done,    696750 boards /      842 armies = 827
-     2 s, set 22 done,   2036929 boards /     3960 armies = 514
-     6 s, set 21 done,   7625391 boards /     5986 armies =1273
-    15 s, set 20 done,   3280859 boards /     3254 armies =1008
-    10 s, set 19 done,   9747710 boards /    39548 armies = 246
-    17 s, set 18 done,   1415219 boards /     9359 armies = 151
-    14 s, set 17 done,  27538136 boards /   260829 armies = 105
-    49 s, set 16 done,   2951211 boards /    14028 armies = 210
-    39 s, set 15 done,  54985290 boards /  1022338 armies =  53
-    94 s, set 14 done,   2572199 boards /    14129 armies = 182
-    41 s, set 13 done,  50311160 boards /  2108454 armies =  23
-    75 s, set 12 done,   1293072 boards /     7673 armies = 168
-    21 s, set 11 done,  26029983 boards /  2685139 armies =   9
-    34 s, set 10 done,    374176 boards /     2540 armies = 147
-     5 s, set  9 done,   8179761 boards /  1716438 armies =   4
-    10 s, set  8 done,     35472 boards /      536 armies =  66
-     0 s, set  7 done,    884127 boards /   357393 armies =   2
-     1 s, set  6 done,      1661 boards /       71 armies =  23
-     0 s, set  5 done,     41636 boards /    32517 armies =   1
-     0 s, set  4 done,       235 boards /        9 armies =  26
-     0 s, set  3 done,      7498 boards /     6590 armies =   1
-     0 s, set  2 done,         0 boards /        0 armies =   0
-   441 s, no solution
+Minimum possible number of moves: 27
+          set 29 done (hp, no heuristics)
+     0 s, set 28 done,         7 boards /        7 armies       1 (   92 MB)
+     0 s, set 27 done,        98 boards /        7 armies      14 (  226 MB)
+     0 s, set 26 done,      1253 boards /       93 armies      13 (  226 MB)
+     0 s, set 25 done,     15980 boards /       93 armies     171 (  226 MB)
+     0 s, set 24 done,    115854 boards /      832 armies     139 (  226 MB)
+     0 s, set 23 done,    696750 boards /      842 armies     837 (  228 MB)
+     1 s, set 22 done,   2036929 boards /     3960 armies     514 (  231 MB)
+     4 s, set 21 done,   7625391 boards /     5986 armies    1925 (  242 MB)
+     3 s, set 20 done,   3280859 boards /     3254 armies    1008 (  242 MB)
+     5 s, set 19 done,   9747710 boards /    39548 armies    2995 (  248 MB)
+     4 s, set 18 done,   1415219 boards /     9359 armies     151 (  247 MB)
+    11 s, set 17 done,  27538136 boards /   260829 armies    2942 (  291 MB)
+    16 s, set 16 done,   2951211 boards /    14028 armies     210 (  289 MB)
+    29 s, set 15 done,  54985290 boards /  1022338 armies    3919 (  566 MB)
+    35 s, set 14 done,   2572199 boards /    14129 armies     182 (  554 MB)
+    33 s, set 13 done,  50311160 boards /  2108454 armies    3560 (  606 MB)
+    30 s, set 12 done,   1293072 boards /     7673 armies     168 (  575 MB)
+    17 s, set 11 done,  26029983 boards /  2685139 armies    3392 (  604 MB)
+    15 s, set 10 done,    374176 boards /     2540 armies     147 (  575 MB)
+     4 s, set  9 done,   8179761 boards /  1716438 armies    3220 (  507 MB)
+     4 s, set  8 done,     35472 boards /      536 armies      66 (  344 MB)
+     0 s, set  7 done,    884127 boards /   357393 armies    1649 (  344 MB)
+     0 s, set  6 done,      1661 boards /       71 armies      23 (  239 MB)
+     0 s, set  5 done,     41636 boards /    32517 armies     586 (  239 MB)
+     0 s, set  4 done,       235 boards /        9 armies      26 (  239 MB)
+     0 s, set  3 done,      7498 boards /     6590 armies     833 (  239 MB)
+     0 s, set  2 done,         0 boards /        0 armies       0 (  239 MB)
+   220 s, no solution
 
            set 30 done (nas)
      0 s, set 29 done,         7 boards /        7 armies       7 (   25 MB)
@@ -1523,6 +1524,28 @@ Killed
   3502 s, set 37 done,2456790979 boards / 32665570 armies   45800 (29078 MB)
   3180 s, set 36 done, 510283543 boards /   140036 armies    3643 (20145 MB)
 Killed
+
+Minimum possible number of moves: 45
+          set 50 done (nas, balance=0, delay=-2)
+     0 s, set 49 done,        21 boards /       21 armies      21 (   92 MB)
+     0 s, set 48 done,       802 boards /       21 armies      38 (   92 MB)
+     0 s, set 47 done,     21965 boards /      561 armies    1045 (  226 MB)
+     0 s, set 46 done,    584976 boards /      544 armies    1075 (  227 MB)
+    10 s, set 45 done,  12374876 boards /    11642 armies   22747 (  365 MB)
+   122 s, set 44 done, 148476453 boards /     6698 armies   22167 ( 1560 MB)
+  1158 s, set 43 done,1138605094 boards /   150221 armies  169991 ( 9604 MB)
+  1898 s, set 42 done,1621333932 boards /    27116 armies   59792 (13902 MB)
+  2690 s, set 41 done,1119194141 boards /   364551 armies   41274 (13896 MB)
+  1384 s, set 40 done, 711128442 boards /    48986 armies   14516 (13805 MB)
+  2778 s, set 39 done,2226117488 boards /  4181414 armies   45443 (20204 MB)
+  2963 s, set 38 done, 810088304 boards /    53641 armies   15102 (18905 MB)
+  4887 s, set 37 done,2456790979 boards / 32665570 armies   45800 (27196 MB)
+  3366 s, set 36 done, 510283543 boards /   140036 armies    3643 (19249 MB)
+ 26931 s, set 35 done,1397661116 boards /222725668 armies    9980 (94544 MB)
+ 16346 s, set 34 done, 705693570 boards /   230886 armies    3056 (49392 MB)
+ 18414 s, set 33 done,2902828722 boards /266846343 armies   12572 (116754 MB)
+ 22675 s, set 32 done,1678259746 boards /   382240 armies    4390 (88808 MB)
+ Crashed
 
 int const X = 8;
 int const Y = 8;

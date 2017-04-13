@@ -66,10 +66,10 @@ bool const BALANCE  = true;
 #define VERBOSE	0
 bool const LOCK_DEBUG = false;
 
-int const X = 9;
-int const Y = 9;
-int const RULES = 6;
-int const ARMY = 10;
+int const X = 16;
+int const Y = 16;
+int const RULES = 8;
+int const ARMY = 19;
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -147,7 +147,7 @@ string get_memory(bool set_base_mem) {
     mem *= PAGE_SIZE;
     if (set_base_mem) base_mem = mem;
     else mem -= base_mem;
-    if (mem >= 1000000) out << "(" << setw(5) << mem / 1000000  << " MB)";
+    if (mem >= 1000000) out << "(" << setw(6) << mem / 1000000  << " MB)";
     return out.str();
 }
 
@@ -790,7 +790,7 @@ STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
 
 class ArmyZSet: public SetStatistics {
   public:
-    static ArmyId const INITIAL_SIZE = 2;
+    static ArmyId const INITIAL_SIZE = 32;
     ArmyZSet(ArmyId size = INITIAL_SIZE);
     ~ArmyZSet();
     void clear(ArmyId size = INITIAL_SIZE);
@@ -1007,13 +1007,7 @@ class BoardSubSet {
     ArmyId* begin() PURE { return &armies_[0]; }
     ArmyId* end()   PURE { return &armies_[allocated()]; }
 
-    bool insert(ArmyId id) {
-        return _insert(id, false);
-    }
-    inline bool insert_new(ArmyId id) {
-        return _insert(id, true);
-    }
-    inline bool _insert(ArmyId red_id, bool is_resize);
+    inline bool insert(ArmyId red_id);
     bool find(ArmyId id) const PURE;
 
     ArmyId mask_;
@@ -1033,44 +1027,48 @@ void BoardSubSet::create(ArmyId size) {
     if (MEMCHECK) nr_armies_ += allocated();
 }
 
-bool BoardSubSet::find(ArmyId value) const {
-    ArmyId pos = hash64(value) & mask_;
+bool BoardSubSet::find(ArmyId red_id) const {
+    auto mask = mask_;
+    ArmyId pos = hash64(red_id) & mask;
     uint offset = 0;
+    auto armies = armies_;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
-        auto& v = armies_[pos];
-        if (v == 0) return false;
-        if (v == value) {
+        auto& id = armies[pos];
+        if (id == 0) return false;
+        if (id == red_id) {
             // cout << "Found duplicate " << hash << "\n";
             return true;
         }
         ++offset;
-        pos = (pos + offset) & mask_;
+        pos = (pos + offset) & mask;
     }
 }
 
-bool BoardSubSet::_insert(ArmyId value, bool is_resize) {
-    // cout << "Insert " << value << "\n";
+bool BoardSubSet::insert(ArmyId red_id) {
+    // cout << "Insert " << red_id << "\n";
     if (left_ == 0) resize();
-    ArmyId pos = hash64(value) & mask_;
+    auto mask = mask_;
+    ArmyId pos = hash64(red_id) & mask;
     uint offset = 0;
+    auto armies = armies_;
     while (true) {
-        // cout << "Try " << pos << " of " << mask_+1 << "\n";
-        auto& v = armies_[pos];
-        if (v == 0) {
-            // if (!is_resize) stats_update(offset);
-            v = value;
+        // cout << "Try " << pos << " of " << mask+1 << "\n";
+        auto& id = armies[pos];
+        if (id == 0) {
+            // stats_update(offset);
+            id = red_id;
             --left_;
             // cout << "Found empty\n";
             return true;
         }
-        if (!is_resize && v == value) {
+        if (id == red_id) {
             // cout << "Found duplicate\n";
-            // if (!is_resize) stats_update(offset);
+            // stats_update(offset);
             return false;
         }
         ++offset;
-        pos = (pos + offset) & mask_;
+        pos = (pos + offset) & mask;
     }
 }
 
@@ -1078,15 +1076,30 @@ void BoardSubSet::resize() {
     auto old_armies = armies_;
     auto old_size = mask_+1;
     ArmyId size = old_size*2;
-    armies_ = new ArmyId[size];
+    auto new_armies = new ArmyId[size];
+    armies_ = new_armies;
     // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n" << flush;
+
     if (MEMCHECK) nr_armies_ -= allocated();
+    auto mask = size-1;
     mask_ = size-1;
     if (MEMCHECK) nr_armies_ += allocated();
-    left_ = FACTOR(size);
+    left_ += FACTOR(size) - FACTOR(old_size);
     fill(begin(), end(), 0);
-    for (ArmyId i = 0; i < old_size; ++i)
-        if (old_armies[i] != 0) insert_new(old_armies[i]);
+    for (ArmyId i = 0; i < old_size; ++i) {
+        auto const& value = old_armies[i];
+        if (value == 0) continue;
+        // cout << "Insert " << value << "\n";
+        ArmyId pos = hash64(value) & mask;
+        uint offset = 0;
+        while (new_armies[pos]) {
+            // cout << "Try " << pos << " of " << mask+1 << "\n";
+            ++offset;
+            pos = (pos + offset) & mask;
+        }
+        new_armies[pos] = value;
+        // cout << "Found empty\n";
+    }
     delete [] old_armies;
 }
 
@@ -1121,7 +1134,7 @@ class BoardSet {
     BoardSubSet const* begin() const PURE { return &subsets_[from()]; }
     BoardSubSet const* end()   const PURE { return &subsets_[top_]; }
     ArmyId back_id() const PURE { return top_-1; }
-    bool insert(ArmyId blue_id, ArmyId red_id, int symmetry) {
+    inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry) {
         if (CHECK) {
             if (blue_id <= 0)
                 throw(logic_error("red_id <= 0"));
@@ -1129,7 +1142,15 @@ class BoardSet {
                 throw(logic_error("opponent is too large"));
         }
         lock_guard<mutex> lock{exclude_};
-        bool result = grow_at(blue_id).insert(red_id, symmetry);
+
+        if (blue_id >= top_) {
+            // Only in the multithreaded case blue_id can be different from top_
+            // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
+            while (blue_id >= capacity_) resize();
+            while (blue_id >= top_)
+                subsets_[top_++].create();
+        }
+        bool result = subsets_[blue_id].insert(red_id, symmetry);
         size_ += result;
         return result;
     }
@@ -1178,16 +1199,6 @@ class BoardSet {
     }
     ArmyId from() const PURE { return keep_ ? 1 : from_; }
     BoardSubSet&  at(ArmyId id) PURE { return subsets_[id]; }
-    BoardSubSet& grow_at(ArmyId id) {
-        if (id >= top_) {
-            // Only in the multithreaded case id can be different from top_
-            // if (id != top_) throw(logic_error("Cannot grow more than 1"));
-            while (id >= capacity_) resize();
-            while (id >= top_)
-                subsets_[top_++].create();
-        }
-        return subsets_[id];
-    }
     NOINLINE void resize() {
         auto old_subsets = subsets_;
         subsets_ = new BoardSubSet[capacity_*2];
@@ -1978,40 +1989,39 @@ void ArmyZSet::clear(ArmyId size) {
     stats_reset();
 }
 
-ArmyId ArmyZSet::insert(ArmyZ  const& value) {
-    // cout << "Insert:\n" << Image{value};
-    // Take hash calculation out of the mutex
-    ArmyId hash = value.hash();
-    lock_guard<mutex> lock{exclude_};
-    // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
-    if (used1_ > limit_) resize();
+ArmyId ArmyZSet::find(ArmyZ const& army) const {
     ArmyId const mask = mask_;
-    ArmyId pos = hash & mask;
-    ArmyId offset = 0;
+    ArmyId pos = army.hash() & mask;
+    auto values = values_;
+    uint offset = 0;
     while (true) {
-        // logger << "Try " << pos << " of " << size_ << "\n" << flush;
-        ArmyId i = values_[pos];
-        if (i == 0) {
-                ArmyId id = used1_++;
-                // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
-                values_[pos] = id;
-                armies_[id] = value;
-                stats_update(offset);
-                return id;
-        }
-        if (armies_[i] == value) {
-            stats_update(offset);
-            // cout << "Found duplicate " << hash << "\n";
-            return i;
-        }
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        ArmyId i = values[pos];
+        if (i == 0) return 0;
+        if (armies_[i] == army) return i;
         ++offset;
         pos = (pos + offset) & mask;
     }
 }
 
-ArmyId ArmyZSet::insert(ArmyZE const& value) {
+ArmyId ArmyZSet::find(ArmyZE const& army) const {
+    ArmyId const mask = mask_;
+    ArmyId pos = army.hash() & mask;
+    auto values = values_;
+    uint offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        ArmyId i = values[pos];
+        if (i == 0) return 0;
+        if (armies_[i] == army) return i;
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
+}
+
+ArmyId ArmyZSet::insert(ArmyZ  const& value) {
     // cout << "Insert:\n" << Image{value};
-    // Take hash calculation out of the mutex
+    // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
     lock_guard<mutex> lock{exclude_};
     // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
@@ -2019,13 +2029,14 @@ ArmyId ArmyZSet::insert(ArmyZE const& value) {
     ArmyId const mask = mask_;
     ArmyId pos = hash & mask;
     ArmyId offset = 0;
+    auto values = values_;
     while (true) {
         // logger << "Try " << pos << " of " << size_ << "\n" << flush;
-        ArmyId i = values_[pos];
+        ArmyId i = values[pos];
         if (i == 0) {
             ArmyId id = used1_++;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
-            values_[pos] = id;
+            values[pos] = id;
             armies_[id] = value;
             stats_update(offset);
             return id;
@@ -2040,70 +2051,74 @@ ArmyId ArmyZSet::insert(ArmyZE const& value) {
     }
 }
 
-ArmyId ArmyZSet::find(ArmyZ const& army) const {
-    ArmyId pos = army.hash() & mask_;
-    uint offset = 0;
+ArmyId ArmyZSet::insert(ArmyZE const& value) {
+    // cout << "Insert:\n" << Image{value};
+    // Leave hash calculation out of the mutex
+    ArmyId hash = value.hash();
+    lock_guard<mutex> lock{exclude_};
+    // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
+    if (used1_ > limit_) resize();
+    ArmyId const mask = mask_;
+    ArmyId pos = hash & mask;
+    ArmyId offset = 0;
+    auto values = values_;
     while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        ArmyId i = values_[pos];
-        if (i == 0) return 0;
-        ArmyZ& a = armies_[i];
-        if (a == army) return i;
+        // logger << "Try " << pos << " of " << size_ << "\n" << flush;
+        ArmyId i = values[pos];
+        if (i == 0) {
+            ArmyId id = used1_++;
+            // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
+            values[pos] = id;
+            armies_[id] = value;
+            stats_update(offset);
+            return id;
+        }
+        if (armies_[i] == value) {
+            stats_update(offset);
+            // cout << "Found duplicate " << hash << "\n";
+            return i;
+        }
         ++offset;
-        pos = (pos + offset) & mask_;
-    }
-}
-
-ArmyId ArmyZSet::find(ArmyZE const& army) const {
-    ArmyId pos = army.hash() & mask_;
-    uint offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        ArmyId i = values_[pos];
-        if (i == 0) return 0;
-        ArmyZ& a = armies_[i];
-        if (a == army) return i;
-        ++offset;
-        pos = (pos + offset) & mask_;
+        pos = (pos + offset) & mask;
     }
 }
 
 void ArmyZSet::resize() {
-    // The upgrade temporarily dropped all locks so recheck size since another
-    // thread can have done the resize at this point
-    if (used1_ > limit_) {
-        if (size_ >= ARMY_HIGHBIT)
-            throw(overflow_error("ArmyZ size grew too large"));
-        auto old_values = values_;
-        auto old_armies = armies_;
-        size_ *= 2;
-        // logger << "Resize ArmyZSet: new size=" << size_ << "\n" << flush;
-        values_ = new ArmyId[size_];
-        limit_ = FACTOR(size_);
-        armies_ = new ArmyZ[limit_+1];
-        delete [] old_values;
-        mask_ = size_-1;
-        for (ArmyId i = 0; i < size_; ++i) values_[i] = 0;
-        for (ArmyId i = 1; i < used1_; ++i) {
-            ArmyZ const& value = old_armies[i];
-            ArmyId hash = value.hash();
-            ArmyId pos = hash & mask_;
-            ArmyId offset = 0;
-            while (values_[pos]) {
-                ++offset;
-                pos = (pos + offset) & mask_;
-            }
-            values_[pos] = i;
-            armies_[i] = value;
+    delete [] values_;
+    values_ = nullptr;
+
+    auto size = size_;
+    if (size >= ARMY_HIGHBIT)
+        throw(overflow_error("ArmyZ size grew too large"));
+    size *= 2;
+    // logger << "Resize ArmyZSet: new size=" << size << "\n" << flush;
+    auto new_values = new ArmyId[size];
+    for (ArmyId i = 0; i < size; ++i) new_values[i] = 0;
+    values_ = new_values;
+
+    auto limit = FACTOR(size);
+    auto new_armies = new ArmyZ[limit+1];
+    auto mask = size-1;
+    mask_   = mask;
+    size_   = size;
+    limit_  = limit;
+    auto old_armies = armies_;
+    auto used1 = used1_;
+    for (ArmyId i = 1; i < used1; ++i) {
+        ArmyZ const& army = old_armies[i];
+        ArmyId hash = army.hash();
+        ArmyId pos = hash & mask;
+        ArmyId offset = 0;
+        while (new_values[pos]) {
+            ++offset;
+            pos = (pos + offset) & mask;
         }
-        delete [] old_armies;
-        // logger << "Resize ArmyZSet: new size=" << size_ << "\n";
-        // logger << "Alloc values " << static_cast<void const *>(values_) << " [" << size_ << "]\n";
-        // logger << "Alloc armies " << static_cast<void const *>(armies_) << " [" << limit_ + 1 << "]\n";
-        // logger << "Free  values " << static_cast<void const *>(old_values) << "\n";
-        // logger << "Free  armies " << static_cast<void const *>(old_armies) << "\n";
-        // logger << "Resize done\n" << flush;
+        new_values[pos] = i;
+        new_armies[i] = army;
     }
+    delete [] armies_;
+    armies_ = new_armies;
+    // logger << "Resize done\n" << flush;
 }
 
 bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red) {
