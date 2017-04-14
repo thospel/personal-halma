@@ -66,10 +66,10 @@ bool const BALANCE  = true;
 #define VERBOSE	0
 bool const LOCK_DEBUG = false;
 
-int const X = 16;
-int const Y = 16;
-int const RULES = 8;
-int const ARMY = 19;
+int const X = 9;
+int const Y = 9;
+int const RULES = 6;
+int const ARMY = 10;
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -959,7 +959,7 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
 
 class BoardSubSet {
   public:
-    ArmyId allocated() const PURE { return mask_+1; }
+    size_t allocated() const PURE { return static_cast<size_t>(mask_)+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
     void create(ArmyId size = 1);
@@ -971,32 +971,9 @@ class BoardSubSet {
     ArmyId const* begin() const PURE { return &armies_[0]; }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
-    bool insert(ArmyId red_id, int symmetry) {
-        if (CHECK) {
-            if (red_id <= 0)
-                throw(logic_error("red_id <= 0"));
-            if (red_id >= ARMY_HIGHBIT)
-                throw(logic_error("red_id is too large"));
-        }
-        ArmyId value = red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0);
-        bool result = insert(value);
-        return result;
-    }
-    bool find(ArmyId red_id, int symmetry) const PURE {
-        if (CHECK) {
-            if (red_id <= 0)
-                throw(logic_error("red_id <= 0"));
-            if (red_id >= ARMY_HIGHBIT)
-                throw(logic_error("red_id is too large"));
-        }
-        return find(red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0));
-    }
+    inline bool insert(ArmyId red_id, ArmyId hash);
+    inline bool find(ArmyId red_id, ArmyId hash) const PURE;
 
-    static ArmyId split(ArmyId value, ArmyId& red_id) {
-        red_id = value & ARMY_MASK;
-        // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
-        return value & ARMY_HIGHBIT;
-    }
     static size_t nr_armies() PURE { return nr_armies_; }
     void print(ostream& os) const;
     void print() const { print(cout); }
@@ -1006,9 +983,6 @@ class BoardSubSet {
 
     ArmyId* begin() PURE { return &armies_[0]; }
     ArmyId* end()   PURE { return &armies_[allocated()]; }
-
-    inline bool insert(ArmyId red_id);
-    bool find(ArmyId id) const PURE;
 
     ArmyId mask_;
     ArmyId left_;
@@ -1027,9 +1001,11 @@ void BoardSubSet::create(ArmyId size) {
     if (MEMCHECK) nr_armies_ += allocated();
 }
 
-bool BoardSubSet::find(ArmyId red_id) const {
+bool BoardSubSet::find(ArmyId red_id, ArmyId hash) const {
+    if (CHECK && red_id <= 0)
+        throw(logic_error("red_id <= 0"));
     auto mask = mask_;
-    ArmyId pos = hash64(red_id) & mask;
+    ArmyId pos = hash & mask;
     uint offset = 0;
     auto armies = armies_;
     while (true) {
@@ -1045,15 +1021,17 @@ bool BoardSubSet::find(ArmyId red_id) const {
     }
 }
 
-bool BoardSubSet::insert(ArmyId red_id) {
-    // cout << "Insert " << red_id << "\n";
+bool BoardSubSet::insert(ArmyId red_id, ArmyId hash) {
+    // logger << "Insert " << red_id << "\n" << flush;
+    if (CHECK && red_id <= 0)
+        throw(logic_error("red_id <= 0"));
     if (left_ == 0) resize();
     auto mask = mask_;
-    ArmyId pos = hash64(red_id) & mask;
+    ArmyId pos = hash & mask;
     uint offset = 0;
     auto armies = armies_;
     while (true) {
-        // cout << "Try " << pos << " of " << mask+1 << "\n";
+        // logger << "Try " << pos << " of " << allocated() << "\n" << flush;
         auto& id = armies[pos];
         if (id == 0) {
             // stats_update(offset);
@@ -1104,21 +1082,25 @@ void BoardSubSet::resize() {
 }
 
 void BoardSubSet::print(ostream& os) const {
-    for (ArmyId value: *this) {
-        if (value) {
+    for (ArmyId red_id: *this)
+        if (red_id) {
             ArmyId red_id;
-            auto symmetry = split(value, red_id);
-            os << " " << red_id << (symmetry ? "-" : "+");
+            os << " " << red_id;
         } else {
             os << " x";
         }
-    }
 }
 
 class BoardSet {
     friend class BoardSubSetRef;
   public:
     static ArmyId const INITIAL_SIZE = 32;
+    static ArmyId split(ArmyId blue_value, bool& symmetry) {
+        symmetry = blue_value & 1;
+        ArmyId blue_id = blue_value >> 1;
+        // cout << "Split: Value=" << hex << blue_value << ", blue id=" << blue_id << ", symmetry=" << symmetry+0 << dec << "\n";
+        return blue_id;
+    }
     BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE);
     ~BoardSet() {
         for (auto& subset: *this)
@@ -1129,28 +1111,31 @@ class BoardSet {
     ArmyId subsets() const PURE { return top_ - from(); }
     ArmyId size() const PURE { return size_; }
     void clear(ArmyId size = INITIAL_SIZE);
-    BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
-    BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
     BoardSubSet const* begin() const PURE { return &subsets_[from()]; }
     BoardSubSet const* end()   const PURE { return &subsets_[top_]; }
     ArmyId back_id() const PURE { return top_-1; }
+    BoardSubSet const&  at(ArmyId blue_id, int symmetry) const PURE { 
+        ArmyId blue_value = blue_id << 1 | (symmetry < 0);
+        return cat(blue_value);
+    }
     inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry) {
+        ArmyId red_hash = hash64(red_id);
         if (CHECK) {
             if (blue_id <= 0)
                 throw(logic_error("red_id <= 0"));
             if (blue_id >= ARMY_HIGHBIT)
                 throw(logic_error("opponent is too large"));
         }
+        blue_id = blue_id << 1 | (symmetry < 0);
+
         lock_guard<mutex> lock{exclude_};
 
         if (blue_id >= top_) {
-            // Only in the multithreaded case blue_id can be different from top_
-            // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
             while (blue_id >= capacity_) resize();
             while (blue_id >= top_)
                 subsets_[top_++].create();
         }
-        bool result = subsets_[blue_id].insert(red_id, symmetry);
+        bool result = subsets_[blue_id].insert(red_id, red_hash);
         size_ += result;
         return result;
     }
@@ -1162,14 +1147,16 @@ class BoardSet {
             insert(board, armies_opponent, armies_to_move);
     }
     bool find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
+        ArmyId red_hash = hash64(red_id);
         if (CHECK) {
             if (blue_id <= 0)
                 throw(logic_error("blue_id <= 0"));
             if (blue_id >= ARMY_HIGHBIT)
                 throw(logic_error("blue_id is too large"));
         }
-        if (blue_id >= top_) return false;
-        return cat(blue_id).find(red_id, symmetry);
+        ArmyId blue_value = blue_id << 1 | (symmetry < 0);
+        if (blue_value >= top_) return false;
+        return cat(blue_value).find(red_id, red_hash);
     }
     bool find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet const& armies_red) const PURE;
     bool find(Board const& board, ArmyZSet& armies_to_move, ArmyZSet& armies_opponent, int nr_moves) const PURE {
@@ -1192,22 +1179,25 @@ class BoardSet {
     BoardSet& operator=(BoardSet const&) = delete;
     void print(ostream& os) const;
   private:
+    static ArmyId const FROM = 2; // 1 << 1 | 0
     ArmyId capacity() const PURE { return capacity_-1; }
     ArmyId next() {
         lock_guard<mutex> lock{exclude_};
         return from_ < top_ ? from_++ : 0;
     }
-    ArmyId from() const PURE { return keep_ ? 1 : from_; }
+    ArmyId from() const PURE { return keep_ ? FROM : from_; }
     BoardSubSet&  at(ArmyId id) PURE { return subsets_[id]; }
+    BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
+    BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
     NOINLINE void resize() {
         auto old_subsets = subsets_;
         subsets_ = new BoardSubSet[capacity_*2];
         capacity_ *= 2;
         // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n" << flush;
-        copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
+        copy(&old_subsets[from()], &old_subsets[top_], &subsets_[FROM]);
         if (!keep_) {
-            top_ -= from_ - 1;
-            from_ = 1;
+            top_ -= from_ - FROM;
+            from_ = FROM;
         }
         delete [] old_subsets;
     }
@@ -1247,7 +1237,7 @@ class BoardSubSetRef {
     bool const keep_;
 };
 
-BoardSet::BoardSet(bool keep, ArmyId size): solution_id_{keep}, size_{0}, capacity_{size+1}, from_{1}, top_{1}, keep_{keep} {
+BoardSet::BoardSet(bool keep, ArmyId size): solution_id_{keep}, size_{0}, capacity_{size+1}, from_{FROM}, top_{FROM}, keep_{keep} {
     subsets_ = new BoardSubSet[capacity_];
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
@@ -1255,7 +1245,7 @@ BoardSet::BoardSet(bool keep, ArmyId size): solution_id_{keep}, size_{0}, capaci
 void BoardSet::clear(ArmyId size) {
     for (auto& subset: *this)
         subset.destroy();
-    from_ = top_ = 1;
+    from_ = top_ = FROM;
     size_ = 0;
     solution_id_ = keep_;
     if (true) {
@@ -1269,9 +1259,11 @@ void BoardSet::clear(ArmyId size) {
 
 void BoardSet::print(ostream& os) const {
     os << "-----\n";
-    for (ArmyId i = from(); i < top_; ++i) {
-        os << " Blue id " << i << ":";
-        cat(i).print(os);
+    for (ArmyId blue_value = from(); blue_value < top_; ++blue_value) {
+        bool symmetry;
+        ArmyId blue_id = split(blue_value, symmetry);
+        os << " Blue id " << blue_id << (symmetry ? "-" : "+") << ":";
+        cat(blue_id).print(os);
         os << "\n";
     }
     os << "-----\n";
@@ -2769,9 +2761,13 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         // There should be only 1 blue army completely on the red base
         if (final_army_set.size() != 1)
             throw(logic_error("More than 1 final blue army"));
-        blue_id = final_board_set.back_id();
+        ArmyId blue_value = final_board_set.back_id();
+        bool symmetry;
+        blue_id = BoardSet::split(blue_value, symmetry);
         if (blue_id != 1)
             throw(logic_error("Unexpected blue army id " + to_string(blue_id)));
+        if (symmetry)
+            throw(logic_error("Unexpected flipped blue army"));
         // There should be only 1 final board
         if (final_board_set.size() != 1)
             throw(logic_error("More than 1 solution while backtracking"));
@@ -2782,28 +2778,29 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
             throw(logic_error("Could not find final blue army"));
     }
 
-    BoardSubSet const& final_subset = final_board_set.cat(blue_id);
+    ArmyZ blueZ = final_army_set.at(blue_id);
+    ArmyZ blueSymmetricZ = blueZ.symmetric();
+    int blue_symmetry = cmp(blueZ, blueSymmetricZ);
+    // And it was stored without flip
+    if (blue_symmetry < 0)
+        throw(logic_error("Unexpected blue army skewed"));
+
+    BoardSubSet const& final_subset = final_board_set.at(blue_id, blue_symmetry);
     if (final_subset.size() != 1)
         throw(logic_error("More than 1 final red army"));
-    ArmyId red_value = 0;
+    ArmyId red_id = 0;
     for (ArmyId value: final_subset)
         if (value != 0) {
-            red_value = value;
+            red_id = value;
             break;
         }
-    if (red_value == 0)
+    if (red_id == 0)
         throw(logic_error("Could not find final red army"));
-    ArmyId red_id;
-    bool skewed = BoardSubSet::split(red_value, red_id) != 0;
     // Backtracking forced the final red army to be last_red_army
     // So there can only be 1 final red army and it therefore has army id 1
     if (red_id != 1)
         throw(logic_error("Unexpected red army id " +to_string(red_id)));
-    // And it was stored without flip
-    if (skewed)
-        throw(logic_error("Unexpected red army skewed"));
 
-    ArmyZ blueZ = final_army_set.at(blue_id);
     ArmyZ redZ  = last_red_army;
 
     // It's probably more useful to generate a FullMove sequence
@@ -2817,7 +2814,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
     if (false) {
         cout << "Initial\n";
-        cout << "Blue: " << blue_id << ", Red: " << red_id << ", skewed=" << skewed << "\n";
+        cout << "Blue: " << blue_id << ", Red: " << red_id << ", blue symmetry=" << blue_symmetry << "\n";
         cout << boards[board_pos];
     }
 
@@ -2825,9 +2822,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     army_set.pop_back();
     army_set.pop_back();
 
-    ArmyZ blueSymmetricZ = blueZ.symmetric();
     ArmyZ redSymmetricZ  = redZ.symmetric();
-    int blue_symmetry = cmp(blueZ, blueSymmetricZ);
     int red_symmetry  = cmp(redZ , redSymmetricZ);
 
     Image image{blueZ, redZ};

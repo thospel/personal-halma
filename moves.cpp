@@ -27,9 +27,11 @@ uint64_t NAME(BoardSet& boards_from,
     while (true) {
         BoardSubSetRef subset{boards_from};
 
-        ArmyId const blue_id = subset.id();
-        if (blue_id == 0) break;
-        if (VERBOSE) cout << "Processing blue " << blue_id << "\n";
+        ArmyId const blue_value = subset.id();
+        if (blue_value == 0) break;
+        bool symmetry;
+        ArmyId const blue_id = BoardSet::split(blue_value, symmetry);
+        if (VERBOSE) logger << "Processing blue " << blue_id << (symmetry ? "-\n" : "+\n") << flush;
         ArmyZ const& bZ = BLUE_TO_MOVE ?
             moving_armies.at(blue_id) :
             opponent_armies.at(blue_id);
@@ -68,11 +70,9 @@ uint64_t NAME(BoardSet& boards_from,
         int const slides = min_slides(parity_blue);
 
         BoardSubSet const& red_armies = subset.armies();
-        for (auto const& red_value: red_armies) {
-            if (red_value == 0) continue;
-            ArmyId red_id;
-            auto const symmetry = BoardSubSet::split(red_value, red_id);
-            if (VERBOSE) cout << " Sub Processing red " << red_id << "," << symmetry << "\n";
+        for (auto const& red_id: red_armies) {
+            if (red_id == 0) continue;
+            if (VERBOSE) logger << " Sub Processing red " << red_id << endl;
             Army const& blue =
                 symmetry ? blue_pair.symmetric() : blue_pair.normal();
 #if BLUE_TO_MOVE
@@ -93,7 +93,7 @@ uint64_t NAME(BoardSet& boards_from,
 
 #if VERBOSE
             Image image{blue, red};
-            cout << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image;
+            logger << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image << flush;
 #endif // VERBOSE
 
             Nbits Ndistance_army = NLEFT >> tables.infinity();
