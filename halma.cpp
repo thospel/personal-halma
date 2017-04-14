@@ -786,7 +786,6 @@ class ReadWriteLock {
 using ArmyId = uint32_t;
 STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
-STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
 
 class ArmyZSet: public SetStatistics {
   public:
@@ -800,8 +799,8 @@ class ArmyZSet: public SetStatistics {
         values_ = nullptr;
     }
     ArmyId size() const PURE { return used1_ - 1; }
-    ArmyId max_size() const PURE {
-        return size_;
+    size_t max_size() const PURE {
+        return static_cast<size_t>(mask_) + 1;
     }
     ArmyId capacity() const PURE {
         return limit_;
@@ -827,11 +826,12 @@ class ArmyZSet: public SetStatistics {
     ArmyZSet& operator=(ArmyZSet const&) = delete;
 
   private:
-    static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
+    static ArmyId constexpr FACTOR(size_t factor=1) {
+        return static_cast<ArmyId>(0.7*factor);
+    }
     NOINLINE void resize();
 
     mutex exclude_;
-    ArmyId size_;
     ArmyId mask_;
     ArmyId used1_;
     ArmyId limit_;
@@ -1930,7 +1930,7 @@ Nbits Coord::Ndistance_base_red() const {
     return tables.Ndistance_base_red(*this);
 }
 
-ArmyZSet::ArmyZSet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
+ArmyZSet::ArmyZSet(ArmyId size) : mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
     if (limit_ >= ARMY_HIGHBIT)
         throw(overflow_error("ArmyZSet size too large"));
     if (used1_ > limit_)
@@ -1974,7 +1974,6 @@ void ArmyZSet::clear(ArmyId size) {
     // logger << flush;
     armies_ = new_armies;
     for (ArmyId i=0; i<size; ++i) values_[i] = 0;
-    size_ = size;
     mask_ = size-1;
     limit_ = new_limit;
     used1_ = 1;
@@ -2079,20 +2078,18 @@ void ArmyZSet::resize() {
     delete [] values_;
     values_ = nullptr;
 
-    auto size = size_;
-    if (size >= ARMY_HIGHBIT)
-        throw(overflow_error("ArmyZ size grew too large"));
-    size *= 2;
+    if (mask_ >= ARMY_HIGHBIT)
+        throw(overflow_error("ArmyZSet size grew too large"));
+    size_t size = max_size() * 2;
     // logger << "Resize ArmyZSet: new size=" << size << "\n" << flush;
     auto new_values = new ArmyId[size];
-    for (ArmyId i = 0; i < size; ++i) new_values[i] = 0;
+    for (size_t i = 0; i < size; ++i) new_values[i] = 0;
     values_ = new_values;
 
     auto limit = FACTOR(size);
     auto new_armies = new ArmyZ[limit+1];
     auto mask = size-1;
     mask_   = mask;
-    size_   = size;
     limit_  = limit;
     auto old_armies = armies_;
     auto used1 = used1_;

@@ -35,56 +35,42 @@ uint64_t NAME(BoardSet& boards_from,
         ArmyZ const& bZ = BLUE_TO_MOVE ?
             moving_armies.at(blue_id) :
             opponent_armies.at(blue_id);
+        ArmyZ bZ_symmetric;
 #if BLUE_TO_MOVE
-        ArmyZ const bZ_symmetric = bZ.symmetric();
-        ArmyPair const blue_pair{bZ, bZ_symmetric};
-        if (CHECK) blue_pair.check(__LINE__);
-        ArmyMapperPair const b_mapper{blue_pair};
+        bZ_symmetric = bZ.symmetric();
+        ArmyZ const& armyZ          {symmetry ? bZ_symmetric : bZ};
+        ArmyZ const& armyZ_symmetric{symmetry ? bZ : bZ_symmetric};
+        Army const& army{armyZ};
+        ArmyMapper const& mapper{armyZ_symmetric};
+        Army const& blue = army;
 #else  // BLUE_TO_MOVE
-        ArmyPair const blue_pair{bZ};
-        if (CHECK) blue_pair.check(__LINE__);
-        // Will return 0 for symmetric or 1 for asymmetric
-        int b_symmetry = blue_pair.symmetry();
+        if (symmetry) bZ_symmetric = bZ.symmetric();
+        Army const blue{symmetry ? bZ_symmetric : bZ};
+        int  blue_symmetry = symmetry ? cmp(bZ_symmetric, bZ) : bZ.symmetry();
 #endif  // BLUE_TO_MOVE
+        if (CHECK) blue.check(__LINE__);
 
         Nbits Ndistance_red = NLEFT >> tables.infinity();
         int off_base_from   = 0;
         int edge_count_from = 0;
-        ParityCount parity_blue = tables.parity_count();
-        for (auto const& b: blue_pair.normal()) {
-            --parity_blue[b.parity()];
+        ParityCount parity_count_blue = tables.parity_count();
+        for (auto const& b: blue) {
+            --parity_count_blue[b.parity()];
             if (b.base_red()) continue;
             ++off_base_from;
             edge_count_from += b.edge_red();
             Ndistance_red |= b.Ndistance_base_red();
         }
         int const distance_red = __builtin_clz(Ndistance_red);
+        int const slides = min_slides(parity_count_blue);
 #if BLUE_TO_MOVE
-        ParityCount const parity_blue_symmetric = {{
-            parity_blue[0],
-            parity_blue[2],
-            parity_blue[1],
-            parity_blue[3],
-        }};
+        auto const& parity_count_from = parity_count_blue;
 #endif // BLUE_TO_MOVE
-        int const slides = min_slides(parity_blue);
 
         BoardSubSet const& red_armies = subset.armies();
         for (auto const& red_id: red_armies) {
             if (red_id == 0) continue;
             if (VERBOSE) logger << " Sub Processing red " << red_id << endl;
-            Army const& blue =
-                symmetry ? blue_pair.symmetric() : blue_pair.normal();
-#if BLUE_TO_MOVE
-            ParityCount const& parity_count_from =
-                symmetry ? parity_blue_symmetric : parity_blue;
-            ArmyMapper const& mapper =
-                symmetry ? b_mapper.symmetric() : b_mapper.normal();
-#else  // BLUE_TO_MOVE
-            int  blue_symmetry =
-                symmetry ? -b_symmetry : b_symmetry;
-#endif // BLUE_TO_MOVE
-
             ArmyZ const& rZ = BLUE_TO_MOVE ?
                 opponent_armies.at(red_id) :
                 moving_armies.at(red_id);
@@ -123,10 +109,8 @@ uint64_t NAME(BoardSet& boards_from,
             }
 
 #if BLUE_TO_MOVE
+            // Will return 0 for symmetric or 1 for asymmetric
             int const red_symmetry = rZ.symmetry();
-            Army const& army             = blue;
-            ArmyZ const& armyZ           = symmetry ? bZ_symmetric : bZ;
-            ArmyZ const& armyZ_symmetric = symmetry ? bZ : bZ_symmetric;
 #else  // BLUE_TO_MOVE
             Army  const& army            = red;
             ArmyZ const& armyZ           = rZ;
