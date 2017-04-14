@@ -25,9 +25,9 @@ uint64_t NAME(BoardSet& boards_from,
 
     uint64_t late = 0;
     while (true) {
-        BoardSubSetRef subset{boards_from};
+        BoardSubSetRef subset_from{boards_from};
 
-        ArmyId const blue_id = subset.id();
+        ArmyId const blue_id = subset_from.id();
         if (blue_id == 0) break;
         if (VERBOSE) cout << "Processing blue " << blue_id << "\n";
         ArmyZ const& bZ = BLUE_TO_MOVE ?
@@ -67,7 +67,12 @@ uint64_t NAME(BoardSet& boards_from,
 #endif // BLUE_TO_MOVE
         int const slides = min_slides(parity_blue);
 
-        BoardSubSet const& red_armies = subset.armies();
+#if !BLUE_TO_MOVE
+        BoardSubSet subset_to;
+        subset_to.create();
+#endif // !BLUE_TO_MOVE
+
+        BoardSubSet const& red_armies = subset_from.armies();
         for (auto const& red_value: red_armies) {
             if (red_value == 0) continue;
             ArmyId red_id;
@@ -363,7 +368,7 @@ uint64_t NAME(BoardSet& boards_from,
 #else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
                     result_symmetry *= blue_symmetry;
-                    if (boards_to.insert(blue_id, moved_id, result_symmetry) && VERBOSE) {
+                    if (subset_to.insert(moved_id, result_symmetry) && VERBOSE) {
                         // cout << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, RED);
                         cout << "   Inserted Red id " << moved_id << "\n" << image;
@@ -375,6 +380,9 @@ uint64_t NAME(BoardSet& boards_from,
                 image.set(soldier, BLUE_TO_MOVE ? BLUE : RED);
             }
         }
+#if !BLUE_TO_MOVE
+        boards_to.insert(blue_id, subset_to);
+#endif // !BLUE_TO_MOVE
     }
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
     return late;

@@ -66,10 +66,10 @@ bool const BALANCE  = true;
 #define VERBOSE	0
 bool const LOCK_DEBUG = false;
 
-int const X = 16;
-int const Y = 16;
-int const RULES = 8;
-int const ARMY = 19;
+int const X = 9;
+int const Y = 9;
+int const RULES = 6;
+int const ARMY = 10;
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -962,16 +962,21 @@ class BoardSubSet {
     ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
+    void zero() {
+        armies_ = nullptr;
+        mask_ = 0;
+        left_ = 0;
+    }
     void create(ArmyId size = 1);
     void destroy() {
         // cout << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << "\n";
         if (MEMCHECK) nr_armies_ -= allocated();
-        delete[] armies_;
+        if (armies_) delete[] armies_;
     }
     ArmyId const* begin() const PURE { return &armies_[0]; }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
-    bool insert(ArmyId red_id, int symmetry) {
+    inline bool insert(ArmyId red_id, int symmetry) {
         if (CHECK) {
             if (red_id <= 0)
                 throw(logic_error("red_id <= 0"));
@@ -991,7 +996,6 @@ class BoardSubSet {
         }
         return find(red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0));
     }
-
     static ArmyId split(ArmyId value, ArmyId& red_id) {
         red_id = value & ARMY_MASK;
         // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
@@ -1010,9 +1014,9 @@ class BoardSubSet {
     inline bool insert(ArmyId red_id);
     bool find(ArmyId id) const PURE;
 
+    ArmyId* armies_;
     ArmyId mask_;
     ArmyId left_;
-    ArmyId* armies_;
 
     static size_t nr_armies_;
 };
@@ -1138,8 +1142,6 @@ class BoardSet {
         if (CHECK) {
             if (blue_id <= 0)
                 throw(logic_error("red_id <= 0"));
-            if (blue_id >= ARMY_HIGHBIT)
-                throw(logic_error("opponent is too large"));
         }
         lock_guard<mutex> lock{exclude_};
 
@@ -1160,6 +1162,24 @@ class BoardSet {
         return blue_to_move ?
             insert(board, armies_to_move, armies_opponent) :
             insert(board, armies_opponent, armies_to_move);
+    }
+    void insert(ArmyId blue_id, BoardSubSet const& subset) {
+        if (CHECK) {
+            if (blue_id <= 0)
+                throw(logic_error("red_id <= 0"));
+        }
+        lock_guard<mutex> lock{exclude_};
+
+        if (blue_id >= top_) {
+            // Only in the multithreaded case blue_id can be different from top_
+            // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
+            while (blue_id >= capacity_) resize();
+            while (blue_id > top_)
+                subsets_[top_++].zero();
+            ++top_;
+        }
+        subsets_[blue_id] = subset;
+        size_ += subset.size();
     }
     bool find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
