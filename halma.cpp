@@ -88,6 +88,8 @@ int balance_min, balance_max;
 
 bool prune_slide = false;
 bool prune_jump  = false;
+bool example = false;
+
 #define STRINGIFY(x) _STRINGIFY(x)
 #define _STRINGIFY(x) #x
 string VCS_COMMIT{STRINGIFY(COMMIT)};
@@ -962,6 +964,7 @@ class BoardSubSet {
     ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
+    bool empty() const PURE { return size() == 0; }
     void zero() {
         armies_ = nullptr;
         mask_ = 0;
@@ -1001,6 +1004,7 @@ class BoardSubSet {
         // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
         return value & ARMY_HIGHBIT;
     }
+    ArmyId example(ArmyId& symmetry) const;
     static size_t nr_armies() PURE { return nr_armies_; }
     void print(ostream& os) const;
     void print() const { print(cout); }
@@ -1107,6 +1111,19 @@ void BoardSubSet::resize() {
     delete [] old_armies;
 }
 
+ArmyId BoardSubSet::example(ArmyId& symmetry) const {
+    if (empty()) throw(logic_error("No red value in BoardSubSet"));
+
+    auto armies = armies_;
+    for (auto end = &armies[allocated()]; armies < end; ++armies)
+        if (*armies) {
+            ArmyId red_id;
+            symmetry = split(*armies, red_id);
+            return red_id;
+        }
+    throw(logic_error("No red value even though the BoardSubSet is not empty"));
+}
+
 void BoardSubSet::print(ostream& os) const {
     for (ArmyId value: *this) {
         if (value) {
@@ -1131,7 +1148,8 @@ class BoardSet {
         delete [] subsets_;
     }
     ArmyId subsets() const PURE { return top_ - from(); }
-    ArmyId size() const PURE { return size_; }
+    size_t size() const PURE { return size_; }
+    bool empty() const PURE { return size() == 0; }
     void clear(ArmyId size = INITIAL_SIZE);
     BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
     BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
@@ -1207,6 +1225,7 @@ class BoardSet {
     }
     ArmyId solution_id() const PURE { return solution_id_; }
     ArmyZ const& solution() const PURE { return solution_; }
+    NOINLINE Board example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const PURE;
     // Non copyable
     BoardSet(BoardSet const&) = delete;
     BoardSet& operator=(BoardSet const&) = delete;
@@ -1234,10 +1253,10 @@ class BoardSet {
     BoardSubSet* begin() PURE { return &subsets_[from()]; }
     BoardSubSet* end()   PURE { return &subsets_[top_]; }
 
+    size_t size_;
     mutex exclude_;
     ArmyZ solution_;
     ArmyId solution_id_;
-    ArmyId size_;
     ArmyId capacity_;
     ArmyId from_;
     ArmyId top_;
@@ -1267,7 +1286,7 @@ class BoardSubSetRef {
     bool const keep_;
 };
 
-BoardSet::BoardSet(bool keep, ArmyId size): solution_id_{keep}, size_{0}, capacity_{size+1}, from_{1}, top_{1}, keep_{keep} {
+BoardSet::BoardSet(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size+1}, from_{1}, top_{1}, keep_{keep} {
     subsets_ = new BoardSubSet[capacity_];
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
@@ -1390,8 +1409,10 @@ inline ostream& operator<<(ostream& os, Board const& board) {
 
 void ArmyZSet::print(ostream& os) const {
     os << "[";
-    for (ArmyId i=0; i < max_size(); ++i)
-        os << " " << values_[i];
+    if (values_) {
+        for (ArmyId i=0; i < max_size(); ++i)
+            os << " " << values_[i];
+        } else os << " deleted";
     os << " ] (" << static_cast<void const *>(this) << ")\n";
     for (ArmyId i=1; i < used1_; ++i) {
         os << "Army " << i << "\n" << Image{armies_[i]};
@@ -2173,6 +2194,22 @@ bool BoardSet::find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet co
     return find(blue_id, red_id, symmetry);
 }
 
+Board BoardSet::example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const {
+    if (empty()) throw(logic_error("No board in BoardSet"));
+    for (ArmyId blue_id = from(); blue_id <= back_id(); ++blue_id) {
+        auto const& subset = at(blue_id);
+        if (subset.empty()) continue;
+        ArmyId symmetry;
+        ArmyId red_id = subset.example(symmetry);
+        ArmyZSet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
+        ArmyZSet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
+        ArmyZ const& blue = blue_armies.at(blue_id);
+        ArmyZ const& red  = red_armies .at(red_id);
+        return Board{blue, symmetry ? red.symmetric() : red};
+    }
+    throw(logic_error("No board even though BoardSet is not empty"));
+}
+
 void Image::clear() {
     image_ = tables.start_image().image_;
 }
@@ -2696,6 +2733,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
                        moving_armies, opponent_armies, moved_armies,
                        nr_moves);
         moved_armies.drop_hash();
+        // if (VERBOSE) cout << moved_armies << boards_to;
 
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
@@ -2703,6 +2741,8 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
             cout << setw(6) << duration << " s, no solution" << endl;
             return -1;
         }
+        if (example)
+            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
         if (boards_to.solution_id()) {
             red_id = boards_to.solution_id();
             red_army = boards_to.solution();
@@ -2775,6 +2815,8 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
+        if (example)
+            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
     }
     auto stop_solve = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
@@ -2975,7 +3017,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sjp", argv);
+    GetOpt options("b:B:t:sjpe", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -2985,6 +3027,7 @@ void my_main(int argc, char const* const* argv) {
             case 'p': replay = true; break;
             case 's': prune_slide = true; break;
             case 'j': prune_jump  = true; break;
+            case 'e': example     = true; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -2994,7 +3037,7 @@ void my_main(int argc, char const* const* argv) {
               nr_threads = val;
               break;
             default:
-              cerr << "usage: " << argv[0] << " [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p]\n";
+              cerr << "usage: " << argv[0] << " [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-e]\n";
               exit(EXIT_FAILURE);
         }
     balance_min = ARMY     / 4 - balance;

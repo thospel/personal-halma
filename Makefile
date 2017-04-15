@@ -18,5 +18,6 @@ halma.o: halma.cpp moves.cpp Makefile
 halma: halma.o
 	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@
 
+.PHONY: clean
 clean:
 	rm -f *.o halma core
