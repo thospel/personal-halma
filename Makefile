@@ -13,10 +13,15 @@ CXXFLAGS := $(CXXFLAGS) -DCOMMIT=`git rev-parse HEAD`
 
 all: halma
 
-halma.o: halma.cpp moves.cpp Makefile
+halma.o: halma.cpp moves.cpp Makefile git_time
 
 halma: halma.o
 	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@
+
+git_time: FORCE
+	@touch --date=@`git show -s --format=%ct HEAD` git_time
+
+FORCE:
 
 .PHONY: clean
 clean:
