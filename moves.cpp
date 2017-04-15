@@ -128,11 +128,13 @@ uint64_t NAME(BoardSet& boards_from,
             }
 
 #if BLUE_TO_MOVE
+            bool const jump_only = available_moves < off_base_from*2 && !slides;
             int const red_symmetry = rZ.symmetry();
             Army const& army             = blue;
             ArmyZ const& armyZ           = symmetry ? bZ_symmetric : bZ;
             ArmyZ const& armyZ_symmetric = symmetry ? bZ : bZ_symmetric;
 #else  // BLUE_TO_MOVE
+            bool const jump_only = false;
             Army  const& army            = red;
             ArmyZ const& armyZ           = rZ;
             ArmyZ const armyZ_symmetric  = rZ.symmetric();
@@ -188,42 +190,48 @@ uint64_t NAME(BoardSet& boards_from,
 
                 array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
                 // Jumps
-                reachable[0] = soldier;
                 int nr_reachable = 1;
-                if (!CLOSED_LOOP) image.set(soldier, COLORS);
-                for (int i=0; i < nr_reachable; ++i) {
-                    for (auto move: Coord::directions()) {
-                        Coord jumpee{reachable[i], move};
-                        if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
-                        Coord target{jumpee, move};
-                        if (image.get(target) != EMPTY) continue;
-                        image.set(target, COLORS);
-                        reachable[nr_reachable++] = target;
+                if (!jump_only || !soldier.base_red()) {
+                    reachable[0] = soldier;
+                    if (!CLOSED_LOOP) image.set(soldier, COLORS);
+                    for (int i=0; i < nr_reachable; ++i) {
+                        for (auto move: Coord::directions()) {
+                            Coord jumpee{reachable[i], move};
+                            if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+                            Coord target{jumpee, move};
+                            if (image.get(target) != EMPTY) continue;
+                            image.set(target, COLORS);
+                            reachable[nr_reachable++] = target;
+                        }
                     }
-                }
-                for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
-                    image.set(reachable[i], EMPTY);
+                    for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
+                        image.set(reachable[i], EMPTY);
 
-                // Only allow jumps off base..
-                if (BLUE_TO_MOVE && prune_jump && !soldier.base_blue()) {
-                    // ... or jump onto target
-                    int i = 1;
-                    while (i < nr_reachable) {
-                        auto const val = reachable[i];
-                        // Maybe allow jumping to the red edge too ?
-                        if (val.base_red()) ++i;
-                        else {
-                            reachable[i] = reachable[--nr_reachable];
-                            if (VERBOSE) {
-                                cout << "   Move " << soldier << " to " << val << "\n";
-                                cout << "   Prune blue jump target outside of red base\n";
+                    // Only allow jumps off base...
+                    if (jump_only ||
+                        (BLUE_TO_MOVE && prune_jump && !soldier.base_blue())) {
+                        // ... or jump onto target
+                        int i = 1;
+                        while (i < nr_reachable) {
+                            auto const val = reachable[i];
+                            // Maybe allow jumping to the red edge too ?
+                            if (val.base_red()) ++i;
+                            else {
+                                reachable[i] = reachable[--nr_reachable];
+                                if (VERBOSE) {
+                                    cout << "   Move " << soldier << " to " << val << "\n";
+                                    cout << "   Prune blue jump target outside of red base\n";
+                                }
                             }
                         }
                     }
                 }
 
                 // Slides
-                if (BLUE_TO_MOVE && prune_slide) {
+                if (jump_only) {
+                    if (VERBOSE)
+                        logger << "   Prune all blue sides (jump only)\n" << flush;
+                } else if (BLUE_TO_MOVE && prune_slide) {
                     if (slides) {
                         // Either slide off base...
                         if (soldier.base_blue()) goto NORMAL_SLIDES;
@@ -233,15 +241,15 @@ uint64_t NAME(BoardSet& boards_from,
                             if (image.get(target) != EMPTY) continue;
                             if (!target.base_red()) {
                                 if (VERBOSE) {
-                                    cout << "   Move " << soldier << " to " << target << "\n";
-                                    cout << "   Prune blue slide target outside of red base\n";
+                                    logger << "   Move " << soldier << " to " << target << "\n";
+                                    logger << "   Prune blue slide target outside of red base\n" << flush;
                                 }
                                 continue;
                             }
                             reachable[nr_reachable++] = target;
                         }
                     } else if (VERBOSE) {
-                        cout << "   Prune all blue sides (target parity reached)\n";
+                        logger << "   Prune all blue sides (target parity reached)\n" << flush;
                     }
                 } else {
                   NORMAL_SLIDES:
