@@ -2,3 +2,4 @@
 *.o
 halma
 *.S
+git_time

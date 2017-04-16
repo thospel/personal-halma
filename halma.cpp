@@ -1492,7 +1492,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     // Must be a jump
     Image image{board_from};
     if (CLOSED_LOOP) image.set(move.from, EMPTY);
-    array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
+    array<Coord, X*Y-2*ARMY+1> reachable;
     array<int, ARMY*2*RULES+(1+RULES)> previous;
     reachable[0] = from;
     int nr_reachable = 1;
@@ -1678,9 +1678,11 @@ class Tables {
         return parity_count_;
     }
     Norm infinity() const FUNCTIONAL { return infinity_; }
-    Rules const& directions() const FUNCTIONAL { return directions_; }
+    inline Rules const& directions() const FUNCTIONAL { return directions_; }
+    inline Army const& army_red()  const FUNCTIONAL { return army_red_; }
     Board const& start() const FUNCTIONAL { return start_; }
     Image const& start_image() const FUNCTIONAL { return start_image_; }
+
     void print_directions(ostream& os) const;
     void print_directions() const {
         print_directions(cout);
@@ -1738,6 +1740,7 @@ class Tables {
     BoardTable<CoordZ> coordZ_;
     BoardZTable<CoordZ> symmetricZ_;
     BoardZTable<CoordPair> coord_pair_;
+    Army army_red_;
     Board start_;
     Image start_image_;
 };
@@ -1840,6 +1843,7 @@ Tables::Tables() {
     parity_count_.fill(0);
     for (auto const& r: red)
         ++parity_count_[r.parity()];
+    army_red_ = Army{red};
 
     min_nr_moves_ = start_.min_nr_moves();
 }
@@ -2910,7 +2914,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
             image.set(soldier, EMPTY);
             armyE         .copy(armyZ         , a);
             armySymmetricE.copy(armySymmetricZ, mapper.map(soldier));
-            array<Coord, ARMY*2*RULES+(1+RULES)> reachable;
+            array<Coord, X*Y-2*ARMY+1> reachable;
 
             // Jumps
             reachable[0] = soldier;
@@ -3017,7 +3021,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sjpe", argv);
+    GetOpt options("b:B:t:sjper", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -3069,6 +3073,7 @@ void my_main(int argc, char const* const* argv) {
         tables.print_blue_parity_count();
         cout << "Red Base parity count:\n";
         tables.print_red_parity_count();
+        cout << "Army red:\n" << tables.army_red();
     }
 
     int needed_moves = tables.min_nr_moves();
