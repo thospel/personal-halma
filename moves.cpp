@@ -400,7 +400,10 @@ Statistics NAME(BoardSet& boards_from,
                                 Coord target{jumpee, move};
                                 Color c = image.get(target);
                                 if (c & RED) continue;
-                                if (c == BLUE) goto ACCEPTABLE;
+                                if (c == BLUE) {
+                                    if (!target.base_red()) goto ACCEPTABLE;
+                                    continue;
+                                }
                                 image.set(target, COLORS);
                                 reachable[r_top--] = target;
                             }
