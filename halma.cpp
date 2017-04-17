@@ -53,7 +53,8 @@
 
 using namespace std;
 
-bool const STATISTICS = false;
+bool const STATISTICS = true;
+bool const SET_STATISTICS = false;
 bool const SYMMETRY = true;
 bool const MEMCHECK = false;
 bool const CLOSED_LOOP = false;
@@ -684,11 +685,39 @@ class ArmyMapperPair {
     ArmyMapper normal_, symmetric_;
 };
 
+class Statistics {
+  public:
+    using Counter = uint64_t;
+    Statistics() {
+        clear();
+    }
+    void clear() {
+        late_prunes_ = 0;
+        boardset_tries_ = 0;
+    }
+    inline void late_prune()   { if (STATISTICS) ++late_prunes_; }
+    inline void boardset_try() { if (STATISTICS) ++boardset_tries_; }
+    Counter late_prunes() const PURE { return late_prunes_; }
+    Counter boardset_tries() const PURE { return boardset_tries_; }
+
+    Statistics& operator+=(Statistics const& statistics) {
+        if (STATISTICS) {
+            late_prunes_    += statistics.late_prunes();
+            boardset_tries_ += statistics.boardset_tries();
+        }
+        return *this;
+    }
+
+  private:
+    Counter late_prunes_;
+    Counter boardset_tries_;
+};
+
 class SetStatistics {
   public:
     SetStatistics(): hits_{0}, misses_{0}, tries_{0} {}
     inline void stats_update(uint64_t offset) {
-        if (!STATISTICS) return;
+        if (!SET_STATISTICS) return;
         if (offset) {
             ++hits_;
             tries_ += offset;
@@ -696,7 +725,7 @@ class SetStatistics {
             ++misses_;
     }
     void stats_reset() {
-        if (!STATISTICS) return;
+        if (!SET_STATISTICS) return;
         misses_ = hits_ = tries_ = 0;
     }
     NOINLINE void show_stats(ostream& os) const;
@@ -710,7 +739,7 @@ class SetStatistics {
 };
 
 void SetStatistics::show_stats(ostream& os) const {
-    if (!STATISTICS) return;
+    if (!SET_STATISTICS) return;
     if (hits_ == 0 && misses_ == 0) {
         os << "Not used\n";
         return;
@@ -2491,20 +2520,20 @@ BoardTable<uint8_t>const *dummy_backtrack = nullptr;
 #undef BACKTRACK
 #undef NAME
 
-uint64_t _make_all_moves(BoardSet& boards_from,
-                         BoardSet& boards_to,
-                         ArmyZSet const& moving_armies,
-                         ArmyZSet const& opponent_armies,
-                         ArmyZSet& moved_armies,
-                         int nr_moves,
-                         int solution_moves,
-                         BoardTable<uint8_t> const& red_backtrack,
-                         BoardTable<uint8_t> const& red_backtrack_symmetric) {
+void _make_all_moves(BoardSet& boards_from,
+                     BoardSet& boards_to,
+                     ArmyZSet const& moving_armies,
+                     ArmyZSet const& opponent_armies,
+                     ArmyZSet& moved_armies,
+                     int nr_moves,
+                     int solution_moves,
+                     BoardTable<uint8_t> const& red_backtrack,
+                     BoardTable<uint8_t> const& red_backtrack_symmetric) {
     auto start = chrono::steady_clock::now();
 
     tids = 0;
-    vector<future<uint64_t>> results;
-    uint64_t late;
+    vector<future<Statistics>> results;
+    Statistics statistics;
     int blue_to_move = nr_moves & 1;
     if (blue_to_move) {
         if (solution_moves > 0) {
@@ -2515,7 +2544,7 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       nr_moves));
-            late = thread_blue_moves_backtrack
+            statistics = thread_blue_moves_backtrack
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
@@ -2527,7 +2556,7 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       nr_moves));
-            late = thread_blue_moves
+            statistics = thread_blue_moves
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
@@ -2542,7 +2571,7 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       ref(red_backtrack), ref(red_backtrack_symmetric),
                       solution_moves, nr_moves));
-            late = thread_red_moves_backtrack
+            statistics = thread_red_moves_backtrack
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  red_backtrack, red_backtrack_symmetric,
@@ -2555,13 +2584,13 @@ uint64_t _make_all_moves(BoardSet& boards_from,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       nr_moves));
-            late = thread_red_moves
+            statistics = thread_red_moves
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
         }
     }
-    for (auto& result: results) late += result.get();
+    for (auto& result: results) statistics += result.get();
 
     auto stop = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop-start).count();
@@ -2573,24 +2602,28 @@ uint64_t _make_all_moves(BoardSet& boards_from,
         cout << boards_to.size()/(moved_armies.size() ? moved_armies.size() : 1);
     else
         cout << boards_to.size()/(opponent_armies.size() ? opponent_armies.size() : 1);
+    if (STATISTICS) {
+        if (statistics.boardset_tries())
+            cout << " " << boards_to.size()*100 / statistics.boardset_tries() << "%";
+        else
+            cout << " ---";
+    }
     cout << " " << get_memory() << endl;
-
-    return late;
 }
 
-NOINLINE uint64_t
+NOINLINE void
 make_all_moves(BoardSet& boards_from,
                BoardSet& boards_to,
                ArmyZSet const& moving_armies,
                ArmyZSet const& opponent_armies,
                ArmyZSet& moved_armies,
                int nr_moves) {
-    return _make_all_moves(boards_from, boards_to,
-                           moving_armies, opponent_armies, moved_armies,
-                           nr_moves, 0, *dummy_backtrack, *dummy_backtrack);
+    _make_all_moves(boards_from, boards_to,
+                    moving_armies, opponent_armies, moved_armies,
+                    nr_moves, 0, *dummy_backtrack, *dummy_backtrack);
 }
 
-NOINLINE uint64_t
+NOINLINE void
 make_all_moves_backtrack(BoardSet& boards_from,
                          BoardSet& boards_to,
                          ArmyZSet const& moving_armies,
@@ -2599,9 +2632,9 @@ make_all_moves_backtrack(BoardSet& boards_from,
                          int nr_moves, int solution_moves,
                          BoardTable<uint8_t> const& red_backtrack,
                          BoardTable<uint8_t> const& red_backtrack_symmetric) {
-    return _make_all_moves(boards_from, boards_to,
-                           moving_armies, opponent_armies, moved_armies,
-                           nr_moves, solution_moves, red_backtrack, red_backtrack_symmetric);
+    _make_all_moves(boards_from, boards_to,
+                    moving_armies, opponent_armies, moved_armies,
+                    nr_moves, solution_moves, red_backtrack, red_backtrack_symmetric);
 }
 
 void play(bool print_moves=false) {

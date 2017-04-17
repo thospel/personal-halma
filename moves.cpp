@@ -1,15 +1,15 @@
 NOINLINE
-uint64_t NAME(BoardSet& boards_from,
-              BoardSet& boards_to,
-              ArmyZSet const& moving_armies,
-              ArmyZSet const& opponent_armies,
-              ArmyZSet& moved_armies,
+Statistics NAME(BoardSet& boards_from,
+                BoardSet& boards_to,
+                ArmyZSet const& moving_armies,
+                ArmyZSet const& opponent_armies,
+                ArmyZSet& moved_armies,
 #if BACKTRACK && !BLUE_TO_MOVE
-              BoardTable<uint8_t> const& backtrack,
-              BoardTable<uint8_t> const& backtrack_symmetric,
-              int solution_moves,
+                BoardTable<uint8_t> const& backtrack,
+                BoardTable<uint8_t> const& backtrack_symmetric,
+                int solution_moves,
 #endif // BACKTRACK && !BLUE_TO_MOVE
-              int available_moves) {
+                int available_moves) {
     tid = ++tids;
     // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
@@ -23,7 +23,7 @@ uint64_t NAME(BoardSet& boards_from,
     ParityCount balance_count_from, balance_count;
 #endif
 
-    uint64_t late = 0;
+    Statistics statistics;
     while (true) {
         BoardSubSetRef subset_from{boards_from};
 
@@ -123,7 +123,7 @@ uint64_t NAME(BoardSet& boards_from,
             if (needed_moves > available_moves) {
                 if (VERBOSE)
                     cout << "  Late prune " << needed_moves << " > " << available_moves << "\n";
-                ++late;
+                statistics.late_prune();
                 continue;
             }
 
@@ -414,6 +414,7 @@ uint64_t NAME(BoardSet& boards_from,
                     auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric);
                     if (CHECK && moved_id == 0)
                         throw(logic_error("ArmyZ Insert returns 0"));
+                    statistics.boardset_try();
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
                     result_symmetry *= red_symmetry;
@@ -443,5 +444,5 @@ uint64_t NAME(BoardSet& boards_from,
 #endif // !BLUE_TO_MOVE
     }
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
-    return late;
+    return statistics;
 }
