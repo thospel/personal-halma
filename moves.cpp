@@ -1,3 +1,19 @@
+#include <future>
+
+#if BLUE_TO_MOVE
+# define COLOR_TO_MOVE	blue
+#else  // BLUE_TO_MOVE
+# define COLOR_TO_MOVE	red
+#endif // BLUE_TO_MOVE
+
+#if BACKTRACK
+# define _BACTRACK _backtrack
+#else  // BACKTRACK
+# define _BACTRACK
+#endif // BACKTRACK
+
+#define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,_BACTRACK)))
+
 NOINLINE
 Statistics NAME(BoardSet& boards_from,
                 BoardSet& boards_to,
@@ -446,3 +462,111 @@ Statistics NAME(BoardSet& boards_from,
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
     return statistics;
 }
+
+#if !BLUE_TO_MOVE
+# define ALL_NAME CAT(make_all_moves,_BACTRACK)
+
+void ALL_NAME(BoardSet& boards_from,
+              BoardSet& boards_to,
+              ArmyZSet const& moving_armies,
+              ArmyZSet const& opponent_armies,
+              ArmyZSet& moved_armies,
+#if BACKTRACK
+              int solution_moves,
+              BoardTable<uint8_t> const& red_backtrack,
+              BoardTable<uint8_t> const& red_backtrack_symmetric,
+#endif // BACKTRACK
+              int nr_moves) {
+    auto start = chrono::steady_clock::now();
+
+    tids = 0;
+    vector<future<Statistics>> results;
+    Statistics statistics;
+    int blue_to_move = nr_moves & 1;
+    if (blue_to_move) {
+#if BACKTRACK
+        if (solution_moves > 0) {
+            for (uint i=1; i < nr_threads; ++i)
+                results.emplace_back
+                    (async
+                     (launch::async, thread_blue_moves_backtrack,
+                      ref(boards_from), ref(boards_to),
+                      ref(moving_armies), ref(opponent_armies), ref(moved_armies),
+                      nr_moves));
+            statistics = thread_blue_moves_backtrack
+                (boards_from, boards_to,
+                 moving_armies, opponent_armies, moved_armies,
+                 nr_moves);
+        } else 
+#endif // BACKTRACK
+            {
+                for (uint i=1; i < nr_threads; ++i)
+                    results.emplace_back
+                        (async
+                         (launch::async, thread_blue_moves,
+                          ref(boards_from), ref(boards_to),
+                          ref(moving_armies), ref(opponent_armies), ref(moved_armies),
+                          nr_moves));
+                statistics = thread_blue_moves
+                    (boards_from, boards_to,
+                     moving_armies, opponent_armies, moved_armies,
+                     nr_moves);
+            }
+    } else {
+#if BACKTRACK
+        if (solution_moves > 0) {
+            for (uint i=1; i < nr_threads; ++i)
+                results.emplace_back
+                    (async
+                     (launch::async, thread_red_moves_backtrack,
+                      ref(boards_from), ref(boards_to),
+                      ref(moving_armies), ref(opponent_armies), ref(moved_armies),
+                      ref(red_backtrack), ref(red_backtrack_symmetric),
+                      solution_moves, nr_moves));
+            statistics = thread_red_moves_backtrack
+                (boards_from, boards_to,
+                 moving_armies, opponent_armies, moved_armies,
+                 red_backtrack, red_backtrack_symmetric,
+                 solution_moves, nr_moves);
+        } else 
+#endif // BACKTRACK
+            {
+                for (uint i=1; i < nr_threads; ++i)
+                    results.emplace_back
+                        (async
+                         (launch::async, thread_red_moves,
+                          ref(boards_from), ref(boards_to),
+                          ref(moving_armies), ref(opponent_armies), ref(moved_armies),
+                          nr_moves));
+                statistics = thread_red_moves
+                    (boards_from, boards_to,
+                     moving_armies, opponent_armies, moved_armies,
+                     nr_moves);
+            }
+    }
+    for (auto& result: results) statistics += result.get();
+
+    auto stop = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<Sec>(stop-start).count();
+    moved_armies.show_stats();
+    // boards_to.show_stats();
+    cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << boards_to.size() << " boards /" << setw(9) << moved_armies.size() << " armies " << setw(7);
+    if (nr_moves % 2)
+        cout << boards_to.size()/(moved_armies.size() ? moved_armies.size() : 1);
+    else
+        cout << boards_to.size()/(opponent_armies.size() ? opponent_armies.size() : 1);
+    if (STATISTICS) {
+        if (statistics.boardset_tries())
+            cout << " " << boards_to.size()*100 / statistics.boardset_tries() << "%";
+        else
+            cout << " ---";
+    }
+    cout << " " << get_memory() << endl;
+}
+
+#undef ALL_NAME
+#endif // BLUE_TO_MOVE
+
+#undef COLOR_TO_MOVE
+#undef NAME
+#undef _BACTRACK
