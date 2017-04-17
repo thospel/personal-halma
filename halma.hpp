@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 
 #include <algorithm>
 #include <array>
@@ -51,7 +52,7 @@
 
 using namespace std;
 
-bool const STATISTICS = true;
+bool const STATISTICS = false;
 bool const SET_STATISTICS = false;
 bool const SYMMETRY = true;
 bool const MEMCHECK = false;
@@ -63,6 +64,7 @@ bool const BALANCE  = true;
 
 #define CHECK   0
 #define VERBOSE	0
+#define RED_BUILDER 1
 bool const LOCK_DEBUG = false;
 
 int const X = 9;
@@ -732,6 +734,8 @@ class Board {
 
 class BoardSubSet {
   public:
+    static ArmyId const INITIAL_SIZE = 4;
+
     ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
@@ -741,10 +745,10 @@ class BoardSubSet {
         mask_ = 0;
         left_ = 0;
     }
-    void create(ArmyId size = 1);
+    void create(ArmyId size = INITIAL_SIZE);
     void destroy() {
         // cout << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << "\n";
-        if (armies_) delete[] armies_;
+        delete[] armies_;
     }
     ArmyId const* begin() const PURE { return &armies_[0]; }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
@@ -757,9 +761,9 @@ class BoardSubSet {
                 throw(logic_error("red_id is too large"));
         }
         ArmyId value = red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0);
-        bool result = insert(value);
-        return result;
+        return insert(value);
     }
+    void convert_red();
     bool find(ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
             if (red_id <= 0)
@@ -777,39 +781,124 @@ class BoardSubSet {
     ArmyId example(ArmyId& symmetry) const;
     void print(ostream& os) const;
     void print() const { print(cout); }
+
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
     NOINLINE void resize();
 
+    inline bool insert(ArmyId red_value);
+    bool find(ArmyId id) const PURE;
+
+  protected:
     ArmyId* begin() PURE { return &armies_[0]; }
     ArmyId* end()   PURE { return &armies_[allocated()]; }
-
-    inline bool insert(ArmyId red_id);
-    bool find(ArmyId id) const PURE;
 
     ArmyId* armies_;
     ArmyId mask_;
     ArmyId left_;
 };
 
-bool BoardSubSet::insert(ArmyId red_id) {
-    // cout << "Insert " << red_id << "\n";
+bool BoardSubSet::insert(ArmyId red_value) {
+    // cout << "Insert " << red_value << "\n";
     if (left_ == 0) resize();
     auto mask = mask_;
-    ArmyId pos = hash64(red_id) & mask;
+    ArmyId pos = hash64(red_value) & mask;
     uint offset = 0;
     auto armies = armies_;
     while (true) {
         // cout << "Try " << pos << " of " << mask+1 << "\n";
-        auto& id = armies[pos];
-        if (id == 0) {
+        auto& rv = armies[pos];
+        if (rv == 0) {
             // stats_update(offset);
-            id = red_id;
+            rv = red_value;
             --left_;
             // cout << "Found empty\n";
             return true;
         }
-        if (id == red_id) {
+        if (rv == red_value) {
+            // cout << "Found duplicate\n";
+            // stats_update(offset);
+            return false;
+        }
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
+}
+
+class BoardSubSetRed: public BoardSubSet {
+  public:
+    inline BoardSubSetRed(ArmyId* list, ArmyId size) {
+        armies_ = list;
+        left_   = size;
+    }
+    ArmyId size()       const PURE { return left_; }
+    ArmyId const* end() const PURE { return &armies_[size()]; }
+};
+
+class BoardSubSetRedBuilder: public BoardSubSet {
+  public:
+    static ArmyId const INITIAL_SIZE = 32;
+
+    BoardSubSetRedBuilder(ArmyId allocate = INITIAL_SIZE);
+    ~BoardSubSetRedBuilder() {
+        delete [] armies_;
+        delete [] (army_list_ - size());
+    }
+    ArmyId capacity()  const PURE { return FACTOR(allocated()); }
+    ArmyId size()      const PURE { return capacity() - left_; }
+    inline bool insert(ArmyId red_id, int symmetry) {
+        if (CHECK) {
+            if (red_id <= 0)
+                throw(logic_error("red_id <= 0"));
+            if (red_id >= ARMY_HIGHBIT)
+                throw(logic_error("red_id is too large"));
+        }
+        ArmyId value = red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0);
+        return insert(value);
+    }
+    inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {
+        ArmyId sz = size();
+        ArmyId* new_list = new ArmyId[sz];
+        ArmyId* old_list = army_list_ - sz;
+        army_list_ = old_list;
+        std::copy(&old_list[0], &old_list[sz], new_list);
+        
+        mask_ = allocated-1;
+        left_ = capacity();
+        fill(begin(), end(), 0);
+        
+        return BoardSubSetRed{new_list, sz};
+    }
+
+  private:
+    static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.5*factor); }
+
+    inline bool insert(ArmyId red_value);
+    NOINLINE void resize();
+
+    ArmyId* army_list_;
+    ArmyId real_allocated_;
+};
+
+bool BoardSubSetRedBuilder::insert(ArmyId red_value) {
+    // cout << "Insert " << red_value << " into BoardSubSetRedBuilder\n";
+    if (left_ == 0) resize();
+    auto mask = mask_;
+    ArmyId pos = hash64(red_value) & mask;
+    uint offset = 0;
+    auto armies = armies_;
+    while (true) {
+        // cout << "Try " << pos << " of " << mask+1 << "\n";
+        auto& rv = armies[pos];
+        if (rv == 0) {
+            // stats_update(offset);
+            rv = red_value;
+            *army_list_++ = red_value;
+            --left_;
+            // cout << "Found empty\n";
+            return true;
+        }
+        if (rv == red_value) {
             // cout << "Found duplicate\n";
             // stats_update(offset);
             return false;
@@ -858,11 +947,13 @@ class BoardSet {
         return result;
     }
     bool insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red);
-    bool insert(Board const& board, ArmyZSet& armies_to_move, ArmyZSet& armies_opponent, int nr_moves) {
+    bool insert(Board const& board, ArmyZSet& armies_to_move, ArmyZSet& armies_opponent, int nr_moves, bool convert = true) {
         int blue_to_move = nr_moves & 1;
-        return blue_to_move ?
+        bool result = blue_to_move ?
             insert(board, armies_to_move, armies_opponent) :
             insert(board, armies_opponent, armies_to_move);
+        if (convert && blue_to_move) convert_red();
+        return result;
     }
     void insert(ArmyId blue_id, BoardSubSet const& subset) {
         if (CHECK) {
@@ -881,6 +972,25 @@ class BoardSet {
         }
         subsets_[blue_id] = subset;
         size_ += subset.size();
+    }
+    void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) {
+        if (CHECK) {
+            if (blue_id <= 0)
+                throw(logic_error("red_id <= 0"));
+        }
+        BoardSubSetRed subset_red = builder.extract();
+
+        lock_guard<mutex> lock{exclude_};
+        if (blue_id >= top_) {
+            // Only in the multithreaded case can blue_id be different from top_
+            // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
+            while (blue_id >= capacity_) resize();
+            while (blue_id > top_)
+                subsets_[top_++].zero();
+            ++top_;
+        }
+        subsets_[blue_id] = subset_red;
+        size_ += subset_red.size();
     }
     bool find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
@@ -933,6 +1043,7 @@ class BoardSet {
         }
         delete [] old_subsets;
     }
+    void convert_red();
     BoardSubSet* begin() PURE { return &subsets_[from()]; }
     BoardSubSet* end()   PURE { return &subsets_[top_]; }
 

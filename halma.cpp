@@ -302,14 +302,14 @@ bool BoardSubSet::find(ArmyId red_id) const {
 
 void BoardSubSet::resize() {
     auto old_armies = armies_;
-    auto old_size = mask_+1;
+    auto old_size = allocated();
     ArmyId size = old_size*2;
     auto new_armies = new ArmyId[size];
     armies_ = new_armies;
     // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n" << flush;
 
-    auto mask = size-1;
-    mask_ = size-1;
+    ArmyId mask = size-1;
+    mask_ = mask;
     left_ += FACTOR(size) - FACTOR(old_size);
     fill(begin(), end(), 0);
     for (ArmyId i = 0; i < old_size; ++i) {
@@ -327,6 +327,16 @@ void BoardSubSet::resize() {
         // cout << "Found empty\n";
     }
     delete [] old_armies;
+}
+
+void BoardSubSet::convert_red() {
+    ArmyId sz = size();
+    auto new_armies = new ArmyId[sz];
+    for (ArmyId const& red_value: *this)
+        if (red_value) *new_armies++ = red_value;
+    delete [] armies_;
+    armies_ = new_armies - sz;
+    left_ = sz;
 }
 
 ArmyId BoardSubSet::example(ArmyId& symmetry) const {
@@ -354,6 +364,54 @@ void BoardSubSet::print(ostream& os) const {
     }
 }
 
+BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId allocate) {
+    real_allocated_ = allocate;
+    mask_ = allocate-1;
+    left_ = capacity();
+    armies_ = new ArmyId[allocate];
+    fill(begin(), end(), 0);
+    army_list_ = new ArmyId[left_];
+}
+
+void BoardSubSetRedBuilder::resize() {
+    auto old_allocated = allocated();
+    ArmyId new_allocated = old_allocated*2;
+    ArmyId *armies, *army_list;
+    ArmyId nr_elems = size();
+    if (new_allocated > real_allocated_) {
+        armies = new ArmyId[new_allocated];
+        delete [] armies_;
+        armies_ = armies;
+        army_list = new ArmyId[FACTOR(new_allocated)];
+        army_list_ -= nr_elems;
+        std::copy(&army_list_[0], &army_list_[size()], army_list);
+        delete [] army_list_;
+        army_list_ = army_list + nr_elems;
+        real_allocated_ = new_allocated;
+    } else {
+        armies = armies_;
+        army_list = army_list_ - nr_elems;
+    }
+    ArmyId mask = new_allocated-1;
+    mask_ = mask;
+    left_ += FACTOR(new_allocated) - FACTOR(old_allocated);
+    fill(begin(), end(), 0);
+
+    for (ArmyId i = 0; i < nr_elems; ++i) {
+        auto value = army_list[i];
+        // cout << "Insert " << value << "\n";
+        ArmyId pos = hash64(value) & mask;
+        uint offset = 0;
+        while (armies[pos]) {
+            // cout << "Try " << pos << " of " << mask+1 << "\n";
+            ++offset;
+            pos = (pos + offset) & mask;
+        }
+        armies[pos] = value;
+        // cout << "Found empty\n";
+    }
+}
+
 BoardSet::BoardSet(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size+1}, from_{1}, top_{1}, keep_{keep} {
     subsets_ = new BoardSubSet[capacity_];
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
@@ -372,6 +430,10 @@ void BoardSet::clear(ArmyId size) {
         delete[] old_subsets;
         capacity_ = size;
     }
+}
+
+void BoardSet::convert_red() {
+    for (auto& subset: *this) subset.convert_red();
 }
 
 void BoardSet::print(ostream& os) const {
@@ -1210,7 +1272,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
             return -1;
         }
         if (example)
-            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
+            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1) << flush;
         if (boards_to.solution_id()) {
             red_id = boards_to.solution_id();
             red_army = boards_to.solution();

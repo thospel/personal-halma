@@ -1277,24 +1277,24 @@ Minimum possible number of moves: 45
      0 s, set 18 done,         0 boards /        0 armies       0 (  254 MB)
   4821 s, no solution
 
-Commit: fc47092651c680cd305a89c65f39115d12c8121f
+Commit: 1c8b75c4347337df47e6cb1564e30af2b522278e
 Minimum possible number of moves: 45
           set 49 done (nas, no heuristics)
      0 s, set 48 done,        21 boards /       21 armies       1 (    33 MB)
      0 s, set 47 done,       802 boards /       21 armies      38 (    33 MB)
-     0 s, set 46 done,     21342 boards /      544 armies      39 (    33 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (   167 MB)
      0 s, set 45 done,    584976 boards /      561 armies    1075 (   504 MB)
-     5 s, set 44 done,   6634978 boards /     6698 armies     990 (   509 MB)
-    48 s, set 43 done,  64228527 boards /    11884 armies    9589 (   687 MB)
-   106 s, set 42 done,  74418075 boards /    27116 armies    2744 (  1055 MB)
-   344 s, set 41 done, 361710211 boards /   217512 armies   13339 (  3237 MB)
-   492 s, set 40 done, 204451594 boards /    43572 armies    4692 (  3224 MB)
-  1019 s, set 39 done, 790838475 boards /  2553497 armies   18150 (  7878 MB)
-  1024 s, set 38 done, 247016643 boards /    33602 armies    7351 (  7695 MB)
-  1405 s, set 37 done, 971718999 boards / 18086135 armies   28918 ( 11530 MB)
-  1366 s, set 36 done, 232461917 boards /   200445 armies    1159 (  7817 MB)
- 13070 s, set 35 done,1251055727 boards /169232581 armies    6241 ( 82045 MB)
- 16343 s, set 34 done,1727765469 boards /   555827 armies    3108 ( 47707 MB)
+     5 s, set 44 done,   6634978 boards /     6698 armies     990 (   510 MB)
+    35 s, set 43 done,  64228527 boards /    11884 armies    9589 (   687 MB)
+   103 s, set 42 done,  74418075 boards /    27116 armies    2744 (  1054 MB)
+   283 s, set 41 done, 361710211 boards /   217512 armies   13339 (  3232 MB)
+   471 s, set 40 done, 204451594 boards /    43572 armies    4692 (  3227 MB)
+  1077 s, set 39 done, 790838475 boards /  2553497 armies   18150 (  8008 MB)
+   980 s, set 38 done, 247016643 boards /    33602 armies    7351 (  7745 MB)
+   800 s, set 37 done, 182327785 boards /  4595006 armies    5426 (  7021 MB)
+   266 s, set 36 done, 232461917 boards /   200445 armies    1159 (  5892 MB)
+  8299 s, set 35 done,6838276933 boards / 87804326 armies   34115 ( 61075 MB)
+  6491 s, set 34 done,1727765469 boards /   555827 armies    3108 ( 43446 MB)
 
 Commit: fc47092651c680cd305a89c65f39115d12c8121f
 Minimum possible number of moves: 45

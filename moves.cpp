@@ -12,6 +12,14 @@
 # define _BACTRACK
 #endif // BACKTRACK
 
+#if RED_BUILDER
+# define RED_NORMAL	(!BLUE_TO_MOVE && !BACKTRACK)
+# define BLUE_NORMAL	( BLUE_TO_MOVE && !BACKTRACK)
+#else  // RED_BUILDER
+# define RED_NORMAL	0
+# define BLUE_NORMAL	0
+#endif // RED_BUILDER
+
 #define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,_BACTRACK)))
 
 NOINLINE
@@ -39,6 +47,9 @@ Statistics NAME(BoardSet& boards_from,
     ParityCount balance_count_from, balance_count;
 #endif
 
+#if RED_NORMAL
+    BoardSubSetRedBuilder subset_to;
+#endif // RED_NORMAL
     Statistics statistics;
     while (true) {
         BoardSubSetRef subset_from{boards_from};
@@ -83,14 +94,19 @@ Statistics NAME(BoardSet& boards_from,
 #endif // BLUE_TO_MOVE
         int const slides = min_slides(parity_blue);
 
-#if !BLUE_TO_MOVE
+#if !BLUE_TO_MOVE && !RED_NORMAL
         BoardSubSet subset_to;
         subset_to.create();
-#endif // !BLUE_TO_MOVE
+#endif // !BLUE_TO_MOVE && !RED_NORMAL
 
+#if BLUE_NORMAL
+        BoardSubSetRed const& red_armies = reinterpret_cast<BoardSubSetRed const&>(subset_from.armies());
+
+#else // BLUE_NORMAL
         BoardSubSet const& red_armies = subset_from.armies();
+#endif // BLUE_NORMAL
         for (auto const& red_value: red_armies) {
-            if (red_value == 0) continue;
+            if (!BLUE_NORMAL && red_value == 0) continue;
             ArmyId red_id;
             auto const symmetry = BoardSubSet::split(red_value, red_id);
             if (VERBOSE) cout << " Sub Processing red " << red_id << "," << symmetry << "\n";
@@ -500,7 +516,7 @@ void ALL_NAME(BoardSet& boards_from,
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
-        } else 
+        } else
 #endif // BACKTRACK
             {
                 for (uint i=1; i < nr_threads; ++i)
@@ -531,7 +547,7 @@ void ALL_NAME(BoardSet& boards_from,
                  moving_armies, opponent_armies, moved_armies,
                  red_backtrack, red_backtrack_symmetric,
                  solution_moves, nr_moves);
-        } else 
+        } else
 #endif // BACKTRACK
             {
                 for (uint i=1; i < nr_threads; ++i)
