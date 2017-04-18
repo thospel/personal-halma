@@ -52,8 +52,8 @@
 
 using namespace std;
 
-bool const STATISTICS = false;
-bool const SET_STATISTICS = false;
+extern bool STATISTICS;
+extern bool HASH_STATISTICS;
 bool const SYMMETRY = true;
 bool const MEMCHECK = false;
 bool const CLOSED_LOOP = false;
@@ -67,8 +67,8 @@ bool const BALANCE  = true;
 #define RED_BUILDER 1
 bool const LOCK_DEBUG = false;
 
-int const X = 9;
-int const Y = 9;
+int const X = 12;
+int const Y = 12;
 int const RULES = 6;
 int const ARMY = 10;
 
@@ -571,6 +571,7 @@ class ArmyMapperPair {
     ArmyMapper normal_, symmetric_;
 };
 
+using ArmyId = uint32_t;
 class Statistics {
   public:
     using Counter = uint64_t;
@@ -579,59 +580,77 @@ class Statistics {
     }
     void clear() {
         late_prunes_ = 0;
+        armyset_tries_ = 0;
         boardset_tries_ = 0;
+        armyset_probes_ = 0;
+        armyset_immediate_ = 0;
+        boardset_probes_ = 0;
+        boardset_immediate_ = 0;
     }
-    inline void late_prune()   { if (STATISTICS) ++late_prunes_; }
-    inline void boardset_try() { if (STATISTICS) ++boardset_tries_; }
+    inline void late_prune(Counter add = 1)   {
+        if (STATISTICS) late_prunes_ += add;
+    }
+    inline void armyset_try(Counter add = 1) {
+        if (STATISTICS) armyset_tries_ += add;
+    }
+    inline void armyset_untry(Counter del = 1) {
+        if (STATISTICS) armyset_tries_ -= del;
+    }
+    inline void boardset_try(Counter add = 1) {
+        if (STATISTICS) boardset_tries_ += add;
+    }
+    inline void boardset_untry(Counter del = 1) {
+        if (STATISTICS) boardset_tries_ -= del;
+    }
+    inline void armyset_probe(ArmyId probes) {
+        if (!HASH_STATISTICS) return;
+        armyset_probes_    += probes;
+        armyset_immediate_ += probes == 0;
+    }
+    inline void boardset_probe(ArmyId probes) {
+        if (!HASH_STATISTICS) return;
+        boardset_probes_    += probes;
+        boardset_immediate_ += probes == 0;
+    }
     Counter late_prunes() const PURE { return late_prunes_; }
+    Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter boardset_tries() const PURE { return boardset_tries_; }
+    Counter armyset_immediate() const PURE { return armyset_immediate_; }
+    Counter boardset_immediate() const PURE { return boardset_immediate_; }
+    Counter armyset_probes() const PURE { return armyset_probes_; }
+    Counter boardset_probes() const PURE { return boardset_probes_; }
 
     Statistics& operator+=(Statistics const& statistics) {
         if (STATISTICS) {
             late_prunes_    += statistics.late_prunes();
+            armyset_tries_  += statistics.armyset_tries();
             boardset_tries_ += statistics.boardset_tries();
+        }
+        if (HASH_STATISTICS) {
+            armyset_probes_	+= statistics.armyset_probes_;
+            armyset_immediate_	+= statistics.armyset_immediate_;
+            boardset_probes_	+= statistics.boardset_probes_;
+            boardset_immediate_	+= statistics.boardset_immediate_;
         }
         return *this;
     }
 
   private:
     Counter late_prunes_;
+    Counter armyset_tries_;
     Counter boardset_tries_;
+    Counter armyset_probes_;
+    Counter armyset_immediate_;
+    Counter boardset_probes_;
+    Counter boardset_immediate_;
 };
 
-class SetStatistics {
-  public:
-    SetStatistics(): hits_{0}, misses_{0}, tries_{0} {}
-    inline void stats_update(uint64_t offset) {
-        if (!SET_STATISTICS) return;
-        if (offset) {
-            ++hits_;
-            tries_ += offset;
-        } else
-            ++misses_;
-    }
-    void stats_reset() {
-        if (!SET_STATISTICS) return;
-        misses_ = hits_ = tries_ = 0;
-    }
-    NOINLINE void show_stats(ostream& os) const;
-    void show_stats() const {
-        show_stats(cout);
-    }
-
-  private:
-    atomic<uint64_t> hits_;
-    atomic<uint64_t> misses_;
-    atomic<uint64_t> tries_;
-};
-
-using ArmyId = uint32_t;
 STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
 STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
 STATIC const ArmyId ARMY_MAX  = std::numeric_limits<ArmyId>::max();
 
-class ArmyZSet: public SetStatistics {
+class ArmyZSet {
   public:
     static ArmyId const INITIAL_SIZE = 32;
     ArmyZSet(ArmyId size = INITIAL_SIZE);
@@ -657,8 +676,8 @@ class ArmyZSet: public SetStatistics {
 #else  // CHECK
     ArmyZ const& at(ArmyId i) const PURE { return armies_[i]; }
 #endif // CHECK
-    inline ArmyId insert(ArmyZ  const& value);
-    inline ArmyId insert(ArmyZE const& value);
+    inline ArmyId insert(ArmyZ  const& value, Statistics& stats);
+    inline ArmyId insert(ArmyZE const& value, Statistics& stats);
     ArmyId find(ArmyZ  const& value) const PURE;
     ArmyId find(ArmyZE const& value) const PURE;
     ArmyZ const* begin() const PURE { return &armies_[1]; }
@@ -756,7 +775,7 @@ class BoardSubSet {
     ArmyId const* begin() const PURE { return &armies_[0]; }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
-    inline bool insert(ArmyId red_id, int symmetry) {
+    inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (red_id <= 0)
                 throw(logic_error("red_id <= 0"));
@@ -764,7 +783,7 @@ class BoardSubSet {
                 throw(logic_error("red_id is too large"));
         }
         ArmyId value = red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0);
-        return insert(value);
+        return insert(value, stats);
     }
     void convert_red();
     bool find(ArmyId red_id, int symmetry) const PURE {
@@ -789,7 +808,7 @@ class BoardSubSet {
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
     NOINLINE void resize();
 
-    inline bool insert(ArmyId red_value);
+    inline bool insert(ArmyId red_value, Statistics& stats);
     bool find(ArmyId id) const PURE;
 
   protected:
@@ -801,7 +820,7 @@ class BoardSubSet {
     ArmyId left_;
 };
 
-bool BoardSubSet::insert(ArmyId red_value) {
+bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
     // cout << "Insert " << red_value << "\n";
     if (left_ == 0) resize();
     auto mask = mask_;
@@ -812,15 +831,16 @@ bool BoardSubSet::insert(ArmyId red_value) {
         // cout << "Try " << pos << " of " << mask+1 << "\n";
         auto& rv = armies[pos];
         if (rv == 0) {
-            // stats_update(offset);
+            stats.boardset_probe(offset);
             rv = red_value;
             --left_;
             // cout << "Found empty\n";
             return true;
         }
         if (rv == red_value) {
+            stats.boardset_probe(offset);
+            stats.boardset_try();
             // cout << "Found duplicate\n";
-            // stats_update(offset);
             return false;
         }
         ++offset;
@@ -856,7 +876,7 @@ class BoardSubSetRedBuilder: public BoardSubSet {
     }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
-    inline bool insert(ArmyId red_id, int symmetry) {
+    inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (red_id <= 0)
                 throw(logic_error("red_id <= 0"));
@@ -864,7 +884,7 @@ class BoardSubSetRedBuilder: public BoardSubSet {
                 throw(logic_error("red_id is too large"));
         }
         ArmyId value = red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0);
-        return insert(value);
+        return insert(value, stats);
     }
     inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {
         ArmyId sz = size();
@@ -883,14 +903,14 @@ class BoardSubSetRedBuilder: public BoardSubSet {
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.5*factor); }
 
-    inline bool insert(ArmyId red_value);
+    inline bool insert(ArmyId red_value, Statistics& stats);
     NOINLINE void resize();
 
     ArmyId* army_list_;
     ArmyId real_allocated_;
 };
 
-bool BoardSubSetRedBuilder::insert(ArmyId red_value) {
+bool BoardSubSetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
     // cout << "Insert " << red_value << " into BoardSubSetRedBuilder\n";
     if (left_ == 0) resize();
     auto mask = mask_;
@@ -901,7 +921,7 @@ bool BoardSubSetRedBuilder::insert(ArmyId red_value) {
         // cout << "Try " << pos << " of " << mask+1 << "\n";
         auto& rv = armies[pos];
         if (rv == 0) {
-            // stats_update(offset);
+            stats.boardset_probe(offset);
             rv = red_value;
             *army_list_++ = red_value;
             --left_;
@@ -909,8 +929,9 @@ bool BoardSubSetRedBuilder::insert(ArmyId red_value) {
             return true;
         }
         if (rv == red_value) {
+            stats.boardset_probe(offset);
+            stats.boardset_try();
             // cout << "Found duplicate\n";
-            // stats_update(offset);
             return false;
         }
         ++offset;
@@ -938,7 +959,7 @@ class BoardSet {
     BoardSubSet const* begin() const PURE { return &subsets_[from()]; }
     BoardSubSet const* end()   const PURE { return &subsets_[top_]; }
     ArmyId back_id() const PURE { return top_-1; }
-    inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry) {
+    inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (blue_id <= 0)
                 throw(logic_error("red_id <= 0"));
@@ -952,7 +973,7 @@ class BoardSet {
             while (blue_id >= top_)
                 subsets_[top_++].create();
         }
-        bool result = subsets_[blue_id].insert(red_id, symmetry);
+        bool result = subsets_[blue_id].insert(red_id, symmetry, stats);
         size_ += result;
         return result;
     }
@@ -1207,10 +1228,9 @@ class Svg {
   public:
     static uint const SCALE = 20;
 
-    static string const solution_file() FUNCTIONAL {
-        return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + ".html";
-    }
+    static string const solution_file(uint nr_moves) FUNCTIONAL;
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
+    void write(vector<Board> const& boards);
     void parameters(uint x, uint y, uint army, uint rule);
     void game(vector<Board> const& boards);
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
@@ -1417,7 +1437,7 @@ Nbits Coord::Ndistance_base_red() const {
     return tables.Ndistance_base_red(*this);
 }
 
-ArmyId ArmyZSet::insert(ArmyZ  const& value) {
+ArmyId ArmyZSet::insert(ArmyZ  const& value, Statistics& stats) {
     // cout << "Insert:\n" << Image{value};
     // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
@@ -1432,15 +1452,16 @@ ArmyId ArmyZSet::insert(ArmyZ  const& value) {
         // logger << "Try " << pos << " of " << size_ << "\n" << flush;
         ArmyId i = values[pos];
         if (i == 0) {
+            stats.armyset_probe(offset);
             ArmyId id = used1_++;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
             armies_[id] = value;
-            stats_update(offset);
             return id;
         }
         if (armies_[i] == value) {
-            stats_update(offset);
+            stats.armyset_probe(offset);
+            stats.armyset_try();
             // cout << "Found duplicate " << hash << "\n";
             return i;
         }
@@ -1449,7 +1470,7 @@ ArmyId ArmyZSet::insert(ArmyZ  const& value) {
     }
 }
 
-ArmyId ArmyZSet::insert(ArmyZE const& value) {
+ArmyId ArmyZSet::insert(ArmyZE const& value, Statistics& stats) {
     // cout << "Insert:\n" << Image{value};
     // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
@@ -1464,15 +1485,16 @@ ArmyId ArmyZSet::insert(ArmyZE const& value) {
         // logger << "Try " << pos << " of " << size_ << "\n" << flush;
         ArmyId i = values[pos];
         if (i == 0) {
+            stats.armyset_probe(offset);
             ArmyId id = used1_++;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
             armies_[id] = value;
-            stats_update(offset);
             return id;
         }
         if (armies_[i] == value) {
-            stats_update(offset);
+            stats.armyset_probe(offset);
+            stats.armyset_try();
             // cout << "Found duplicate " << hash << "\n";
             return i;
         }

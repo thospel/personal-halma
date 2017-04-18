@@ -11,6 +11,9 @@ bool prune_slide = false;
 bool prune_jump  = false;
 bool example = false;
 
+bool STATISTICS = false;
+bool HASH_STATISTICS = false;
+
 string HOSTNAME;
 // 0 means let C++ decide
 uint nr_threads = 0;
@@ -193,18 +196,6 @@ ArmyPair::ArmyPair(ArmyZ const& army) {
         symmetric_[i] = p.symmetric();
     }
     sort(symmetric_.begin(), symmetric_.end());
-}
-
-void SetStatistics::show_stats(ostream& os) const {
-    if (!SET_STATISTICS) return;
-    if (hits_ == 0 && misses_ == 0) {
-        os << "Not used\n";
-        return;
-    }
-    os << "misses: " << misses_ << " (" << 100. * misses_ / (hits_+misses_) << "%)\n";
-    os << "hits:   " << hits_ << " (" << 100. * hits_ / (hits_+misses_) << "%)\n";
-    if (hits_)
-        os << "Average retries: " << 1. * tries_ / hits_ << "\n";
 }
 
 Move::Move(ArmyZ const& army_from, ArmyZ const& army_to): from{-1,-1}, to{-1, -1} {
@@ -844,7 +835,6 @@ void ArmyZSet::clear(ArmyId size) {
     mask_ = size-1;
     limit_ = new_limit;
     used1_ = 1;
-    stats_reset();
 }
 
 ArmyId ArmyZSet::find(ArmyZ const& army) const {
@@ -916,18 +906,20 @@ void ArmyZSet::resize() {
 }
 
 bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red) {
+    Statistics dummy_stats;
+
     ArmyZ const& blue = board.blue();
     auto blue_symmetric = blue.symmetric();
     int blue_symmetry = cmp(blue, blue_symmetric);
-    auto blue_id = armies_blue.insert(blue_symmetry >= 0 ? blue : blue_symmetric);
+    auto blue_id = armies_blue.insert(blue_symmetry >= 0 ? blue : blue_symmetric, dummy_stats);
 
     ArmyZ const& red  = board.red();
     auto red_symmetric = red.symmetric();
     int red_symmetry = cmp(red, red_symmetric);
-    auto red_id = armies_red.insert(red_symmetry >= 0 ? red : red_symmetric);
+    auto red_id = armies_red.insert(red_symmetry >= 0 ? red : red_symmetric, dummy_stats);
 
     int symmetry = blue_symmetry * red_symmetry;
-    return insert(blue_id, red_id, symmetry);
+    return insert(blue_id, red_id, symmetry, dummy_stats);
 }
 
 bool BoardSet::find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet const& armies_red) const {
@@ -1030,6 +1022,10 @@ void Board::do_move(Move const& move_) {
         return;
     }
     throw(logic_error("Move not found"));
+}
+
+string const Svg::solution_file(uint nr_moves) {
+    return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + "_" + to_string(nr_moves) + ".html";
 }
 
 void Svg::html_header(uint nr_moves) {
@@ -1139,6 +1135,29 @@ void Svg::html(FullMoves const& full_moves) {
         moves_string.pop_back();
         moves_string.pop_back();
         out_ << "    <p>\n" << moves_string << "\n    </p>\n";
+    }
+}
+
+void Svg::write(vector<Board> const& boards) {
+    html_header(boards.size()-1);
+    game(boards);
+    html_footer();
+    string const svg_file = solution_file(boards.size()-1);
+    string const svg_file_tmp = svg_file + "." + HOSTNAME + "." + to_string(getpid()) + ".new";
+    ofstream svg_fh;
+    svg_fh.exceptions(ofstream::failbit | ofstream::badbit);
+    try {
+        svg_fh.open(svg_file_tmp, ofstream::out);
+        svg_fh << *this;
+        svg_fh.close();
+        int rc = rename(svg_file_tmp.c_str(), svg_file.c_str());
+        if (rc)
+            throw(system_error(errno, system_category(),
+                               "Could not rename '" + svg_file_tmp + "' to '" +
+                               svg_file + "'"));
+    } catch(exception& e) {
+        unlink(svg_file_tmp.c_str());
+        throw;
     }
 }
 
@@ -1523,26 +1542,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         cout << "Move " << i << "\n" << boards[i];
 
     Svg svg;
-    svg.html_header(boards.size()-1);
-    svg.game(boards);
-    svg.html_footer();
-    string const svg_file = Svg::solution_file();
-    string const svg_file_tmp = svg_file + "." + HOSTNAME + "." + to_string(getpid()) + ".new";
-    ofstream svg_fh;
-    svg_fh.exceptions(ofstream::failbit | ofstream::badbit);
-    try {
-        svg_fh.open(svg_file_tmp, ofstream::out);
-        svg_fh << svg;
-        svg_fh.close();
-        int rc = rename(svg_file_tmp.c_str(), svg_file.c_str());
-        if (rc)
-            throw(system_error(errno, system_category(),
-                               "Could not rename '" + svg_file_tmp + "' to '" +
-                               svg_file + "'"));
-    } catch(exception& e) {
-        unlink(svg_file_tmp.c_str());
-        throw;
-    }
+    svg.write(boards);
 }
 
 void system_properties() {
@@ -1561,7 +1561,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sjper", argv);
+    GetOpt options("b:B:t:sHSjper", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -1570,6 +1570,8 @@ void my_main(int argc, char const* const* argv) {
             case 'B': balance_delay = atoi(options.arg()); break;
             case 'p': replay = true; break;
             case 's': prune_slide = true; break;
+            case 'H': HASH_STATISTICS  = true; break;
+            case 'S': STATISTICS  = true; break;
             case 'j': prune_jump  = true; break;
             case 'e': example     = true; break;
             case 't':
