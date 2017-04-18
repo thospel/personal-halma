@@ -1277,7 +1277,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
             red_id = boards_to.solution_id();
             red_army = boards_to.solution();
             if (nr_moves > 1)
-                cout << "Unexpected early solution. Bailing out\n";
+                cout << "Unexpected early solution. Bailing out" << endl;
             ++i;
             break;
         }
@@ -1347,7 +1347,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
         if (example)
-            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
+            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1) << flush;
     }
     auto stop_solve = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
