@@ -335,8 +335,7 @@ void BoardSubSet::convert_red() {
     for (ArmyId const& red_value: *this)
         if (red_value) *new_armies++ = red_value;
     delete [] armies_;
-    armies_ = new_armies - sz;
-    left_ = sz;
+    *this = BoardSubSetRed{new_armies - sz, sz};
 }
 
 ArmyId BoardSubSet::example(ArmyId& symmetry) const {
@@ -362,6 +361,14 @@ void BoardSubSet::print(ostream& os) const {
             os << " x";
         }
     }
+}
+
+ArmyId BoardSubSetRed::example(ArmyId& symmetry) const {
+    if (empty()) throw(logic_error("No red value in BoardSubSetRed"));
+
+    ArmyId red_id;
+    symmetry = split(armies_[0], red_id);
+    return red_id;
 }
 
 BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId allocate) {
@@ -944,9 +951,15 @@ Board BoardSet::example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_a
     if (empty()) throw(logic_error("No board in BoardSet"));
     for (ArmyId blue_id = from(); blue_id <= back_id(); ++blue_id) {
         auto const& subset = at(blue_id);
-        if (subset.empty()) continue;
-        ArmyId symmetry;
-        ArmyId red_id = subset.example(symmetry);
+        auto const& subset_red = subset.red();
+        ArmyId red_id, symmetry;
+        if (subset_red) {
+            if (subset_red->empty()) continue;
+            red_id = subset_red->example(symmetry);
+        } else {
+            if (subset.empty()) continue;
+            red_id = subset.example(symmetry);
+        }
         ArmyZSet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
         ArmyZSet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
         ArmyZ const& blue = blue_armies.at(blue_id);

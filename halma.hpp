@@ -629,6 +629,7 @@ using ArmyId = uint32_t;
 STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
 STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
+STATIC const ArmyId ARMY_MAX  = std::numeric_limits<ArmyId>::max();
 
 class ArmyZSet: public SetStatistics {
   public:
@@ -732,6 +733,7 @@ class Board {
     }
 };
 
+class BoardSubSetRed;
 class BoardSubSet {
   public:
     static ArmyId const INITIAL_SIZE = 4;
@@ -740,6 +742,7 @@ class BoardSubSet {
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
     bool empty() const PURE { return size() == 0; }
+    inline BoardSubSetRed const* red() const PURE;
     void zero() {
         armies_ = nullptr;
         mask_ = 0;
@@ -830,10 +833,17 @@ class BoardSubSetRed: public BoardSubSet {
     inline BoardSubSetRed(ArmyId* list, ArmyId size) {
         armies_ = list;
         left_   = size;
+        mask_   = ARMY_MAX;
     }
     ArmyId size()       const PURE { return left_; }
     ArmyId const* end() const PURE { return &armies_[size()]; }
+    ArmyId example(ArmyId& symmetry) const;
 };
+
+BoardSubSetRed const* BoardSubSet::red() const {
+    if (mask_ != ARMY_MAX) return nullptr;
+    return static_cast<BoardSubSetRed const*>(this);
+}
 
 class BoardSubSetRedBuilder: public BoardSubSet {
   public:
@@ -862,11 +872,11 @@ class BoardSubSetRedBuilder: public BoardSubSet {
         ArmyId* old_list = army_list_ - sz;
         army_list_ = old_list;
         std::copy(&old_list[0], &old_list[sz], new_list);
-        
+
         mask_ = allocated-1;
         left_ = capacity();
         fill(begin(), end(), 0);
-        
+
         return BoardSubSetRed{new_list, sz};
     }
 

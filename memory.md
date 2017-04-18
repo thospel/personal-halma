@@ -81,42 +81,44 @@ Minimum possible number of moves: 27
      0 s, set  2 done,         0 boards /        0 armies       0 (  239 MB)
    220 s, no solution
 
-           set 30 done (nas)
-     0 s, set 29 done,         7 boards /        7 armies       7 (   25 MB)
-     0 s, set 28 done,        98 boards /        7 armies      14 (   25 MB)
-     0 s, set 27 done,      1253 boards /       93 armies     179 (   25 MB)
-     0 s, set 26 done,     16045 boards /       93 armies     172 (   25 MB)
-     0 s, set 25 done,    149422 boards /      842 armies    1606 (   26 MB)
-     0 s, set 24 done,   1233504 boards /      832 armies    1482 (   37 MB)
-     6 s, set 23 done,   7679391 boards /     6541 armies    9230 (   97 MB)
-    20 s, set 22 done,  25966198 boards /     4175 armies    6219 (  224 MB)
-    90 s, set 21 done, 100060722 boards /    44667 armies   23966 (  996 MB)
-    47 s, set 20 done,  46934896 boards /    10441 armies    4495 (  996 MB)
-   147 s, set 19 done, 156542548 boards /   403167 armies   14993 ( 1374 MB)
-    56 s, set 18 done,  33376348 boards /    39503 armies     844 ( 1374 MB)
-   451 s, set 17 done, 551934766 boards /  2611785 armies   13971 ( 4647 MB)
-   243 s, set 16 done,  94456798 boards /    84201 armies    1121 ( 4647 MB)
-  1368 s, set 15 done,1494972624 boards / 11295958 armies   17754 (12675 MB)
-   702 s, set 14 done, 127548926 boards /   109149 armies    1168 (12675 MB)
-  1874 s, set 13 done,2099834887 boards / 31355903 armies   19238 (18712 MB)
-   999 s, set 12 done, 129511449 boards /    90696 armies    1427 (18712 MB)
-  2175 s, set 11 done,2106810183 boards / 59311136 armies   23229 (22546 MB)
-  1019 s, set 10 done,  73079869 boards /    43017 armies    1698 (22546 MB)
-  1342 s, set  9 done,1177225383 boards / 76596391 armies   27366 (24425 MB)
-   547 s, set  8 done,  15651077 boards /    15278 armies    1024 (24425 MB)
-   295 s, set  7 done, 276741441 boards / 49292701 armies   18113 (24425 MB)
-   123 s, set  6 done,   2345680 boards /     3706 armies     632 (24425 MB)
-    42 s, set  5 done,  52407135 boards / 19088702 armies   14141 (24425 MB)
-    23 s, set  4 done,    389690 boards /      475 armies     820 (24425 MB)
-     7 s, set  3 done,  10017392 boards /  5831726 armies   21089 (24425 MB)
-     4 s, set  2 done,     70716 boards /       30 armies    2357 (24425 MB)
-     0 s, set  1 done,   1533630 boards /  1305129 armies   51121 (24425 MB)
+Commit: 2c690ea7348c8dac448bc9a3c82c165b7aef5d16
+Minimum possible number of moves: 27
+          set 30 done (hp, no heuristics)
+     0 s, set 29 done,         7 boards /        7 armies       7 (   159 MB)
+     0 s, set 28 done,        98 boards /        7 armies      14 (   159 MB)
+     0 s, set 27 done,      1253 boards /       93 armies     179 (   226 MB)
+     0 s, set 26 done,     16045 boards /       93 armies     172 (   226 MB)
+     0 s, set 25 done,    149422 boards /      842 armies    1606 (   226 MB)
+     0 s, set 24 done,   1233504 boards /      832 armies    1482 (   229 MB)
+     4 s, set 23 done,   7679391 boards /     6541 armies    9230 (   234 MB)
+    17 s, set 22 done,  25966198 boards /     4175 armies    6219 (   274 MB)
+    58 s, set 21 done, 100060722 boards /    44667 armies   23966 (   531 MB)
+    56 s, set 20 done,  46934896 boards /    10441 armies    4495 (   531 MB)
+    73 s, set 19 done,  28605209 boards /   195539 armies    2739 (   523 MB)
+    19 s, set 18 done,  33376348 boards /    39503 armies     844 (   523 MB)
+   143 s, set 17 done, 121183418 boards /  1057870 armies    3067 (   578 MB)
+    75 s, set 16 done,  94456798 boards /    84201 armies    1121 (   973 MB)
+   358 s, set 15 done, 229083862 boards /  3780086 armies    2720 (  1183 MB)
+   125 s, set 14 done, 127548926 boards /   109149 armies    1168 (  1390 MB)
+   426 s, set 13 done, 224721814 boards /  7339796 armies    2058 (  1641 MB)
+   111 s, set 12 done, 129511449 boards /    90696 armies    1427 (  1637 MB)
+   352 s, set 11 done, 122655397 boards /  6986507 armies    1352 (  1754 MB)
+    53 s, set 10 done,  73079869 boards /    43017 armies    1698 (  1502 MB)
+   159 s, set  9 done,  28149344 boards /  3430741 armies     654 (  1494 MB)
+     9 s, set  8 done,  15651077 boards /    15278 armies    1024 (  1017 MB)
+    27 s, set  7 done,   3214318 boards /  1014357 armies     210 (   883 MB)
+     1 s, set  6 done,   2345680 boards /     3706 armies     632 (   757 MB)
+     3 s, set  5 done,    528660 boards /   256056 armies     142 (   690 MB)
+     0 s, set  4 done,    389690 boards /      475 armies     820 (   448 MB)
+     0 s, set  3 done,    100372 boards /    60583 armies     211 (   381 MB)
+     0 s, set  2 done,     70716 boards /       30 armies    2357 (   255 MB)
+     0 s, set  1 done,     18457 boards /    11692 armies     615 (   255 MB)
 ==================================
 +------------------+
 |. . . . . . . . . |
 |. X . . . . . . . |
 |. . . . . . . . . |
-|. X . X . . . . . |
+|. X . . . . X . . |
 |. . X . . X . . . |
 |. . . X . . X X O |
 |. . . . X . . O O |
@@ -124,41 +126,42 @@ Minimum possible number of moves: 27
 |. . . . . O O O O |
 +------------------+
 Solution!
-     0 s, set  0 done,     11364 boards /        1 armies   11364 (24425 MB)
- 11595 s, solved
+     0 s, set  0 done,     11364 boards /        1 armies   11364 (   255 MB)
+  2079 s, solved
 Start backtracking
           set 30 done
-     0 s, set 29 done,         7 boards /        7 armies       7 (24425 MB)
-     0 s, set 28 done,        98 boards /        7 armies      14 (24425 MB)
-     0 s, set 27 done,      1253 boards /       93 armies     179 (24425 MB)
-     0 s, set 26 done,     16045 boards /       93 armies     172 (24425 MB)
-     0 s, set 25 done,    149422 boards /      842 armies    1606 (24425 MB)
-     0 s, set 24 done,   1233504 boards /      832 armies    1482 (24425 MB)
-     6 s, set 23 done,   7679391 boards /     6541 armies    9230 (24425 MB)
-    21 s, set 22 done,  25966198 boards /     4175 armies    6219 (24425 MB)
-    88 s, set 21 done, 100060722 boards /    44667 armies   23966 (24425 MB)
-    48 s, set 20 done,  46934896 boards /    10441 armies    4495 (24425 MB)
-   123 s, set 19 done, 141959470 boards /   356635 armies   13596 (24425 MB)
-    51 s, set 18 done,  31109855 boards /    38496 armies     808 (24425 MB)
-   266 s, set 17 done, 362540228 boards /  1620443 armies    9417 (24425 MB)
-   162 s, set 16 done,  67482635 boards /    77935 armies     865 (24425 MB)
-   400 s, set 15 done, 456976611 boards /  3023730 armies    5863 (24425 MB)
-   224 s, set 14 done,  57188576 boards /    93235 armies     613 (24425 MB)
-   201 s, set 13 done, 227695316 boards /  2362040 armies    2442 (24434 MB)
-   117 s, set 12 done,  28036865 boards /    64869 armies     432 (24434 MB)
-    43 s, set 11 done,  51583398 boards /   847850 armies     795 (24434 MB)
-    27 s, set 10 done,   4831327 boards /    26066 armies     185 (24434 MB)
-     4 s, set  9 done,   5500014 boards /   162865 armies     211 (24434 MB)
-     2 s, set  8 done,    406066 boards /     6953 armies      58 (24434 MB)
-     0 s, set  7 done,    426825 boards /    22724 armies      61 (24434 MB)
-     0 s, set  6 done,     30646 boards /     1326 armies      23 (24434 MB)
-     0 s, set  5 done,     20246 boards /     1923 armies      15 (24434 MB)
-     0 s, set  4 done,      2258 boards /      176 armies      12 (24434 MB)
-     0 s, set  3 done,       669 boards /       83 armies       3 (24434 MB)
-     0 s, set  2 done,        60 boards /       15 armies       4 (24434 MB)
-     0 s, set  1 done,         7 boards /        1 armies       0 (24434 MB)
-     0 s, set  0 done,         1 boards /        1 armies       1 (24434 MB)
-  1793 s, backtrack tables built
+     0 s, set 29 done,         7 boards /        7 armies       7 (   255 MB)
+     0 s, set 28 done,        98 boards /        7 armies      14 (   255 MB)
+     0 s, set 27 done,      1253 boards /       93 armies     179 (   255 MB)
+     0 s, set 26 done,     16045 boards /       93 armies     172 (   255 MB)
+     0 s, set 25 done,    149422 boards /      842 armies    1606 (   255 MB)
+     0 s, set 24 done,   1233504 boards /      832 armies    1482 (   255 MB)
+     4 s, set 23 done,   7679391 boards /     6541 armies    9230 (   255 MB)
+    16 s, set 22 done,  25966198 boards /     4175 armies    6219 (   493 MB)
+    63 s, set 21 done, 100060722 boards /    44667 armies   23966 (  1331 MB)
+    55 s, set 20 done,  46934896 boards /    10441 armies    4495 (  1618 MB)
+    72 s, set 19 done,  27482913 boards /   184489 armies    2632 (  1871 MB)
+    19 s, set 18 done,  31967983 boards /    39328 armies     812 (  2142 MB)
+   112 s, set 17 done,  95434193 boards /   784957 armies    2426 (  3008 MB)
+    58 s, set 16 done,  72355140 boards /    79022 armies     915 (  3562 MB)
+   298 s, set 15 done, 104318128 boards /  1378380 armies    1320 (  4449 MB)
+    78 s, set 14 done,  59783989 boards /    93902 armies     636 (  4980 MB)
+   137 s, set 13 done,  46937679 boards /   847025 armies     499 (  5410 MB)
+    30 s, set 12 done,  28029037 boards /    63798 armies     439 (  5670 MB)
+    39 s, set 11 done,   8792995 boards /   244598 armies     137 (  5758 MB)
+     5 s, set 10 done,   4772088 boards /    25701 armies     185 (  5768 MB)
+     5 s, set  9 done,    700336 boards /    46484 armies      27 (  5770 MB)
+     0 s, set  8 done,    399386 boards /     6763 armies      59 (  5770 MB)
+     0 s, set  7 done,     38907 boards /     5852 armies       5 (  5771 MB)
+     0 s, set  6 done,     29949 boards /     1252 armies      23 (  5771 MB)
+     0 s, set  5 done,      2890 boards /      591 armies       2 (  5771 MB)
+     0 s, set  4 done,      2228 boards /      170 armies      13 (  5771 MB)
+     0 s, set  3 done,        59 boards /       23 armies       0 (  5771 MB)
+     0 s, set  2 done,        40 boards /       13 armies       3 (  5771 MB)
+     0 s, set  1 done,         2 boards /        1 armies       0 (  5771 MB)
+     0 s, set  0 done,         1 boards /        1 armies       1 (  5771 MB)
+  1000 s, backtrack tables built
+Move 0
 +------------------+
 |O O O O . . . . . |
 |O O O . . . . . . |
@@ -170,6 +173,7 @@ Start backtracking
 |. . . . . . X X X |
 |. . . . . X X X X |
 +------------------+
+Move 1
 +------------------+
 |O O O O . . . . . |
 |O O O . . . . . . |
@@ -181,6 +185,7 @@ Start backtracking
 |. . . . . X X X X |
 |. . . . . . X X X |
 +------------------+
+Move 2
 +------------------+
 |O O O O . . . . . |
 |O O O . . . . . . |
@@ -192,6 +197,7 @@ Start backtracking
 |. . . . . X X X X |
 |. . . . . . X X X |
 +------------------+
+Move 3
 +------------------+
 |O O O O . . . . . |
 |O O O . . . . . . |
@@ -199,10 +205,11 @@ Start backtracking
 |. O . . . . . . . |
 |. . . . . . . . . |
 |. . . . . . . . X |
-|. . . . . X . X X |
+|. . . . . . X X . |
 |. . . . . X X X X |
-|. . . . . . X . X |
+|. . . . . . X X X |
 +------------------+
+Move 4
 +------------------+
 |O O O O . . . . . |
 |. O O . . . . . . |
@@ -210,10 +217,11 @@ Start backtracking
 |. O O . . . . . . |
 |. . . . . . . . . |
 |. . . . . . . . X |
-|. . . . . X . X X |
+|. . . . . . X X . |
 |. . . . . X X X X |
-|. . . . . . X . X |
+|. . . . . . X X X |
 +------------------+
+Move 5
 +------------------+
 |O O O O . . . . . |
 |. O O . . . . . . |
@@ -221,10 +229,11 @@ Start backtracking
 |. O O . . . . . . |
 |. . . . . . . . . |
 |. . . . . . X . X |
-|. . . . . X . X X |
-|. . . . . X . X X |
-|. . . . . . X . X |
+|. . . . . . . X . |
+|. . . . . X X X X |
+|. . . . . . X X X |
 +------------------+
+Move 6
 +------------------+
 |O O O O . . . . . |
 |. O O . . . . . . |
@@ -232,98 +241,107 @@ Start backtracking
 |. O O . . . . . . |
 |. . . . . . . . . |
 |. . . . . . X . X |
-|. . . . . X . X X |
-|. . . . . X . X X |
-|. . . . . . X . X |
+|. . . . . . . X . |
+|. . . . . X X X X |
+|. . . . . . X X X |
 +------------------+
-+------------------+
-|O O O O . . . . . |
-|. O O . . . . . . |
-|O . . O . . . . . |
-|. O O . . . . . . |
-|. . . . . . X . . |
-|. . . . . . X . X |
-|. . . . . X . X . |
-|. . . . . X . X X |
-|. . . . . . X . X |
-+------------------+
+Move 7
 +------------------+
 |O O O O . . . . . |
 |. O O . . . . . . |
 |O . . O . . . . . |
-|. . O O . . . . . |
-|. . . . . . X . . |
-|. . . . . . X . X |
-|. . . . . X . X . |
-|. . . . . X . X X |
-|. . . . . . X . X |
+|. O O . . . . . . |
+|. . . . . . . . . |
+|. . . . . X X . X |
+|. . . . . . . X . |
+|. . . . . X X . X |
+|. . . . . . X X X |
 +------------------+
+Move 8
 +------------------+
 |O O O O . . . . . |
 |. O O . . . . . . |
 |O . . O . . . . . |
 |. . O O . . . . . |
-|. . . . . X . . . |
-|. . . . . . X . X |
-|. . . . . X . X . |
-|. . . . . X . X X |
-|. . . . . . X . X |
+|. . . . . . . . . |
+|. . . . . X X . X |
+|. . . . . . . X . |
+|. . . . . X X . X |
+|. . . . . . X X X |
 +------------------+
+Move 9
++------------------+
+|O O O O . . . . . |
+|. O O . . . . . . |
+|O . . O . . . . . |
+|. . O O . . . . . |
+|. . . . . . . . . |
+|. . . . . X X . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
+|. . . . . . X X . |
++------------------+
+Move 10
++------------------+
+|O O O O . . . . . |
+|. O O . . . . . . |
+|O . . O . . . . . |
+|. . O . O . . . . |
+|. . . . . . . . . |
+|. . . . . X X . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
+|. . . . . . X X . |
++------------------+
+Move 11
 +------------------+
 |O O O O . . . . . |
 |. O O . . . . . . |
 |O . . O . . . . . |
 |. . O . O . . . . |
 |. . . . . X . . . |
-|. . . . . . X . X |
-|. . . . . X . X . |
-|. . . . . X . X X |
-|. . . . . . X . X |
-+------------------+
-+------------------+
-|O O O O . . . . . |
-|. O O . . . . . . |
-|O . . O . . . . . |
-|. . O . O . . . . |
-|. . X . . X . . . |
-|. . . . . . X . X |
-|. . . . . X . X . |
-|. . . . . X . X X |
+|. . . . . X X . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
 |. . . . . . X . . |
 +------------------+
+Move 12
 +------------------+
 |O O . O . . . . . |
 |. O O . . . . . . |
 |O . . O . . . . . |
 |. . O . O . . . . |
-|. . X . . X . . . |
-|. . . . . . X . X |
-|. . . . . X . X . |
-|. . . . . X . X X |
+|. . . . . X . . . |
+|. . . . . X X . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
 |. . . . . . X . O |
 +------------------+
+Move 13
 +------------------+
 |O O . O . . . . . |
 |. O O . . . . . . |
 |O . . O . . . . . |
 |. . O . O . . . . |
 |. . X . . X . . . |
-|. . . . . . X . X |
-|. . . . X X . X . |
-|. . . . . X . X X |
+|. . . . . X X . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
 |. . . . . . . . O |
 +------------------+
+Move 14
 +------------------+
 |O O . O . . . . . |
 |. O O . . . . . . |
 |. . . O . . . . . |
 |. . O . O . . . . |
 |. . X . . X . . . |
-|. . . . . . X . X |
-|. . . . X X . X . |
-|. . . . . X . X X |
+|. . . . . X X . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
 |. . . . . . O . O |
 +------------------+
+Move 15
 +------------------+
 |O O . O . . . . . |
 |. O O . . . . . . |
@@ -331,10 +349,11 @@ Start backtracking
 |. X O . O . . . . |
 |. . X . . X . . . |
 |. . . . . . X . X |
-|. . . . X X . X . |
-|. . . . . X . . X |
+|. . . . X . . X . |
+|. . . . . X X . X |
 |. . . . . . O . O |
 +------------------+
+Move 16
 +------------------+
 |O O . O . . . . . |
 |. . O . . . . . . |
@@ -342,21 +361,23 @@ Start backtracking
 |. X O . O . . . . |
 |. . X . . X . . . |
 |. . . . . . X . X |
-|. . . . X X . X . |
+|. . . . X . . X . |
+|. . . . . X X O X |
+|. . . . . . O . O |
++------------------+
+Move 17
++------------------+
+|O O . O . . . . . |
+|. . O . . . . . . |
+|. . . O . . . . . |
+|. X O . O . . . . |
+|. . X . . X . . . |
+|. . . . X . X . X |
+|. . . . X . . X . |
 |. . . . . X . O X |
 |. . . . . . O . O |
 +------------------+
-+------------------+
-|O O . O . . . . . |
-|. . O . . . . . . |
-|. . . O . . . . . |
-|. X O . O . . . . |
-|. . X . . X . . . |
-|. . . . X . X . X |
-|. . . . X X . X . |
-|. . . . . X . O . |
-|. . . . . . O . O |
-+------------------+
+Move 18
 +------------------+
 |. O . O . . . . . |
 |. . O . . . . . . |
@@ -364,10 +385,11 @@ Start backtracking
 |. X O . O . . . . |
 |. . X . . X . . . |
 |. . . . X . X . X |
-|. . . . X X . X O |
-|. . . . . X . O . |
+|. . . . X . . X O |
+|. . . . . X . O X |
 |. . . . . . O . O |
 +------------------+
+Move 19
 +------------------+
 |. O . O . . . . . |
 |. . O . . . . . . |
@@ -375,125 +397,136 @@ Start backtracking
 |. X O . O . . . . |
 |. . X . . X . . . |
 |. . . X . . X . X |
-|. . . . X X . X O |
-|. . . . . X . O . |
-|. . . . . . O . O |
-+------------------+
-+------------------+
-|. O . O . . . . . |
-|. . O . . . . . . |
-|. . . O . . . . . |
-|. X . . O . . . . |
-|. . X . . X . . . |
-|. . . X . . X . X |
-|. . . . X X . X O |
-|. . . . . X . O O |
-|. . . . . . O . O |
-+------------------+
-+------------------+
-|. O . O . . . . . |
-|. . O . . . . . . |
-|. . . O . . . . . |
-|. X . . O . . . . |
-|. . X . . X . . . |
-|. . . X . X X . X |
 |. . . . X . . X O |
-|. . . . . X . O O |
+|. . . . . X . O X |
 |. . . . . . O . O |
 +------------------+
+Move 20
 +------------------+
 |. O . . . . . . . |
 |. . O . . . . . . |
 |. . . O . . . . . |
-|. X . . O . . . . |
+|. X O . O . . . . |
 |. . X . . X . . . |
-|. . . X . X X . X |
+|. . . X . . X . X |
 |. . . . X . . X O |
-|. . . . . X . O O |
+|. . . . . X . O X |
 |. . . . . . O O O |
 +------------------+
+Move 21
 +------------------+
 |. O . . . . . . . |
 |. . O . . . . . . |
 |. . . O . . . . . |
-|. X . X O . . . . |
-|. . X . . X . . . |
-|. . . X . . X . X |
-|. . . . X . . X O |
-|. . . . . X . O O |
-|. . . . . . O O O |
-+------------------+
-+------------------+
-|. O . . . . . . . |
-|. . O . . . . . . |
-|. . . . . . . . . |
-|. X . X O . . . . |
-|. . X . . X . . . |
-|. . . X . . X . X |
-|. . . . X . . X O |
-|. . . . . X . O O |
-|. . . . . O O O O |
-+------------------+
-+------------------+
-|. O . . . . . . . |
-|. . O . . . . . . |
-|. . . . . . . . . |
-|. X . X O . . . . |
+|. X O . O . . . . |
 |. . X . . X . . . |
 |. . . X . . X X . |
 |. . . . X . . X O |
-|. . . . . X . O O |
-|. . . . . O O O O |
+|. . . . . X . O X |
+|. . . . . . O O O |
 +------------------+
+Move 22
 +------------------+
 |. O . . . . . . . |
 |. . O . . . . . . |
 |. . . . . . . . . |
-|. X . X . . . . . |
+|. X O . O . . . . |
+|. . X . . X . . . |
+|. . . X . . X X . |
+|. . . . X . . X O |
+|. . . . . X . O X |
+|. . . . . O O O O |
++------------------+
+Move 23
++------------------+
+|. O . . . . . . . |
+|. . O . . . . . . |
+|. . . . . . . . . |
+|. X O . O . X . . |
+|. . X . . X . . . |
+|. . . X . . X X . |
+|. . . . X . . X O |
+|. . . . . X . O . |
+|. . . . . O O O O |
++------------------+
+Move 24
++------------------+
+|. O . . . . . . . |
+|. . O . . . . . . |
+|. . . . . . . . . |
+|. X . . O . X . . |
 |. . X . . X . . . |
 |. . . X . . X X O |
 |. . . . X . . X O |
+|. . . . . X . O . |
+|. . . . . O O O O |
++------------------+
+Move 25
++------------------+
+|. O . . . . . . . |
+|. . O . . . . . . |
+|. . . . . . . . . |
+|. X . . O . X . . |
+|. . X X . X . . . |
+|. . . X . . X X O |
+|. . . . X . . . O |
+|. . . . . X . O . |
+|. . . . . O O O O |
++------------------+
+Move 26
++------------------+
+|. O . . . . . . . |
+|. . O . . . . . . |
+|. . . . . . . . . |
+|. X . . . . X . . |
+|. . X X . X . . . |
+|. . . X . . X X O |
+|. . . . X . . . O |
 |. . . . . X . O O |
 |. . . . . O O O O |
 +------------------+
+Move 27
 +------------------+
 |. O . . . . . . . |
 |. . O . . . . . . |
 |. X . . . . . . . |
-|. X . X . . . . . |
+|. X . . . . X . . |
 |. . X . . X . . . |
 |. . . X . . X X O |
 |. . . . X . . . O |
 |. . . . . X . O O |
 |. . . . . O O O O |
 +------------------+
+Move 28
 +------------------+
 |. O . . . . . . . |
 |. . . . . . . . . |
 |. X . . . . . . . |
-|. X . X . . . . . |
+|. X . . . . X . . |
 |. . X . . X . . . |
 |. . . X . . X X O |
 |. . . . X . . . O |
 |. . . . . X O O O |
 |. . . . . O O O O |
 +------------------+
+Move 29
 +------------------+
 |. O . . . . . . . |
 |. X . . . . . . . |
 |. . . . . . . . . |
-|. X . X . . . . . |
+|. X . . . . X . . |
 |. . X . . X . . . |
 |. . . X . . X X O |
 |. . . . X . . . O |
 |. . . . . X O O O |
 |. . . . . O O O O |
 +------------------+
+Move 30
 +------------------+
 |. . . . . . . . . |
 |. X . . . . . . . |
 |. . . . . . . . . |
-|. X . X . . . . . |
+|. X . . . . X . . |
 |. . X . . X . . . |
 |. . . X . . X X O |
 |. . . . X . . O O |
