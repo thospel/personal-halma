@@ -198,6 +198,61 @@ ArmyPair::ArmyPair(ArmyZ const& army) {
     sort(symmetric_.begin(), symmetric_.end());
 }
 
+void StatisticsE::print(ostream& os) const {
+    if (STATISTICS) {
+        os << "\tArmy inserts:  ";
+        if (armyset_tries())
+            os << setw(3) << armyset_size()*100 / armyset_tries() << "%";
+        else
+            os << "----";
+        os << "\t" << armyset_size() << " / " << armyset_tries() << " " << "\n";
+
+        os << "\tBoard inserts: ";
+        if (boardset_tries())
+            os << setw(3) << boardset_size()*100 / boardset_tries() << "%";
+        else
+            os << "----";
+        os << "\t" << boardset_size() << " / " << boardset_tries() << " " << "\n";
+    }
+    if (HASH_STATISTICS) {
+        os << "\tArmy immediate:";
+        if (armyset_tries())
+            os << setw(3) << armyset_immediate() * 100 / armyset_tries() << "%";
+        else
+            os << "----";
+        os << "\t" << armyset_immediate() << " / " << armyset_tries() << " " << "\n";
+
+        os << "\tArmy probes:  ";
+        auto probes = armyset_tries();
+        // probes -= armyset_immediate();
+        if (probes)
+            os << setw(4) << 1 + armyset_probes() * 100 / probes / 100.;
+        else
+            os << "----";
+        os << "\t" << armyset_probes() << " / " << probes << " +1" << "\n";
+
+        os << "\tBoard immediate:";
+        if (boardset_tries())
+            os << setw(3) << boardset_immediate() * 100 / boardset_tries() << "%";
+        else
+            os << "----";
+        os << "\t" << boardset_immediate() << " / " << boardset_tries() << " " << "\n";
+
+        os << "\tBoard probes:  ";
+        probes = boardset_tries();
+        // probes -= boardset_immediate();
+        if (probes)
+            os << setw(4) << 1 + boardset_probes() * 100 / probes / 100.;
+        else
+            os << "----";
+        os << "\t" << boardset_probes() << " / " << probes << " +1" << "\n";
+    }
+
+    os << setw(6) << duration() << " s, set " << setw(2) << available_moves()-1 << " done," << setw(10) << boardset_size() << " boards /" << setw(9) << armyset_size() << " armies " << setw(7);
+    os << boardset_size()/(blue_armies_size() ? blue_armies_size() : 1);
+    os << " " << memory() << "\n";
+}
+
 Move::Move(ArmyZ const& army_from, ArmyZ const& army_to): from{-1,-1}, to{-1, -1} {
     ArmyZE const fromE{army_from};
     ArmyZE const toE  {army_to};
@@ -1031,6 +1086,14 @@ string const Svg::solution_file(uint nr_moves) {
 void Svg::html_header(uint nr_moves) {
     out_ <<
         "<html>\n"
+        "  <head>\n"
+        "    <style>\n"
+        "      .blue { color: blue; }\n"
+        "      .red  { color: red; }\n"
+        "      table,tr,td,th { border: 1px solid black; }\n"
+        "      .stats td { text-align: right; }\n"
+        "    </style>\n"
+        "  </head>\n"
         "  <body>\n"
         "   <h1>" << nr_moves << " moves</h1>\n";
 }
@@ -1060,7 +1123,7 @@ void Svg::footer() {
 
 void Svg::parameters(uint x, uint y, uint army, uint rule) {
     out_ <<
-        "    <table>\n"
+        "    <table class='parameters'>\n"
         "      <tr><th align='left'>X</th><td>" << x << "</td></tr>\n"
         "      <tr><th align='left'>Y</th><td>" << y << "</td></tr>\n"
         "      <tr><th align='left'>Army</th><td>" << army << "</td></tr>\n"
@@ -1101,7 +1164,7 @@ void Svg::move(FullMove const& move) {
     out_ << "' stroke='black' stroke-width='" << scale_/10 << "' fill='none' marker-end='url(#arrowhead)' />\n";
 }
 
-void Svg::game(vector<Board> const& boards) {
+void Svg::game(BoardList const& boards) {
     parameters(X, Y, ARMY, RULES);
     FullMoves full_moves;
     for (size_t i = 0; i < boards.size(); ++i) {
@@ -1120,15 +1183,15 @@ void Svg::game(vector<Board> const& boards) {
 
 void Svg::html(FullMoves const& full_moves) {
     int color_index = full_moves.size() % 2;
-    string color_font[] = {
-        "      <font color='" + font_color(RED ) + "'>",
-        "      <font color='" + font_color(BLUE) + "'>",
+    string const color_span[] = {
+        "      <span class='red'>",
+        "      <span class='blue'>",
     };
     string moves_string;
     for (auto const& full_move: full_moves) {
-        moves_string += color_font[color_index];
+        moves_string += color_span[color_index];
         moves_string += full_move.str();
-        moves_string += "</font>,\n";
+        moves_string += "</span>,\n";
         color_index = !color_index;
     }
     if (full_moves.size()) {
@@ -1138,9 +1201,40 @@ void Svg::html(FullMoves const& full_moves) {
     }
 }
 
-void Svg::write(vector<Board> const& boards) {
+void Svg::stats(string const& cls, StatisticsList const& stats_list) {
+    out_ <<
+        "    <table class='stats " << cls << "'>\n"
+        "      <tr>\n"
+        "        <th>Moves left</th>\n"
+        "        <th>Seconds</th>\n"
+        "        <th>Boards</th>\n"
+        "        <th>Armies</th>\n"
+        "        <th>Boards per blue army</th>\n"
+        "        <th>Memory</th>\n"
+        "      </tr>\n";
+    for (auto const& st: stats_list) {
+        out_ <<
+            "      <tr>\n"
+            "        <td class='" << st.css_color() << "'>" << st.available_moves() << "</td>\n"
+            "        <td>" << st.duration() << "</td>\n"
+            "        <td>" << st.boardset_size() << "</td>\n"
+            "        <td>" << st.armyset_size() << "</td>\n"
+            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n"
+            "        <td>" << st.memory() << "</td>\n"
+            "      </tr>\n";
+    }
+    out_ << "    </table>\n";
+}
+
+void Svg::write(BoardList const& boards,
+                StatisticsList const& stats_list_solve,
+                StatisticsList const& stats_list_backtrack) {
     html_header(boards.size()-1);
     game(boards);
+    out_ << "<h4>Solve</h4>\n";
+    stats("solve", stats_list_solve);
+    out_ << "<h4>Backtrack</h4>\n";
+    stats("backtrack", stats_list_backtrack);
     html_footer();
     string const svg_file = solution_file(boards.size()-1);
     string const svg_file_tmp = svg_file + "." + HOSTNAME + "." + to_string(getpid()) + ".new";
@@ -1233,11 +1327,10 @@ void play(bool print_moves=false) {
         ArmyZSet  army_set[3];
         board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
 
-        make_all_moves(board_set[0], board_set[1],
-                       army_set[0], army_set[1], army_set[2],
-                       nr_moves);
-
-        cout << "===============================\n";
+        auto stats = make_all_moves(board_set[0], board_set[1],
+                                    army_set[0], army_set[1], army_set[2],
+                                    nr_moves);
+        cout << stats << "===============================\n";
         --nr_moves;
         board.do_move(move);
         if (board_set[1].find(board, army_set[1], army_set[2], nr_moves)) {
@@ -1257,7 +1350,8 @@ void play(bool print_moves=false) {
     }
 }
 
-int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
+int solve(Board const& board, int nr_moves, ArmyZ& red_army,
+          StatisticsList& stats_list) {
     auto start_solve = chrono::steady_clock::now();
     array<BoardSet, 2> board_set;
     array<ArmyZSet, 3>  army_set;
@@ -1285,26 +1379,29 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
     for (i=0; nr_moves>0; --nr_moves, ++i) {
         auto& boards_from = board_set[ i    % 2];
         auto& boards_to   = board_set[(i+1) % 2];
-        boards_to.clear();
-        auto const& moving_armies   = army_set[ i    % 3];
+        auto& moving_armies   = army_set[ i    % 3];
         auto const& opponent_armies = army_set[(i+1) % 3];
         auto& moved_armies    = army_set[(i+2) % 3];
 
-        moved_armies.clear();
-        make_all_moves(boards_from, boards_to,
-                       moving_armies, opponent_armies, moved_armies,
-                       nr_moves);
+        stats_list.emplace_back
+            (make_all_moves(boards_from, boards_to,
+                            moving_armies, opponent_armies, moved_armies,
+                            nr_moves));
         moved_armies.drop_hash();
-        // if (VERBOSE) cout << moved_armies << boards_to;
+        moving_armies.clear();
+        boards_from.clear();
 
+        // if (VERBOSE) cout << moved_armies << boards_to;
+        auto const& stats = stats_list.back();
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
             auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
-            cout << setw(6) << duration << " s, no solution" << endl;
+            cout << stats << setw(6) << duration << " s, no solution" << endl;
             return -1;
         }
         if (example)
-            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1) << flush;
+            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
+        cout << stats << flush;
         if (boards_to.solution_id()) {
             red_id = boards_to.solution_id();
             red_army = boards_to.solution();
@@ -1323,7 +1420,9 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army) {
 }
 
 void backtrack(Board const& board, int nr_moves, int solution_moves,
-               ArmyZ const& last_red_army) {
+               ArmyZ const& last_red_army,
+               StatisticsList& stats_list,
+               BoardList& boards) {
     cout << "Start backtracking\n";
 
     auto start_solve = chrono::steady_clock::now();
@@ -1370,16 +1469,17 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies        = *army_set[i+2];
 
-        make_all_moves_backtrack
-            (boards_from, boards_to,
-             moving_armies, opponent_armies, moved_armies,
-             solution_moves, red_backtrack, red_backtrack_symmetric,
-             nr_moves);
-
+        stats_list.emplace_back
+            (make_all_moves_backtrack
+             (boards_from, boards_to,
+              moving_armies, opponent_armies, moved_armies,
+              solution_moves, red_backtrack, red_backtrack_symmetric,
+              nr_moves));
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
         if (example)
-            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1) << flush;
+            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
+        cout << stats_list.back() << flush;
     }
     auto stop_solve = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
@@ -1434,7 +1534,6 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     // It's probably more useful to generate a FullMove sequence
     // instead of a board sequence. Punt for now. --Note
 
-    vector<Board> boards;
     // Reserve nr_moves+1 boards
     size_t board_pos = board_set.size();
     boards.resize(board_pos);
@@ -1537,12 +1636,6 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         boards[--board_pos] = Board{blueZ, redZ};
     }
     // cout << "Final image:\n" << image;
-
-    for (size_t i = 0; i < boards.size(); ++i)
-        cout << "Move " << i << "\n" << boards[i];
-
-    Svg svg;
-    svg.write(boards);
 }
 
 void system_properties() {
@@ -1639,10 +1732,21 @@ void my_main(int argc, char const* const* argv) {
         return;
     }
 
+    StatisticsList stats_list_solve;
     ArmyZ red_army;
-    int solution_moves = solve(start_board, nr_moves, red_army);
+    int solution_moves =
+        solve(start_board, nr_moves, red_army, stats_list_solve);
     if (solution_moves < 0) return;
-    backtrack(start_board, nr_moves, solution_moves, red_army);
+    StatisticsList stats_list_backtrack;
+    BoardList boards;
+    backtrack(start_board, nr_moves, solution_moves, red_army,
+              stats_list_backtrack, boards);
+
+    for (size_t i = 0; i < boards.size(); ++i)
+        cout << "Move " << i << "\n" << boards[i];
+
+    Svg svg;
+    svg.write(boards, stats_list_solve, stats_list_backtrack);
 }
 
 int main(int argc, char const* const* argv) {

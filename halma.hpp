@@ -67,8 +67,8 @@ bool const BALANCE  = true;
 #define RED_BUILDER 1
 bool const LOCK_DEBUG = false;
 
-int const X = 12;
-int const Y = 12;
+int const X = 9;
+int const Y = 9;
 int const RULES = 6;
 int const ARMY = 10;
 
@@ -119,6 +119,8 @@ uint64_t hash64(uint64_t v) {
     // return murmur_mix(murmur_mix(murmur_mix(v)));
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
 }
+
+extern string get_memory(bool set_base_mem = false);
 
 class LogBuffer: public std::streambuf {
   public:
@@ -580,27 +582,42 @@ class Statistics {
     }
     void clear() {
         late_prunes_ = 0;
+
+        armyset_size_ = 0;
         armyset_tries_ = 0;
-        boardset_tries_ = 0;
         armyset_probes_ = 0;
         armyset_immediate_ = 0;
+
+        boardset_size_ = 0;
+        boardset_tries_ = 0;
         boardset_probes_ = 0;
         boardset_immediate_ = 0;
     }
-    inline void late_prune(Counter add = 1)   {
-        if (STATISTICS) late_prunes_ += add;
+    inline void late_prune()   {
+        if (!STATISTICS) return;
+        ++late_prunes_;
     }
-    inline void armyset_try(Counter add = 1) {
-        if (STATISTICS) armyset_tries_ += add;
+    inline void armyset_size(Counter size) {
+        armyset_tries_ += size;
+        armyset_size_ = size;
     }
-    inline void armyset_untry(Counter del = 1) {
-        if (STATISTICS) armyset_tries_ -= del;
+    inline void armyset_try() {
+        if (!STATISTICS) return;
+        ++armyset_tries_;
     }
-    inline void boardset_try(Counter add = 1) {
-        if (STATISTICS) boardset_tries_ += add;
+    inline void armyset_untry(Counter del) {
+        armyset_tries_ -= del;
     }
-    inline void boardset_untry(Counter del = 1) {
-        if (STATISTICS) boardset_tries_ -= del;
+    inline void boardset_size(Counter size) {
+        boardset_tries_ += size;
+        boardset_size_ = size;
+    }
+    inline void boardset_try() {
+        if (!STATISTICS) return;
+        ++boardset_tries_;
+    }
+    inline void boardset_untry(Counter del) {
+        boardset_tries_ -= del;
     }
     inline void armyset_probe(ArmyId probes) {
         if (!HASH_STATISTICS) return;
@@ -613,11 +630,13 @@ class Statistics {
         boardset_immediate_ += probes == 0;
     }
     Counter late_prunes() const PURE { return late_prunes_; }
+    Counter armyset_size() const PURE { return armyset_size_; }
     Counter armyset_tries() const PURE { return armyset_tries_; }
-    Counter boardset_tries() const PURE { return boardset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
-    Counter boardset_immediate() const PURE { return boardset_immediate_; }
     Counter armyset_probes() const PURE { return armyset_probes_; }
+    Counter boardset_size() const PURE { return boardset_size_; }
+    Counter boardset_tries() const PURE { return boardset_tries_; }
+    Counter boardset_immediate() const PURE { return boardset_immediate_; }
     Counter boardset_probes() const PURE { return boardset_probes_; }
 
     Statistics& operator+=(Statistics const& statistics) {
@@ -637,13 +656,50 @@ class Statistics {
 
   private:
     Counter late_prunes_;
+    Counter armyset_size_;
     Counter armyset_tries_;
-    Counter boardset_tries_;
     Counter armyset_probes_;
     Counter armyset_immediate_;
+    Counter boardset_size_;
+    Counter boardset_tries_;
     Counter boardset_probes_;
     Counter boardset_immediate_;
 };
+
+class StatisticsE: public Statistics {
+  public:
+    StatisticsE(int available_moves, Counter opponent_armies_size):
+        opponent_armies_size_{opponent_armies_size},
+        available_moves_{available_moves} {}
+    void start() { start_ = chrono::steady_clock::now(); }
+    void stop () {
+        stop_  = chrono::steady_clock::now();
+        memory_ = get_memory();
+    }
+    string const& memory() const PURE { return memory_; }
+    Sec::rep duration() const PURE {
+        return chrono::duration_cast<Sec>(stop_-start_).count();
+    }
+    int available_moves() const PURE { return available_moves_; }
+    bool blue_move() const PURE { return available_moves() & 1; }
+    string css_color() const PURE { return blue_move() ? "blue" : "red"; }
+    Counter blue_armies_size() const PURE {
+        return blue_move() ? armyset_size() : opponent_armies_size_;
+    }
+    void print(ostream& os) const;
+  private:
+    string memory_;
+    chrono::steady_clock::time_point start_, stop_;
+    Counter opponent_armies_size_;
+    int available_moves_;
+};
+
+inline ostream& operator<<(ostream& os, StatisticsE const& stats) {
+    stats.print(os);
+    return os;
+}
+
+using StatisticsList = vector<StatisticsE>;
 
 STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
@@ -751,6 +807,7 @@ class Board {
         return l.blue() == r.blue() && l.red() == r.red();
     }
 };
+using BoardList = vector<Board>;
 
 class BoardSubSetRed;
 class BoardSubSet {
@@ -1230,9 +1287,12 @@ class Svg {
 
     static string const solution_file(uint nr_moves) FUNCTIONAL;
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
-    void write(vector<Board> const& boards);
+    void write(BoardList const& boards,
+               StatisticsList const& stats_list_solve,
+               StatisticsList const& stats_list_backtrack);
     void parameters(uint x, uint y, uint army, uint rule);
-    void game(vector<Board> const& boards);
+    void game(BoardList const& boards);
+    void stats(string const& cls, StatisticsList const& stats_list);
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
     void html(FullMoves const& full_moves);
@@ -1515,15 +1575,14 @@ void Board::do_move(FullMove const& move_) {
     do_move(move_.move());
 }
 
-extern string get_memory(bool set_base_mem = false);
-extern void make_all_moves
+extern StatisticsE make_all_moves
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmyZSet const& moving_armies,
  ArmyZSet const& opponent_armies,
  ArmyZSet& moved_armies,
  int nr_moves);
-extern void make_all_moves_backtrack
+extern StatisticsE make_all_moves_backtrack
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmyZSet const& moving_armies,

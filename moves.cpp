@@ -485,24 +485,24 @@ Statistics NAME(BoardSet& boards_from,
 #if !BLUE_TO_MOVE
 # define ALL_NAME CAT(make_all_moves,_BACTRACK)
 
-void ALL_NAME(BoardSet& boards_from,
-              BoardSet& boards_to,
-              ArmyZSet const& moving_armies,
-              ArmyZSet const& opponent_armies,
-              ArmyZSet& moved_armies,
+StatisticsE ALL_NAME(BoardSet& boards_from,
+                     BoardSet& boards_to,
+                     ArmyZSet const& moving_armies,
+                     ArmyZSet const& opponent_armies,
+                     ArmyZSet& moved_armies,
 #if BACKTRACK
-              int solution_moves,
-              BoardTable<uint8_t> const& red_backtrack,
-              BoardTable<uint8_t> const& red_backtrack_symmetric,
+                     int solution_moves,
+                     BoardTable<uint8_t> const& red_backtrack,
+                     BoardTable<uint8_t> const& red_backtrack_symmetric,
 #endif // BACKTRACK
-              int nr_moves) {
-    auto start = chrono::steady_clock::now();
+                     int nr_moves) {
+    StatisticsE stats{nr_moves, opponent_armies.size()};
+    stats.start();
+    stats.armyset_untry(moved_armies.size());
+    stats.boardset_untry(boards_to.size());
 
     tids = 0;
     vector<future<Statistics>> results;
-    Statistics stats;
-    stats.armyset_untry(moved_armies.size());
-    stats.boardset_untry(boards_to.size());
     int blue_to_move = nr_moves & 1;
     if (blue_to_move) {
 #if BACKTRACK
@@ -514,7 +514,7 @@ void ALL_NAME(BoardSet& boards_from,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       nr_moves));
-            stats = thread_blue_moves_backtrack
+            static_cast<Statistics&>(stats) = thread_blue_moves_backtrack
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
@@ -528,7 +528,7 @@ void ALL_NAME(BoardSet& boards_from,
                           ref(boards_from), ref(boards_to),
                           ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                           nr_moves));
-                stats = thread_blue_moves
+                static_cast<Statistics&>(stats) = thread_blue_moves
                     (boards_from, boards_to,
                      moving_armies, opponent_armies, moved_armies,
                      nr_moves);
@@ -544,7 +544,7 @@ void ALL_NAME(BoardSet& boards_from,
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       ref(red_backtrack), ref(red_backtrack_symmetric),
                       solution_moves, nr_moves));
-            stats = thread_red_moves_backtrack
+            static_cast<Statistics&>(stats) = thread_red_moves_backtrack
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  red_backtrack, red_backtrack_symmetric,
@@ -559,75 +559,18 @@ void ALL_NAME(BoardSet& boards_from,
                           ref(boards_from), ref(boards_to),
                           ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                           nr_moves));
-                stats = thread_red_moves
+                static_cast<Statistics&>(stats) = thread_red_moves
                     (boards_from, boards_to,
                      moving_armies, opponent_armies, moved_armies,
                      nr_moves);
             }
     }
     for (auto& result: results) stats += result.get();
+    stats.armyset_size(moved_armies.size());
+    stats.boardset_size(boards_to.size());
+    stats.stop();
 
-    auto stop = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<Sec>(stop-start).count();
-    stats.armyset_try(moved_armies.size());
-    stats.boardset_try(boards_to.size());
-    if (STATISTICS) {
-        cout << "\tArmy inserts:  ";
-        if (stats.armyset_tries())
-            cout << setw(3) << moved_armies.size()*100 / stats.armyset_tries() << "%";
-        else
-            cout << "----";
-        cout << "\t" << moved_armies.size() << " / " << stats.armyset_tries() << " " << "\n";
-
-        cout << "\tBoard inserts: ";
-        if (stats.boardset_tries())
-            cout << setw(3) << boards_to.size()*100 / stats.boardset_tries() << "%";
-        else
-            cout << "----";
-        cout << "\t" << boards_to.size() << " / " << stats.boardset_tries() << " " << "\n";
-    }
-    if (HASH_STATISTICS) {
-        cout << "\tArmy immediate:";
-        if (stats.armyset_tries())
-            cout << setw(3) << stats.armyset_immediate() * 100 / stats.armyset_tries() << "%";
-        else
-            cout << "----";
-        cout << "\t" << stats.armyset_immediate() << " / " << stats.armyset_tries() << " " << "\n";
-
-        cout << "\tArmy probes:  ";
-        auto probes = stats.armyset_tries();
-        // probes -= stats.armyset_immediate();
-        if (probes)
-            cout << setw(4) << 1 + stats.armyset_probes() * 100 / probes / 100.;
-        else
-            cout << "----";
-        cout << "\t" << stats.armyset_probes() << " / " << probes << " +1" << "\n";
-
-        cout << "\tBoard immediate:";
-        if (stats.boardset_tries())
-            cout << setw(3) << stats.boardset_immediate() * 100 / stats.boardset_tries() << "%";
-        else
-            cout << "----";
-        cout << "\t" << stats.boardset_immediate() << " / " << stats.boardset_tries() << " " << "\n";
-
-        cout << "\tBoard probes:  ";
-        probes = stats.boardset_tries();
-        // probes -= stats.boardset_immediate();
-        if (probes)
-            cout << setw(4) << 1 + stats.boardset_probes() * 100 / probes / 100.;
-        else
-            cout << "----";
-        cout << "\t" << stats.boardset_probes() << " / " << probes << " +1" << "\n";
-    }
-
-    // moved_armies.show_stats();
-    // boards_to.show_stats();
-    cout << setw(6) << duration << " s, set " << setw(2) << nr_moves-1 << " done," << setw(10) << boards_to.size() << " boards /" << setw(9) << moved_armies.size() << " armies " << setw(7);
-    if (nr_moves % 2)
-        cout << boards_to.size()/(moved_armies.size() ? moved_armies.size() : 1);
-    else
-        cout << boards_to.size()/(opponent_armies.size() ? opponent_armies.size() : 1);
-    cout << " " << get_memory() << endl;
+    return stats;
 }
 
 #undef ALL_NAME
