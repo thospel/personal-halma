@@ -56,7 +56,7 @@ Statistics NAME(BoardSet& boards_from,
 
         ArmyId const blue_id = subset_from.id();
         if (blue_id == 0) break;
-        if (VERBOSE) cout << "Processing blue " << blue_id << "\n";
+        if (VERBOSE) logger << "Processing blue " << blue_id << "\n" << flush;
         ArmyZ const& bZ = BLUE_TO_MOVE ?
             moving_armies.at(blue_id) :
             opponent_armies.at(blue_id);
@@ -109,7 +109,7 @@ Statistics NAME(BoardSet& boards_from,
             if (!BLUE_NORMAL && red_value == 0) continue;
             ArmyId red_id;
             auto const symmetry = BoardSubSet::split(red_value, red_id);
-            if (VERBOSE) cout << " Sub Processing red " << red_id << "," << symmetry << "\n";
+            if (VERBOSE) logger << " Sub Processing red " << red_id << "," << symmetry << "\n" << flush;
             Army const& blue =
                 symmetry ? blue_pair.symmetric() : blue_pair.normal();
 #if BLUE_TO_MOVE
@@ -128,10 +128,9 @@ Statistics NAME(BoardSet& boards_from,
             Army const red{rZ};
             if (CHECK) red.check(__LINE__);
 
-#if VERBOSE
             Image image{blue, red};
-            cout << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image;
-#endif // VERBOSE
+            if (VERBOSE)
+                logger << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image << flush;
 
             Nbits Ndistance_army = NLEFT >> tables.infinity();
             for (auto const& b: blue) {
@@ -142,19 +141,19 @@ Statistics NAME(BoardSet& boards_from,
             int const distance_army = __builtin_clz(Ndistance_army);
 
             if (VERBOSE) {
-                cout << "  Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
-                cout << "  Distance army=" << distance_army << "\n";
-                cout << "  Distance red =" << distance_red  << "\n";
-                cout << "  Off base=" << off_base_from << "\n";
+                logger << "  Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
+                logger << "  Distance army=" << distance_army << "\n";
+                logger << "  Distance red =" << distance_red  << "\n";
+                logger << "  Off base=" << off_base_from << "\n" << flush;
             }
             int pre_moves = min((distance_army + BLUE_TO_MOVE) / 2, distance_red);
             int blue_moves = pre_moves + max(slides-pre_moves-edge_count_from, 0) + off_base_from;
             int needed_moves = 2*blue_moves - BLUE_TO_MOVE;
             if (VERBOSE)
-                cout << "  Needed moves=" << static_cast<int>(needed_moves) << "\n";
+                logger << "  Needed moves=" << static_cast<int>(needed_moves) << "\n" << flush;
             if (needed_moves > available_moves) {
                 if (VERBOSE)
-                    cout << "  Late prune " << needed_moves << " > " << available_moves << "\n";
+                    logger << "  Late prune " << needed_moves << " > " << available_moves << "\n" << flush;
                 stats.late_prune();
                 continue;
             }
@@ -190,9 +189,6 @@ Statistics NAME(BoardSet& boards_from,
 #endif // BLUE_TO_MOVE
 
             ArmyZPos armyE, armyESymmetric;
-#if !VERBOSE
-            Image image{blue, red};
-#endif // VERBOSE
 #if BLUE_TO_MOVE
             array<Coord, X*Y-2*ARMY+1> reachable;
 #else  // BLUE_TO_MOVE
@@ -269,8 +265,9 @@ Statistics NAME(BoardSet& boards_from,
                             else {
                                 reachable[i] = reachable[--nr_reachable];
                                 if (VERBOSE) {
-                                    cout << "   Move " << soldier << " to " << val << "\n";
-                                    cout << "   Prune blue jump target outside of red base\n";
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune blue jump target outside of red base\n";
+                                    logger.flush();
                                 }
                             }
                         }
@@ -315,7 +312,7 @@ Statistics NAME(BoardSet& boards_from,
                     auto const val = reachable[i];
                     if (false) {
                         image.set(val, BLUE_TO_MOVE ? BLUE : RED);
-                        cout << image;
+                        logger << image << flush;
                         image.set(val, EMPTY);
                     }
 
@@ -333,8 +330,8 @@ Statistics NAME(BoardSet& boards_from,
 #if !BACKTRACK
                                 if (boards_to.solve(red_id, rZ)) {
                                     image.set(val, BLUE_TO_MOVE ? BLUE : RED);
-                                    cout << "==================================\n";
-                                    cout << image << "Solution!" << endl;
+                                    logger << "==================================\n";
+                                    logger << image << "Solution!" << endl;
                                     image.set(val, EMPTY);
                                 }
 #endif // !BACKTRACK
@@ -358,8 +355,9 @@ Statistics NAME(BoardSet& boards_from,
                         if (backtrack_count           - backtrack[val]           >= solution_moves &&
                             backtrack_count_symmetric - backtrack_symmetric[val] >= solution_moves) {
                             if (VERBOSE) {
-                                cout << "   Move " << soldier << " to " << val << "\n";
-                                cout << "   Prune backtrack: bactrack " << backtrack_count - backtrack[val] << " >= " << solution_moves << " && backtrack_count_symmetric " << backtrack_count_symmetric - backtrack_symmetric[val] << " >= " << solution_moves << "\n";
+                                logger << "   Move " << soldier << " to " << val << "\n";
+                                logger << "   Prune backtrack: bactrack " << backtrack_count - backtrack[val] << " >= " << solution_moves << " && backtrack_count_symmetric " << backtrack_count_symmetric - backtrack_symmetric[val] << " >= " << solution_moves << "\n";
+                                logger.flush();
                             }
                           continue;
                         }
@@ -373,8 +371,9 @@ Statistics NAME(BoardSet& boards_from,
                                 balance_bits |= static_cast<BalanceMask>(1) << b;
                             if (balance_bits & balance_mask) {
                                 if (VERBOSE) {
-                                    cout << "   Move " << soldier << " to " << val << "\n";
-                                    cout << "   Prune unbalanced: " << balance_min << " <= " << balance_c << " <= " << balance_max << "\n";
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune unbalanced: " << balance_min << " <= " << balance_c << " <= " << balance_max << "\n";
+                                    logger.flush();
                                 }
                                 continue;
                             }
@@ -394,8 +393,9 @@ Statistics NAME(BoardSet& boards_from,
 #endif // BLUE_TO_MOVE
                         if (needed_moves >= available_moves) {
                             if (VERBOSE) {
-                                cout << "   Move " << soldier << " to " << val << "\n";
-                                cout << "   Prune game length: " << needed_moves << " > " << available_moves-1 << "\n";
+                                logger << "   Move " << soldier << " to " << val << "\n";
+                                logger << "   Prune game length: " << needed_moves << " > " << available_moves-1 << " da=" << distance_army << ", dr=" << distance_red << ", pm=" << pre_moves << ", sl=" << slides << ", bm=" << blue_moves << "\n";
+                                logger.flush();
                             }
                             continue;
                         }
@@ -428,8 +428,9 @@ Statistics NAME(BoardSet& boards_from,
                             image.set(reachable[i], EMPTY);
                         image.set(val, EMPTY);
                         if (VERBOSE) {
-                            cout << "   Move " << soldier << " to " << val << "\n";
-                            cout << "   Prune blue cannot jump to target\n";
+                            logger << "   Move " << soldier << " to " << val << "\n";
+                            logger << "   Prune blue cannot jump to target\n";
+                            logger.flush();
                         }
                         continue;
                       ACCEPTABLE:
@@ -440,8 +441,9 @@ Statistics NAME(BoardSet& boards_from,
 #endif // BLUE_TO_MOVE
                     CoordZ valZ{val};
                     armyE.store(valZ);
-                    // cout << "   Final Set pos " << pos << armyE[pos] << "\n";
-                    // cout << armyE << "----------------\n";
+                    // logger << "   Final Set pos " << pos << armyE[pos] << "\n";
+                    // logger << armyE << "----------------\n";
+                    // logger.flush();
                     if (CHECK) armyE.check(__LINE__);
                     armyESymmetric.store(valZ.symmetric());
                     if (CHECK) armyESymmetric.check(__LINE__);
@@ -453,18 +455,18 @@ Statistics NAME(BoardSet& boards_from,
                     // The opponent is red and after this it is red's move
                     result_symmetry *= red_symmetry;
                     if (boards_to.insert(moved_id, red_id, result_symmetry, stats) && VERBOSE) {
-                        // cout << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, BLUE);
-                        cout << "   Inserted Blue id " << moved_id << "\n" << image;
+                        logger << "   Inserted Blue id " << moved_id << "\n" << image << flush;
                         image.set(val, EMPTY);
                     }
 #else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
                     result_symmetry *= blue_symmetry;
                     if (subset_to.insert(moved_id, result_symmetry, stats) && VERBOSE) {
-                        // cout << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
                         image.set(val, RED);
-                        cout << "   Inserted Red id " << moved_id << "\n" << image;
+                        logger << "   Inserted Red id " << moved_id << "\n" << image << flush;
                         image.set(val, EMPTY);
                     }
 #endif // BLUE_TO_MOVE

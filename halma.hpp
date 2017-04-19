@@ -52,10 +52,16 @@
 
 using namespace std;
 
-extern bool STATISTICS;
-extern bool HASH_STATISTICS;
+extern bool statistics;
+extern bool hash_statistics;
+extern bool verbose;
+
+#define STATISTICS	UNLIKELY(statistics)
+#define HASH_STATISTICS UNLIKELY(hash_statistics)
+// #define VERBOSE		UNLIKELY(verbose)
+#define VERBOSE		false
+
 bool const SYMMETRY = true;
-bool const MEMCHECK = false;
 bool const CLOSED_LOOP = false;
 bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
@@ -63,9 +69,7 @@ bool const PASS = false;
 bool const BALANCE  = true;
 
 #define CHECK   0
-#define VERBOSE	0
 #define RED_BUILDER 1
-bool const LOCK_DEBUG = false;
 
 int const X = 9;
 int const Y = 9;
@@ -120,7 +124,7 @@ uint64_t hash64(uint64_t v) {
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
 }
 
-extern string get_memory(bool set_base_mem = false);
+extern size_t get_memory(bool set_base_mem = false);
 
 class LogBuffer: public std::streambuf {
   public:
@@ -639,17 +643,17 @@ class Statistics {
     Counter boardset_immediate() const PURE { return boardset_immediate_; }
     Counter boardset_probes() const PURE { return boardset_probes_; }
 
-    Statistics& operator+=(Statistics const& statistics) {
+    Statistics& operator+=(Statistics const& stats) {
         if (STATISTICS) {
-            late_prunes_    += statistics.late_prunes();
-            armyset_tries_  += statistics.armyset_tries();
-            boardset_tries_ += statistics.boardset_tries();
+            late_prunes_    += stats.late_prunes();
+            armyset_tries_  += stats.armyset_tries();
+            boardset_tries_ += stats.boardset_tries();
         }
         if (HASH_STATISTICS) {
-            armyset_probes_	+= statistics.armyset_probes_;
-            armyset_immediate_	+= statistics.armyset_immediate_;
-            boardset_probes_	+= statistics.boardset_probes_;
-            boardset_immediate_	+= statistics.boardset_immediate_;
+            armyset_probes_	+= stats.armyset_probes_;
+            armyset_immediate_	+= stats.armyset_immediate_;
+            boardset_probes_	+= stats.boardset_probes_;
+            boardset_immediate_	+= stats.boardset_immediate_;
         }
         return *this;
     }
@@ -676,7 +680,7 @@ class StatisticsE: public Statistics {
         stop_  = chrono::steady_clock::now();
         memory_ = get_memory();
     }
-    string const& memory() const PURE { return memory_; }
+    size_t const& memory() const PURE { return memory_; }
     Sec::rep duration() const PURE {
         return chrono::duration_cast<Sec>(stop_-start_).count();
     }
@@ -688,7 +692,7 @@ class StatisticsE: public Statistics {
     }
     void print(ostream& os) const;
   private:
-    string memory_;
+    size_t memory_;
     chrono::steady_clock::time_point start_, stop_;
     Counter opponent_armies_size_;
     int available_moves_;

@@ -11,8 +11,9 @@ bool prune_slide = false;
 bool prune_jump  = false;
 bool example = false;
 
-bool STATISTICS = false;
-bool HASH_STATISTICS = false;
+bool statistics = false;
+bool hash_statistics = false;
+bool verbose = false;
 
 string HOSTNAME;
 // 0 means let C++ decide
@@ -75,9 +76,7 @@ class GetOpt {
 
 size_t PAGE_SIZE;
 // Linux specific
-string get_memory(bool set_base_mem) {
-    stringstream out;
-
+size_t get_memory(bool set_base_mem) {
     static size_t base_mem = 0;
 
     size_t mem = 0;
@@ -85,10 +84,11 @@ string get_memory(bool set_base_mem) {
     statm.open("/proc/self/statm");
     statm >> mem;
     mem *= PAGE_SIZE;
-    if (set_base_mem) base_mem = mem;
-    else mem -= base_mem;
-    if (mem >= 1000000) out << "(" << setw(6) << mem / 1000000  << " MB)";
-    return out.str();
+    if (set_base_mem) {
+        base_mem = mem;
+        // cout << "Base mem=" << mem / 1000000 << " MB\n";
+    } else mem -= base_mem;
+    return mem;
 }
 
 thread_local uint tid;
@@ -103,7 +103,7 @@ string thread_name() {
     return to_string(thread_id());
 }
 
-LogBuffer::LogBuffer(): prefix_{"Thread " + thread_name() + ": "} {
+LogBuffer::LogBuffer(): prefix_{nr_threads == 1 ? "" : "Thread " + thread_name() + ": "} {
     buffer_.resize(BLOCK);
     setp(&buffer_[0], &buffer_[BLOCK]);
 }
@@ -250,7 +250,7 @@ void StatisticsE::print(ostream& os) const {
 
     os << setw(6) << duration() << " s, set " << setw(2) << available_moves()-1 << " done," << setw(10) << boardset_size() << " boards /" << setw(9) << armyset_size() << " armies " << setw(7);
     os << boardset_size()/(blue_armies_size() ? blue_armies_size() : 1);
-    os << " " << memory() << "\n";
+    os << " (" << setw(6) << memory() / 1000000 << " MB)\n";
 }
 
 Move::Move(ArmyZ const& army_from, ArmyZ const& army_to): from{-1,-1}, to{-1, -1} {
@@ -1210,7 +1210,7 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Boards</th>\n"
         "        <th>Armies</th>\n"
         "        <th>Boards per blue army</th>\n"
-        "        <th>Memory</th>\n"
+        "        <th>Memory (MB)</th>\n"
         "      </tr>\n";
     for (auto const& st: stats_list) {
         out_ <<
@@ -1220,7 +1220,7 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <td>" << st.boardset_size() << "</td>\n"
             "        <td>" << st.armyset_size() << "</td>\n"
             "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n"
-            "        <td>" << st.memory() << "</td>\n"
+            "        <td>" << st.memory() / 1000000 << "</td>\n"
             "      </tr>\n";
     }
     out_ << "    </table>\n";
@@ -1654,7 +1654,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjper", argv);
+    GetOpt options("b:B:t:sHSjperv", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -1663,8 +1663,9 @@ void my_main(int argc, char const* const* argv) {
             case 'B': balance_delay = atoi(options.arg()); break;
             case 'p': replay = true; break;
             case 's': prune_slide = true; break;
-            case 'H': HASH_STATISTICS  = true; break;
-            case 'S': STATISTICS  = true; break;
+            case 'H': hash_statistics  = true; break;
+            case 'S': statistics  = true; break;
+            case 'v': verbose     = true; break;
             case 'j': prune_jump  = true; break;
             case 'e': example     = true; break;
             case 't':
@@ -1725,7 +1726,7 @@ void my_main(int argc, char const* const* argv) {
         }
     }
 
-    get_memory(true);
+    // get_memory(true);
 
     if (replay) {
         play();
