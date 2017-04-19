@@ -486,6 +486,19 @@ void BoardSet::clear(ArmyId size) {
     }
 }
 
+void BoardSet::resize() {
+    auto old_subsets = subsets_;
+    subsets_ = new BoardSubSet[capacity_*2];
+    capacity_ *= 2;
+    // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n" << flush;
+    copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
+    if (!keep_) {
+        top_ -= from_ - 1;
+        from_ = 1;
+    }
+    delete [] old_subsets;
+}
+
 void BoardSet::convert_red() {
     for (auto& subset: *this) subset.convert_red();
 }
@@ -529,11 +542,11 @@ string Image::str() const {
 void ArmyZSet::print(ostream& os) const {
     os << "[";
     if (values_) {
-        for (ArmyId i=0; i < max_size(); ++i)
+        for (size_t i=0; i < allocated(); ++i)
             os << " " << values_[i];
         } else os << " deleted";
     os << " ] (" << static_cast<void const *>(this) << ")\n";
-    for (ArmyId i=1; i < used1_; ++i) {
+    for (size_t i=1; i <= used_; ++i) {
         os << "Army " << i << "\n" << Image{armies_[i]};
     }
 }
@@ -843,54 +856,42 @@ void Tables::print_red_parity_count(ostream& os) const {
 
 Tables const tables;
 
-ArmyZSet::ArmyZSet(ArmyId size) : size_{size}, mask_{size-1}, used1_{1}, limit_{FACTOR(size)} {
-    if (limit_ >= ARMY_HIGHBIT)
+void ArmyZSet::_clear(ArmyId size) {
+    if (size > ARMY_HIGHBIT)
         throw(overflow_error("ArmyZSet size too large"));
-    if (used1_ > limit_)
-        throw(logic_error("ArmyZSet initial size too small"));
+
+    armies_size_ = size;
+    mask_ = size-1;
+    used_ = 0;
+    limit_ = FACTOR(size);
+    if (used_ >= limit_)
+        throw(logic_error("ArmyZSet clear size too small"));
+
+    armies_ = new ArmyZ [size];
     values_ = new ArmyId[size];
-    for (ArmyId i=0; i<size; ++i) values_[i] = 0;
-    armies_ = new ArmyZ[limit_+1];
-    // logger << "Create armies " << static_cast<void const *>(armies_) << "\n";
-    // logger << "Create values " << static_cast<void const *>(values_) << "\n";
-    // logger << flush;
+    std::fill(&values_[0], &values_[size], 0);
+    // logger << "New value  " << static_cast<void const *>(values_) << "\n";
+    // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
+}
+
+ArmyZSet::ArmyZSet(ArmyId size) : armies_{nullptr}, values_{nullptr} {
+    _clear(size);
 }
 
 ArmyZSet::~ArmyZSet() {
     delete [] armies_;
-    // logger << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
-    if (values_) {
-        // logger << "Destroy values " << static_cast<void const *>(values_) << "\n";
-        delete [] values_;
-    }
-    // logger << flush;
+    // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
+    // if (values_) cout << "Destroy values " << static_cast<void const *>(values_) << "\n";
+    delete [] values_;
 }
 
 void ArmyZSet::clear(ArmyId size) {
-    ArmyId new_limit = FACTOR(size);
-    if (new_limit >= ARMY_HIGHBIT)
-        throw(overflow_error("ArmyZ size grew too large"));
-    if (1 > limit_)
-        throw(logic_error("ArmyZSet clear size too small"));
-    // logger << "Clear\n";
-    auto new_values = new ArmyId[size];
-    // logger << "New value " << static_cast<void const *>(new_values) << "\n";
-    auto new_armies = new ArmyZ[new_limit+1];
-    // logger << "New armies " << static_cast<void const *>(new_armies) << "\n";
-    if (values_) {
-        delete [] values_;
-        // logger << "delete old values " << static_cast<void const *>(values_) << "\n";
-    }
-    values_ = new_values;
+    // cout << "Clear\n";
     delete [] armies_;
-    // logger << "delete old armies " << static_cast<void const *>(armies_) << "\n";
-    // logger << flush;
-    armies_ = new_armies;
-    for (ArmyId i=0; i<size; ++i) values_[i] = 0;
-    size_ = size;
-    mask_ = size-1;
-    limit_ = new_limit;
-    used1_ = 1;
+    armies_ = nullptr;
+    delete [] values_;
+    values_ = nullptr;
+    _clear(size);
 }
 
 ArmyId ArmyZSet::find(ArmyZ const& army) const {
@@ -924,40 +925,52 @@ ArmyId ArmyZSet::find(ArmyZE const& army) const {
 }
 
 void ArmyZSet::resize() {
-    delete [] values_;
-    values_ = nullptr;
+    ArmyId values_limit = FACTOR(allocated());
+    ArmyId armies_limit = armies_size_ - 1;
 
-    auto size = size_;
-    if (size >= ARMY_HIGHBIT)
-        throw(overflow_error("ArmyZ size grew too large"));
-    size *= 2;
-    // logger << "Resize ArmyZSet: new size=" << size << "\n" << flush;
-    auto new_values = new ArmyId[size];
-    for (ArmyId i = 0; i < size; ++i) new_values[i] = 0;
-    values_ = new_values;
-
-    auto limit = FACTOR(size);
-    auto new_armies = new ArmyZ[limit+1];
-    auto mask = size-1;
-    mask_   = mask;
-    size_   = size;
-    limit_  = limit;
-    auto old_armies = armies_;
-    auto used1 = used1_;
-    for (ArmyId i = 1; i < used1; ++i) {
-        ArmyZ const& army = old_armies[i];
-        ArmyId hash = army.hash();
-        ArmyId pos = hash & mask;
-        ArmyId offset = 0;
-        while (new_values[pos]) {
-            ++offset;
-            pos = (pos + offset) & mask;
-        }
-        new_values[pos] = i;
-        new_armies[i] = army;
+    if (used_ >= armies_limit) {
+        size_t size = armies_size_ * 2;
+        // logger << "Resize ArmyZSet armies: new size=" << size << endl;
+        auto new_armies = new ArmyZ[size];
+        // 0 is a dummy element we don't need to copy
+        // But it's probably nicely aligned so the compiler can generate
+        // some very fast copy code
+        std::copy(&armies_[0], &armies_[armies_size_], &new_armies[0]);
+        delete [] armies_;
+        armies_ = new_armies;
+        armies_size_ = size;
+        armies_limit = size - 1;
     }
-    delete [] armies_;
-    armies_ = new_armies;
+
+    if (used_ >= values_limit) {
+        size_t size = allocated() * 2;
+        // logger << "Resize ArmyZSet values: new size=" << size << "\n" << flush;
+        if (size > ARMY_HIGHBIT)
+            throw(overflow_error("ArmyZ size grew too large"));
+
+        delete [] values_;
+        values_ = nullptr;
+        auto mask = size-1;
+        auto values = new ArmyId[size];
+        std::fill(&values[0], &values[size], 0);
+        values_ = values;
+        mask_ = mask;
+        auto used = used_;
+        auto armies = armies_;
+        for (ArmyId i = 1; i <= used; ++i) {
+            ArmyZ const& army = armies[i];
+            ArmyId hash = army.hash();
+            ArmyId pos = hash & mask;
+            ArmyId offset = 0;
+            while (values[pos]) {
+                ++offset;
+                pos = (pos + offset) & mask;
+            }
+            values[pos] = i;
+        }
+        values_limit = FACTOR(allocated());
+    }
+    limit_ = min(values_limit, armies_limit);
     // logger << "Resize done\n" << flush;
 }
 

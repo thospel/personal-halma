@@ -719,27 +719,27 @@ class ArmyZSet {
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
         values_ = nullptr;
     }
-    ArmyId size() const PURE { return used1_ - 1; }
-    ArmyId max_size() const PURE {
-        return size_;
+    ArmyId size() const PURE { return used_; }
+    size_t allocated() const PURE {
+        return static_cast<size_t>(mask_)+1;
     }
     ArmyId capacity() const PURE {
         return limit_;
     }
 #if CHECK
     ArmyZ const& at(ArmyId i) const {
-        if (i >= used1_) throw(logic_error("ArmyZ id " + to_string(i) + " out of range of set"));
+        if (i > used_) throw(logic_error("ArmyZ id " + to_string(i) + " out of range of set"));
         return armies_[i];
     }
 #else  // CHECK
     ArmyZ const& at(ArmyId i) const PURE { return armies_[i]; }
 #endif // CHECK
-    inline ArmyId insert(ArmyZ  const& value, Statistics& stats);
-    inline ArmyId insert(ArmyZE const& value, Statistics& stats);
+    inline ArmyId insert(ArmyZ  const& value, Statistics& stats) RESTRICT;
+    inline ArmyId insert(ArmyZE const& value, Statistics& stats) RESTRICT;
     ArmyId find(ArmyZ  const& value) const PURE;
     ArmyId find(ArmyZE const& value) const PURE;
-    ArmyZ const* begin() const PURE { return &armies_[1]; }
-    ArmyZ const* end()   const PURE { return &armies_[used1_]; }
+    inline ArmyZ const* begin() const PURE { return &armies_[1]; }
+    inline ArmyZ const* end()   const PURE { return &armies_[used_+1]; }
 
     void print(ostream& os) const;
     // Non copyable
@@ -747,16 +747,17 @@ class ArmyZSet {
     ArmyZSet& operator=(ArmyZSet const&) = delete;
 
   private:
-    static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
-    NOINLINE void resize();
+    static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
+    inline void _clear(ArmyId size) RESTRICT;
+    NOINLINE void resize() RESTRICT;
 
-    mutex exclude_;
-    ArmyId size_;
-    ArmyId mask_;
-    ArmyId used1_;
-    ArmyId limit_;
-    ArmyId* values_;
     ArmyZ* armies_;
+    ArmyId* values_;
+    size_t armies_size_;
+    mutex exclude_;
+    ArmyId mask_;
+    ArmyId used_;
+    ArmyId limit_;
 };
 
 inline ostream& operator<<(ostream& os, ArmyZSet const& set) {
@@ -865,7 +866,7 @@ class BoardSubSet {
 
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
-    NOINLINE void resize();
+    NOINLINE void resize() RESTRICT;
 
     inline bool insert(ArmyId red_value, Statistics& stats);
     bool find(ArmyId id) const PURE;
@@ -963,7 +964,7 @@ class BoardSubSetRedBuilder: public BoardSubSet {
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.5*factor); }
 
     inline bool insert(ArmyId red_value, Statistics& stats);
-    NOINLINE void resize();
+    NOINLINE void resize() RESTRICT;
 
     ArmyId* army_list_;
     ArmyId real_allocated_;
@@ -1121,18 +1122,7 @@ class BoardSet {
     }
     ArmyId from() const PURE { return keep_ ? 1 : from_; }
     BoardSubSet&  at(ArmyId id) PURE { return subsets_[id]; }
-    NOINLINE void resize() {
-        auto old_subsets = subsets_;
-        subsets_ = new BoardSubSet[capacity_*2];
-        capacity_ *= 2;
-        // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n" << flush;
-        copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
-        if (!keep_) {
-            top_ -= from_ - 1;
-            from_ = 1;
-        }
-        delete [] old_subsets;
-    }
+    NOINLINE void resize() RESTRICT;
     void convert_red();
     BoardSubSet* begin() PURE { return &subsets_[from()]; }
     BoardSubSet* end()   PURE { return &subsets_[top_]; }
@@ -1504,8 +1494,8 @@ ArmyId ArmyZSet::insert(ArmyZ  const& value, Statistics& stats) {
     // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
     lock_guard<mutex> lock{exclude_};
-    // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
-    if (used1_ > limit_) resize();
+    // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
+    if (used_ >= limit_) resize();
     ArmyId const mask = mask_;
     ArmyId pos = hash & mask;
     ArmyId offset = 0;
@@ -1515,7 +1505,7 @@ ArmyId ArmyZSet::insert(ArmyZ  const& value, Statistics& stats) {
         ArmyId i = values[pos];
         if (i == 0) {
             stats.armyset_probe(offset);
-            ArmyId id = used1_++;
+            ArmyId id = ++used_;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
             armies_[id] = value;
@@ -1537,8 +1527,8 @@ ArmyId ArmyZSet::insert(ArmyZE const& value, Statistics& stats) {
     // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
     lock_guard<mutex> lock{exclude_};
-    // logger << "used1_ = " << used1_ << ", limit = " << limit_ << "\n" << flush;
-    if (used1_ > limit_) resize();
+    // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
+    if (used_ >= limit_) resize();
     ArmyId const mask = mask_;
     ArmyId pos = hash & mask;
     ArmyId offset = 0;
@@ -1548,7 +1538,7 @@ ArmyId ArmyZSet::insert(ArmyZE const& value, Statistics& stats) {
         ArmyId i = values[pos];
         if (i == 0) {
             stats.armyset_probe(offset);
-            ArmyId id = used1_++;
+            ArmyId id = ++used_;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
             armies_[id] = value;
