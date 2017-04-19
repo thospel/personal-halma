@@ -108,7 +108,7 @@ Statistics NAME(BoardSet& boards_from,
 #endif // !BLUE_TO_MOVE && !RED_NORMAL
 
 #if BLUE_NORMAL
-        BoardSubSetRed const& red_armies = static_cast<BoardSubSetRed const&>(subset_from.armies());
+        BoardSubSetRed const& red_armies = subset_from.armies_red();
 
 #else // BLUE_NORMAL
         BoardSubSet const& red_armies = subset_from.armies();

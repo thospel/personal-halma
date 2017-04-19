@@ -812,8 +812,40 @@ class Board {
 };
 using BoardList = vector<Board>;
 
-class BoardSubSetRed;
-class BoardSubSet {
+class BoardSubSetBase {
+  public:
+    static ArmyId split(ArmyId value, ArmyId& red_id) {
+        red_id = value & ARMY_MASK;
+        // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
+        return value & ARMY_HIGHBIT;
+    }
+    ArmyId const* begin() const PURE { return &armies_[0]; }
+    void destroy() {
+        // cout << "Destroy BoardSubSetBase " << static_cast<void const*>(armies_) << "\n";
+        delete[] armies_;
+    }
+  protected:
+    ArmyId* begin() PURE { return &armies_[0]; }
+
+    ArmyId* armies_;
+    ArmyId mask_;
+    ArmyId left_;
+};
+
+class BoardSubSetRed: public BoardSubSetBase {
+  public:
+    inline BoardSubSetRed(ArmyId* list, ArmyId size) {
+        armies_ = list;
+        left_   = size;
+        mask_   = ARMY_MAX;
+    }
+    ArmyId size()       const PURE { return left_; }
+    bool empty() const PURE { return size() == 0; }
+    ArmyId const* end() const PURE { return &armies_[size()]; }
+    ArmyId example(ArmyId& symmetry) const;
+};
+
+class BoardSubSet: public BoardSubSetBase {
   public:
     static ArmyId const INITIAL_SIZE = 4;
 
@@ -828,11 +860,6 @@ class BoardSubSet {
         left_ = 0;
     }
     void create(ArmyId size = INITIAL_SIZE);
-    void destroy() {
-        // cout << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << "\n";
-        delete[] armies_;
-    }
-    ArmyId const* begin() const PURE { return &armies_[0]; }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
     inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
@@ -855,11 +882,6 @@ class BoardSubSet {
         }
         return find(red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0));
     }
-    static ArmyId split(ArmyId value, ArmyId& red_id) {
-        red_id = value & ARMY_MASK;
-        // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMY_HIGHBIT) << dec << "\n";
-        return value & ARMY_HIGHBIT;
-    }
     ArmyId example(ArmyId& symmetry) const;
     void print(ostream& os) const;
     void print() const { print(cout); }
@@ -871,13 +893,8 @@ class BoardSubSet {
     inline bool insert(ArmyId red_value, Statistics& stats);
     bool find(ArmyId id) const PURE;
 
-  protected:
-    ArmyId* begin() PURE { return &armies_[0]; }
+  private:
     ArmyId* end()   PURE { return &armies_[allocated()]; }
-
-    ArmyId* armies_;
-    ArmyId mask_;
-    ArmyId left_;
 };
 
 bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
@@ -908,24 +925,12 @@ bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
     }
 }
 
-class BoardSubSetRed: public BoardSubSet {
-  public:
-    inline BoardSubSetRed(ArmyId* list, ArmyId size) {
-        armies_ = list;
-        left_   = size;
-        mask_   = ARMY_MAX;
-    }
-    ArmyId size()       const PURE { return left_; }
-    ArmyId const* end() const PURE { return &armies_[size()]; }
-    ArmyId example(ArmyId& symmetry) const;
-};
-
 BoardSubSetRed const* BoardSubSet::red() const {
     if (mask_ != ARMY_MAX) return nullptr;
-    return static_cast<BoardSubSetRed const*>(this);
+    return static_cast<BoardSubSetRed const*>(static_cast<BoardSubSetBase const*>(this));
 }
 
-class BoardSubSetRedBuilder: public BoardSubSet {
+class BoardSubSetRedBuilder: public BoardSubSetBase {
   public:
     static ArmyId const INITIAL_SIZE = 32;
 
@@ -934,6 +939,7 @@ class BoardSubSetRedBuilder: public BoardSubSet {
         delete [] armies_;
         delete [] (army_list_ - size());
     }
+    ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
     inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
@@ -955,7 +961,7 @@ class BoardSubSetRedBuilder: public BoardSubSet {
 
         mask_ = allocated-1;
         left_ = capacity();
-        fill(begin(), end(), 0);
+        std::fill(begin(), end(), 0);
 
         return BoardSubSetRed{new_list, sz};
     }
@@ -963,6 +969,8 @@ class BoardSubSetRedBuilder: public BoardSubSet {
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.5*factor); }
 
+    ArmyId const* end()   const PURE { return &armies_[allocated()]; }
+    ArmyId      * end()         PURE { return &armies_[allocated()]; }
     inline bool insert(ArmyId red_value, Statistics& stats);
     NOINLINE void resize() RESTRICT;
 
@@ -1014,10 +1022,12 @@ class BoardSet {
     size_t size() const PURE { return size_; }
     bool empty() const PURE { return size() == 0; }
     void clear(ArmyId size = INITIAL_SIZE);
-    BoardSubSet const&  at(ArmyId id) const PURE { return subsets_[id]; }
-    BoardSubSet const& cat(ArmyId id) const PURE { return subsets_[id]; }
-    BoardSubSet const* begin() const PURE { return &subsets_[from()]; }
-    BoardSubSet const* end()   const PURE { return &subsets_[top_]; }
+    inline BoardSubSet const& cat(ArmyId id) const PURE {
+        return static_cast<BoardSubSet const&>(subsets_[id]);
+    }
+    inline BoardSubSet const& at(ArmyId id) const PURE { return cat(id); }
+    inline BoardSubSet const* begin() const PURE { return &cat(from()); }
+    inline BoardSubSet const* end()   const PURE { return &cat(top_); }
     ArmyId back_id() const PURE { return top_-1; }
     inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
@@ -1030,10 +1040,9 @@ class BoardSet {
             // Only in the multithreaded case blue_id can be different from top_
             // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
             while (blue_id >= capacity_) resize();
-            while (blue_id >= top_)
-                subsets_[top_++].create();
+            while (blue_id >= top_) at(top_++).create();
         }
-        bool result = subsets_[blue_id].insert(red_id, symmetry, stats);
+        bool result = at(blue_id).insert(red_id, symmetry, stats);
         size_ += result;
         return result;
     }
@@ -1057,11 +1066,10 @@ class BoardSet {
             // Only in the multithreaded case blue_id can be different from top_
             // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
             while (blue_id >= capacity_) resize();
-            while (blue_id > top_)
-                subsets_[top_++].zero();
+            while (blue_id > top_) at(top_++).zero();
             ++top_;
         }
-        subsets_[blue_id] = subset;
+        at(blue_id) = subset;
         size_ += subset.size();
     }
     void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) {
@@ -1076,8 +1084,7 @@ class BoardSet {
             // Only in the multithreaded case can blue_id be different from top_
             // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
             while (blue_id >= capacity_) resize();
-            while (blue_id > top_)
-                subsets_[top_++].zero();
+            while (blue_id > top_) at(top_++).zero();
             ++top_;
         }
         subsets_[blue_id] = subset_red;
@@ -1085,9 +1092,9 @@ class BoardSet {
     }
     bool find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
-            if (blue_id <= 0)
+            if (UNLIKELY(blue_id <= 0))
                 throw(logic_error("blue_id <= 0"));
-            if (blue_id >= ARMY_HIGHBIT)
+            if (UNLIKELY(blue_id >= ARMY_HIGHBIT))
                 throw(logic_error("blue_id is too large"));
         }
         if (blue_id >= top_) return false;
@@ -1121,11 +1128,13 @@ class BoardSet {
         return from_ < top_ ? from_++ : 0;
     }
     ArmyId from() const PURE { return keep_ ? 1 : from_; }
-    BoardSubSet&  at(ArmyId id) PURE { return subsets_[id]; }
+    inline BoardSubSet& at(ArmyId id) PURE {
+        return static_cast<BoardSubSet&>(subsets_[id]);
+    }
     NOINLINE void resize() RESTRICT;
     void convert_red();
-    BoardSubSet* begin() PURE { return &subsets_[from()]; }
-    BoardSubSet* end()   PURE { return &subsets_[top_]; }
+    BoardSubSet* begin() PURE { return &at(from()); }
+    BoardSubSet* end()   PURE { return &at(top_); }
 
     size_t size_;
     mutex exclude_;
@@ -1134,7 +1143,7 @@ class BoardSet {
     ArmyId capacity_;
     ArmyId from_;
     ArmyId top_;
-    BoardSubSet* subsets_;
+    BoardSubSetBase* subsets_;
     bool const keep_;
 };
 
@@ -1148,14 +1157,19 @@ class BoardSubSetRef {
     BoardSubSetRef(BoardSet& set): BoardSubSetRef{set, set.next()} {}
     ~BoardSubSetRef() { if (id_ && !keep_) subset_.destroy(); }
     ArmyId id() const PURE { return id_; }
-    BoardSubSet const& armies() const PURE { return subset_; }
+    BoardSubSet const& armies() const PURE {
+        return static_cast<BoardSubSet const&>(subset_);
+    }
+    BoardSubSetRed const& armies_red() const PURE {
+        return static_cast<BoardSubSetRed const&>(subset_);
+    }
 
     BoardSubSetRef(BoardSubSetRef const&) = delete;
     BoardSubSetRef& operator=(BoardSubSetRef const&) = delete;
     void keep() { id_ = 0; }
   private:
     BoardSubSetRef(BoardSet& set, ArmyId id): subset_{set.at(id)}, id_{id}, keep_{set.keep_} {}
-    BoardSubSet& subset_;
+    BoardSubSetBase& subset_;
     ArmyId id_;
     bool const keep_;
 };

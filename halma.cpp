@@ -382,7 +382,8 @@ void BoardSubSet::convert_red() {
     for (ArmyId const& red_value: *this)
         if (red_value) *new_armies++ = red_value;
     delete [] armies_;
-    *this = BoardSubSetRed{new_armies - sz, sz};
+    auto subset_red = BoardSubSetRed{new_armies - sz, sz};
+    static_cast<BoardSubSetBase&>(*this) = static_cast<BoardSubSetBase&>(subset_red);
 }
 
 ArmyId BoardSubSet::example(ArmyId& symmetry) const {
