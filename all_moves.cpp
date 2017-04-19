@@ -2,6 +2,7 @@
 
 // gcc is unable to inline the huge bodies if done as functions
 // Hack around it using the preprocessor
+
 #define BACKTRACK    0
 #define BLUE_TO_MOVE 1
 #include "moves.cpp"

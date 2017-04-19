@@ -7,9 +7,9 @@
 #endif // BLUE_TO_MOVE
 
 #if BACKTRACK
-# define _BACTRACK _backtrack
+# define _BACKTRACK _backtrack
 #else  // BACKTRACK
-# define _BACTRACK
+# define _BACKTRACK
 #endif // BACKTRACK
 
 #if RED_BUILDER
@@ -20,7 +20,15 @@
 # define BLUE_NORMAL	0
 #endif // RED_BUILDER
 
-#define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,_BACTRACK)))
+#if SLOW
+# define _SLOW _slow
+#else  // SLOW
+# define _SLOW _fast
+#endif // SLOW
+
+#define VERBOSE (SLOW && UNLIKELY(verbose))
+
+#define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,CAT(_BACKTRACK,_SLOW))))
 
 NOINLINE
 Statistics NAME(BoardSet& boards_from,
@@ -485,7 +493,11 @@ Statistics NAME(BoardSet& boards_from,
 }
 
 #if !BLUE_TO_MOVE
-# define ALL_NAME CAT(make_all_moves,_BACTRACK)
+# define ALL_NAME CAT(make_all_moves,CAT(_BACKTRACK,_SLOW))
+# define BLUE_MOVES_BACKTRACK CAT(thread_blue_moves_backtrack,_SLOW)
+# define BLUE_MOVES           CAT(thread_blue_moves,_SLOW)
+# define RED_MOVES_BACKTRACK  CAT(thread_red_moves_backtrack,_SLOW)
+# define RED_MOVES            CAT(thread_red_moves,_SLOW)
 
 StatisticsE ALL_NAME(BoardSet& boards_from,
                      BoardSet& boards_to,
@@ -512,11 +524,11 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
             for (uint i=1; i < nr_threads; ++i)
                 results.emplace_back
                     (async
-                     (launch::async, thread_blue_moves_backtrack,
+                     (launch::async, BLUE_MOVES_BACKTRACK,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       nr_moves));
-            static_cast<Statistics&>(stats) = thread_blue_moves_backtrack
+            static_cast<Statistics&>(stats) = BLUE_MOVES_BACKTRACK
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
@@ -526,11 +538,11 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
                 for (uint i=1; i < nr_threads; ++i)
                     results.emplace_back
                         (async
-                         (launch::async, thread_blue_moves,
+                         (launch::async, BLUE_MOVES,
                           ref(boards_from), ref(boards_to),
                           ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                           nr_moves));
-                static_cast<Statistics&>(stats) = thread_blue_moves
+                static_cast<Statistics&>(stats) = BLUE_MOVES
                     (boards_from, boards_to,
                      moving_armies, opponent_armies, moved_armies,
                      nr_moves);
@@ -541,12 +553,12 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
             for (uint i=1; i < nr_threads; ++i)
                 results.emplace_back
                     (async
-                     (launch::async, thread_red_moves_backtrack,
+                     (launch::async, RED_MOVES_BACKTRACK,
                       ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       ref(red_backtrack), ref(red_backtrack_symmetric),
                       solution_moves, nr_moves));
-            static_cast<Statistics&>(stats) = thread_red_moves_backtrack
+            static_cast<Statistics&>(stats) = RED_MOVES_BACKTRACK
                 (boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  red_backtrack, red_backtrack_symmetric,
@@ -557,11 +569,11 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
                 for (uint i=1; i < nr_threads; ++i)
                     results.emplace_back
                         (async
-                         (launch::async, thread_red_moves,
+                         (launch::async, RED_MOVES,
                           ref(boards_from), ref(boards_to),
                           ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                           nr_moves));
-                static_cast<Statistics&>(stats) = thread_red_moves
+                static_cast<Statistics&>(stats) = RED_MOVES
                     (boards_from, boards_to,
                      moving_armies, opponent_armies, moved_armies,
                      nr_moves);
@@ -575,9 +587,15 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
     return stats;
 }
 
-#undef ALL_NAME
+# undef ALL_NAME
+# undef BLUE_MOVES_BACKTRACK
+# undef BLUE_MOVES
+# undef RED_MOVES_BACKTRACK
+# undef RED_MOVES
 #endif // BLUE_TO_MOVE
 
 #undef COLOR_TO_MOVE
 #undef NAME
-#undef _BACTRACK
+#undef _BACKTRACK
+#undef _SLOW
+#undef VERBOSE

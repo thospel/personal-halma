@@ -1,3 +1,4 @@
+#define SLOW 0
 #include "halma.hpp"
 
 #include <sys/types.h>
@@ -199,7 +200,7 @@ ArmyPair::ArmyPair(ArmyZ const& army) {
 }
 
 void StatisticsE::print(ostream& os) const {
-    if (STATISTICS) {
+    if (statistics) {
         os << "\tArmy inserts:  ";
         if (armyset_tries())
             os << setw(3) << armyset_size()*100 / armyset_tries() << "%";
@@ -214,7 +215,7 @@ void StatisticsE::print(ostream& os) const {
             os << "----";
         os << "\t" << boardset_size() << " / " << boardset_tries() << " " << "\n";
     }
-    if (HASH_STATISTICS) {
+    if (hash_statistics) {
         os << "\tArmy immediate:";
         if (armyset_tries())
             os << setw(3) << armyset_immediate() * 100 / armyset_tries() << "%";
@@ -1042,7 +1043,7 @@ int Board::min_nr_moves(bool blue_to_move) const {
     int distance_army = __builtin_clz(Ndistance_army);
     int distance_red  = __builtin_clz(Ndistance_red);
 
-    if (VERBOSE) {
+    if (verbose) {
         cout << "Slides >= " << slides << ", red edge count " << edge_count_from << "\n";
         cout << "Distance army=" << distance_army << "\n";
         cout << "Distance red =" << distance_red  << "\n";
@@ -1391,7 +1392,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         moving_armies.clear();
         boards_from.clear();
 
-        // if (VERBOSE) cout << moved_armies << boards_to;
+        // if (verbose) cout << moved_armies << boards_to;
         auto const& stats = stats_list.back();
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
@@ -1443,7 +1444,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     BoardTable<uint8_t> red_backtrack_symmetric{};
     red_backtrack_symmetric.fill(0);
     red_backtrack_symmetric.set(last_army.symmetric(), 2);
-    if (VERBOSE) {
+    if (verbose) {
         cout << "red_backtrack:\n";
         for (int y=0; y<Y; ++y) {
             for (int x=0; x<X; ++x)

@@ -56,10 +56,8 @@ extern bool statistics;
 extern bool hash_statistics;
 extern bool verbose;
 
-#define STATISTICS	UNLIKELY(statistics)
-#define HASH_STATISTICS UNLIKELY(hash_statistics)
-// #define VERBOSE		UNLIKELY(verbose)
-#define VERBOSE		false
+#define STATISTICS	(SLOW && UNLIKELY(statistics))
+#define HASH_STATISTICS (SLOW && UNLIKELY(hash_statistics))
 
 bool const SYMMETRY = true;
 bool const CLOSED_LOOP = false;
@@ -1579,14 +1577,39 @@ void Board::do_move(FullMove const& move_) {
     do_move(move_.move());
 }
 
-extern StatisticsE make_all_moves
+extern StatisticsE make_all_moves_fast
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmyZSet const& moving_armies,
  ArmyZSet const& opponent_armies,
  ArmyZSet& moved_armies,
  int nr_moves);
-extern StatisticsE make_all_moves_backtrack
+
+extern StatisticsE make_all_moves_slow
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmyZSet const& moving_armies,
+ ArmyZSet const& opponent_armies,
+ ArmyZSet& moved_armies,
+ int nr_moves);
+
+inline StatisticsE make_all_moves
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmyZSet const& moving_armies,
+ ArmyZSet const& opponent_armies,
+ ArmyZSet& moved_armies,
+ int nr_moves) {
+    return verbose || statistics || hash_statistics ?
+        make_all_moves_slow(boards_from, boards_to, 
+                               moving_armies, opponent_armies, moved_armies,
+                               nr_moves) :
+        make_all_moves_fast(boards_from, boards_to, 
+                            moving_armies, opponent_armies, moved_armies,
+                            nr_moves);
+}
+
+extern StatisticsE make_all_moves_backtrack_fast
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmyZSet const& moving_armies,
@@ -1596,3 +1619,37 @@ extern StatisticsE make_all_moves_backtrack
  BoardTable<uint8_t> const& red_backtrack,
  BoardTable<uint8_t> const& red_backtrack_symmetric,
  int nr_moves);
+
+extern StatisticsE make_all_moves_backtrack_slow
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmyZSet const& moving_armies,
+ ArmyZSet const& opponent_armies,
+ ArmyZSet& moved_armies,
+ int solution_moves,
+ BoardTable<uint8_t> const& red_backtrack,
+ BoardTable<uint8_t> const& red_backtrack_symmetric,
+ int nr_moves);
+
+inline StatisticsE make_all_moves_backtrack
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmyZSet const& moving_armies,
+ ArmyZSet const& opponent_armies,
+ ArmyZSet& moved_armies,
+ int solution_moves,
+ BoardTable<uint8_t> const& red_backtrack,
+ BoardTable<uint8_t> const& red_backtrack_symmetric,
+ int nr_moves) {
+    return verbose || statistics || hash_statistics ?
+        make_all_moves_backtrack_slow
+        (boards_from, boards_to,
+         moving_armies, opponent_armies, moved_armies,
+         solution_moves, red_backtrack, red_backtrack_symmetric,
+         nr_moves) :
+        make_all_moves_backtrack_fast
+        (boards_from, boards_to,
+         moving_armies, opponent_armies, moved_armies,
+         solution_moves, red_backtrack, red_backtrack_symmetric,
+         nr_moves);
+}
