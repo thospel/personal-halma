@@ -15,6 +15,7 @@ bool example = false;
 bool statistics = false;
 bool hash_statistics = false;
 bool verbose = false;
+bool sample_subset_red = false;
 
 string HOSTNAME;
 // 0 means let C++ decide
@@ -1365,6 +1366,17 @@ void play(bool print_moves=false) {
     }
 }
 
+void show_largest_red(vector<ArmyId> const& largest_red) {
+    cout << hex;
+    for (ArmyId const& red_value: largest_red) {
+        ArmyId red_id;
+        bool symmetry = BoardSubSet::split(red_value, red_id) != 0;
+
+        cout << red_id << (symmetry ? "-" : "+") << "\n";
+    }
+    cout << dec;
+}
+
 int solve(Board const& board, int nr_moves, ArmyZ& red_army,
           StatisticsList& stats_list) {
     auto start_solve = chrono::steady_clock::now();
@@ -1389,6 +1401,8 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         cout << ", no heuristics";
     cout << ")" << endl;
 
+    vector<ArmyId> largest_red;
+
     ArmyId red_id = 0;
     int i;
     for (i=0; nr_moves>0; --nr_moves, ++i) {
@@ -1406,12 +1420,20 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         moving_armies.clear();
         boards_from.clear();
 
+        if (sample_subset_red && nr_moves % 2 == 0)
+            for (auto const& subset: static_cast<BoardSet const&>(boards_to)) {
+                BoardSubSetRed const& subset_red = static_cast<BoardSubSetRed const&>(static_cast<BoardSubSetBase const&>(subset));
+                if (subset_red.size() > largest_red.size())
+                    largest_red.assign(subset_red.begin(), subset_red.end());
+            }
+
         // if (verbose) cout << moved_armies << boards_to;
         auto const& stats = stats_list.back();
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
             auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
             cout << stats << setw(6) << duration << " s, no solution" << endl;
+            if (largest_red.size()) show_largest_red(largest_red);
             return -1;
         }
         if (example)
@@ -1429,6 +1451,8 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
     auto stop_solve = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
     cout << setw(6) << duration << " s, solved" << endl;
+
+    if (largest_red.size()) show_largest_red(largest_red);
 
     if (red_id == 0) throw(logic_error("Solved without solution"));
     return i;
@@ -1669,7 +1693,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjperv", argv);
+    GetOpt options("b:B:t:sHSjpervR", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -1683,6 +1707,7 @@ void my_main(int argc, char const* const* argv) {
             case 'v': verbose     = true; break;
             case 'j': prune_jump  = true; break;
             case 'e': example     = true; break;
+            case 'R': sample_subset_red = true; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
