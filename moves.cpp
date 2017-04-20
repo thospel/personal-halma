@@ -42,7 +42,8 @@ Statistics NAME(BoardSet& boards_from,
                 int solution_moves,
 #endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) {
-    tid = ++tids;
+    tid = tids.fetch_add(1, memory_order_relaxed);
+    signal_generation_seen = signal_generation.load(memory_order_relaxed);
     // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
     BalanceMask balance_mask;
@@ -60,11 +61,22 @@ Statistics NAME(BoardSet& boards_from,
 #endif // RED_NORMAL
     Statistics stats;
     while (true) {
+#if BLUE_NORMAL
+        BoardSubSetRedRef subset_from{boards_from};
+#else // BLUE_NORMAL
         BoardSubSetRef subset_from{boards_from};
+#endif // BLUE_NORMAL
 
         ArmyId const blue_id = subset_from.id();
         if (blue_id == 0) break;
         if (VERBOSE) logger << "Processing blue " << blue_id << "\n" << flush;
+
+        uint signal_gen = signal_generation.load(memory_order_relaxed);
+        if (signal_generation_seen != signal_gen) {
+            signal_generation_seen = signal_gen;
+            logger << "Processing blue " << setw(6) << blue_id << "," << setw(9) << boards_from.size() + subset_from.armies().size() << " boards left\n" << flush;
+        }
+
         ArmyZ const& bZ = BLUE_TO_MOVE ?
             moving_armies.at(blue_id) :
             opponent_armies.at(blue_id);
@@ -107,12 +119,7 @@ Statistics NAME(BoardSet& boards_from,
         subset_to.create();
 #endif // !BLUE_TO_MOVE && !RED_NORMAL
 
-#if BLUE_NORMAL
-        BoardSubSetRed const& red_armies = subset_from.armies_red();
-
-#else // BLUE_NORMAL
-        BoardSubSet const& red_armies = subset_from.armies();
-#endif // BLUE_NORMAL
+        auto const& red_armies = subset_from.armies();
         for (auto const& red_value: red_armies) {
             if (!BLUE_NORMAL && red_value == 0) continue;
             ArmyId red_id;
@@ -515,7 +522,7 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
     stats.armyset_untry(moved_armies.size());
     stats.boardset_untry(boards_to.size());
 
-    tids = 0;
+    tids = 1;
     vector<future<Statistics>> results;
     int blue_to_move = nr_moves & 1;
     if (blue_to_move) {

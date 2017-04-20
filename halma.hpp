@@ -100,6 +100,8 @@ uint const THREADS_MAX = 256;
 extern uint nr_threads;
 extern thread_local uint tid;
 extern atomic<uint> tids;
+extern atomic<uint> signal_generation;
+extern thread_local uint signal_generation_seen;
 
 const char letters[] = "abcdefghijklmnopqrstuvwxyz";
 
@@ -1011,7 +1013,7 @@ bool BoardSubSetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
 }
 
 class BoardSet {
-    friend class BoardSubSetRef;
+    friend class BoardSubSetRefBase;
   public:
     static ArmyId const INITIAL_SIZE = 32;
     BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE);
@@ -1138,6 +1140,7 @@ class BoardSet {
     void convert_red();
     BoardSubSet* begin() PURE { return &at(from()); }
     BoardSubSet* end()   PURE { return &at(top_); }
+    void down_size(ArmyId size) { size_ -= size; }
 
     size_t size_;
     mutex exclude_;
@@ -1155,26 +1158,42 @@ inline ostream& operator<<(ostream& os, BoardSet const& set) {
     return os;
 }
 
-class BoardSubSetRef {
+class BoardSubSetRefBase {
   public:
-    BoardSubSetRef(BoardSet& set): BoardSubSetRef{set, set.next()} {}
-    ~BoardSubSetRef() { if (id_ && !keep_) subset_.destroy(); }
+    ~BoardSubSetRefBase() { if (id_ && !keep_) subset_.destroy(); }
     ArmyId id() const PURE { return id_; }
-    BoardSubSet const& armies() const PURE {
-        return static_cast<BoardSubSet const&>(subset_);
-    }
-    BoardSubSetRed const& armies_red() const PURE {
-        return static_cast<BoardSubSetRed const&>(subset_);
-    }
 
-    BoardSubSetRef(BoardSubSetRef const&) = delete;
-    BoardSubSetRef& operator=(BoardSubSetRef const&) = delete;
+    BoardSubSetRefBase(BoardSubSetRefBase const&) = delete;
+    BoardSubSetRefBase& operator=(BoardSubSetRefBase const&) = delete;
     void keep() { id_ = 0; }
-  private:
-    BoardSubSetRef(BoardSet& set, ArmyId id): subset_{set.at(id)}, id_{id}, keep_{set.keep_} {}
+  protected:
+    static void down_size(BoardSet& set, ArmyId size) { set.down_size(size); }
+
+    BoardSubSetRefBase(BoardSet& set): BoardSubSetRefBase{set, set.next()} {}
+    BoardSubSetRefBase(BoardSet& set, ArmyId id): subset_{set.at(id)}, id_{id}, keep_{set.keep_} {}
     BoardSubSetBase& subset_;
     ArmyId id_;
     bool const keep_;
+};
+
+class BoardSubSetRef: public BoardSubSetRefBase {
+  public:
+    BoardSubSetRef(BoardSet& set): BoardSubSetRefBase{set} {
+        down_size(set, armies().size());
+    }
+    BoardSubSet const& armies() const PURE {
+        return static_cast<BoardSubSet const&>(subset_);
+    }
+};
+
+class BoardSubSetRedRef: public BoardSubSetRefBase {
+  public:
+    BoardSubSetRedRef(BoardSet& set): BoardSubSetRefBase{set} {
+        down_size(set, armies().size());
+    }
+    BoardSubSetRed const& armies() const PURE {
+        return static_cast<BoardSubSetRed const&>(subset_);
+    }
 };
 
 class Image {

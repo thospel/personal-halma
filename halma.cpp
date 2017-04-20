@@ -1,6 +1,8 @@
 #define SLOW 0
 #include "halma.hpp"
 
+#include <csignal>
+
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -22,6 +24,10 @@ string HOSTNAME;
 uint nr_threads = 0;
 string VCS_COMMIT{STRINGIFY(COMMIT)};
 string VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
+
+int signal_counter = 0;
+atomic<uint> signal_generation;
+thread_local uint signal_generation_seen;
 
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
@@ -1711,6 +1717,43 @@ void system_properties() {
     PAGE_SIZE = tmp;
 }
 
+void signal_handler(int signum) {
+    switch(signum) {
+        case SIGSYS:
+          signal_generation.store(++signal_counter, memory_order_relaxed);
+          break;
+        case SIGUSR1:
+          if (nr_threads > 1) --nr_threads;
+          break;
+        case SIGUSR2:
+          ++nr_threads;
+          break;
+        default:
+          // Impossible. Ignore
+          break;
+    }
+}
+
+void set_signals() {
+    struct sigaction new_action;
+
+    signal_generation = 0;
+
+    new_action.sa_handler = signal_handler;
+    sigemptyset (&new_action.sa_mask);
+    new_action.sa_flags = 0;
+
+    if (sigaction(SIGSYS, &new_action, nullptr))
+        throw(system_error(errno, system_category(),
+                           "Could not set SIGSYS handler"));
+    if (sigaction(SIGUSR1, &new_action, nullptr))
+        throw(system_error(errno, system_category(),
+                           "Could not set SIGUSR1 handler"));
+    if (sigaction(SIGUSR2, &new_action, nullptr))
+        throw(system_error(errno, system_category(),
+                           "Could not set SIGUSR2 handler"));
+}
+
 void my_main(int argc, char const* const* argv) {
     GetOpt options("b:B:t:sHSjpervR:", argv);
     long long int val;
@@ -1743,6 +1786,7 @@ void my_main(int argc, char const* const* argv) {
     balance_max = (ARMY+3) / 4 + balance;
     if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
 
+    cout << "Pid: " << getpid() << "\n";
     cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
     if (false) {
@@ -1785,6 +1829,7 @@ void my_main(int argc, char const* const* argv) {
         }
     }
 
+    set_signals();
     // get_memory(true);
 
     if (replay) {
