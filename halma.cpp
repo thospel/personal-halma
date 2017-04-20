@@ -1326,13 +1326,13 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
 }
 
 void Svg::write(BoardList const& boards,
-                StatisticsList const& stats_list_solve,
-                StatisticsList const& stats_list_backtrack) {
+                StatisticsList const& stats_list_solve, Sec::rep solve_duration,
+                StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration) {
     html_header(boards.size()-1);
     game(boards);
-    out_ << "<h4>Solve</h4>\n";
+    out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
     stats("solve", stats_list_solve);
-    out_ << "<h4>Backtrack</h4>\n";
+    out_ << "<h3>Backtrack (" << backtrack_duration << " seconds)</h3>\n";
     stats("backtrack", stats_list_backtrack);
     html_footer();
     string const svg_file = solution_file(boards.size()-1);
@@ -1478,7 +1478,7 @@ void save_largest_red(vector<ArmyId> const& largest_red) {
 }
 
 int solve(Board const& board, int nr_moves, ArmyZ& red_army,
-          StatisticsList& stats_list) {
+          StatisticsList& stats_list, Sec::rep& duration) {
     auto start_solve = chrono::steady_clock::now();
     array<BoardSet, 2> board_set;
     array<ArmyZSet, 3>  army_set;
@@ -1531,7 +1531,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         auto const& stats = stats_list.back();
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
-            auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+            duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
             cout << stats << setw(6) << duration << " s, no solution" << endl;
             if (largest_red.size()) save_largest_red(largest_red);
             return -1;
@@ -1553,7 +1553,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         }
     }
     auto stop_solve = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+    duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
     cout << setw(6) << duration << " s, solved" << endl;
 
     if (largest_red.size()) save_largest_red(largest_red);
@@ -1564,7 +1564,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
 
 void backtrack(Board const& board, int nr_moves, int solution_moves,
                ArmyZ const& last_red_army,
-               StatisticsList& stats_list,
+               StatisticsList& stats_list, Sec::rep& duration,
                BoardList& boards) {
     cout << "Start backtracking\n";
 
@@ -1625,7 +1625,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         cout << stats_list.back() << flush;
     }
     auto stop_solve = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+    duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
     cout << setw(6) << duration << " s, backtrack tables built" << endl;
 
     // Do some sanity checking
@@ -1918,20 +1918,25 @@ void my_main(int argc, char const* const* argv) {
     }
 
     StatisticsList stats_list_solve;
+    Sec::rep solve_duration;
     ArmyZ red_army;
     int solution_moves =
-        solve(start_board, nr_moves, red_army, stats_list_solve);
+        solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
     if (solution_moves < 0) return;
+
     StatisticsList stats_list_backtrack;
+    Sec::rep backtrack_duration;
     BoardList boards;
     backtrack(start_board, nr_moves, solution_moves, red_army,
-              stats_list_backtrack, boards);
+              stats_list_backtrack, backtrack_duration, boards);
 
     for (size_t i = 0; i < boards.size(); ++i)
         cout << "Move " << i << "\n" << boards[i];
 
     Svg svg;
-    svg.write(boards, stats_list_solve, stats_list_backtrack);
+    svg.write(boards,
+              stats_list_solve, solve_duration,
+              stats_list_backtrack, backtrack_duration);
 }
 
 int main(int argc, char const* const* argv) {

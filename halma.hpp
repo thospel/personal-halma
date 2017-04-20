@@ -1319,8 +1319,8 @@ class Svg {
     static string const solution_file(uint nr_moves) FUNCTIONAL;
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
     void write(BoardList const& boards,
-               StatisticsList const& stats_list_solve,
-               StatisticsList const& stats_list_backtrack);
+               StatisticsList const& stats_list_solve, Sec::rep solve_duration,
+               StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration);
     void parameters(uint x, uint y, uint army, uint rule);
     void game(BoardList const& boards);
     void stats(string const& cls, StatisticsList const& stats_list);
