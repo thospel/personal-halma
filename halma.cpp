@@ -6,13 +6,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <random>
+
 int balance = -1;
 int balance_delay = 0;
 int balance_min, balance_max;
 
 bool prune_slide = false;
 bool prune_jump  = false;
-bool example = false;
+int example = 0;
 
 bool statistics = false;
 bool hash_statistics = false;
@@ -144,6 +146,31 @@ int LogBuffer::sync() {
 }
 
 thread_local LogStream logger;
+
+std::random_device rnd;
+template <class T>
+T random(T range) {
+    std::uniform_int_distribution<T> dist(0, range-1);
+    return dist(rnd);
+}
+
+template <class T>
+T gcd(T small, T big) {
+    while (small) {
+        T r = big % small;
+        big = small;
+        small = r;
+    }
+    return big;
+}
+
+ArmyId random_coprime(ArmyId range) {
+    std::uniform_int_distribution<ArmyId> dist(1, range-1);
+    while (true) {
+        ArmyId i = dist(rnd);
+        if (gcd(i, range) == 1) return i;
+    }
+}
 
 void CoordZ::svg(ostream& os, Color color, uint scale) const {
     os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
@@ -407,6 +434,21 @@ ArmyId BoardSubSet::example(ArmyId& symmetry) const {
     throw(logic_error("No red value even though the BoardSubSet is not empty"));
 }
 
+ArmyId BoardSubSet::random_example(ArmyId& symmetry) const {
+    if (empty()) throw(logic_error("No red value in BoardSubSet"));
+
+    auto armies = armies_;
+    ArmyId n = allocated();
+    ArmyId i = random(n);
+    ArmyId mask = n-1;
+    ArmyId offset = 0;
+
+    while (armies[i] == 0) i = (i + ++offset) & mask;
+    ArmyId red_id;
+    symmetry = split(armies[i], red_id);
+    return red_id;
+}
+
 void BoardSubSet::print(ostream& os) const {
     for (ArmyId value: *this) {
         if (value) {
@@ -424,6 +466,14 @@ ArmyId BoardSubSetRed::example(ArmyId& symmetry) const {
 
     ArmyId red_id;
     symmetry = split(armies_[0], red_id);
+    return red_id;
+}
+
+ArmyId BoardSubSetRed::random_example(ArmyId& symmetry) const {
+    if (empty()) throw(logic_error("No red value in BoardSubSetRed"));
+
+    ArmyId red_id;
+    symmetry = split(armies_[random(size())], red_id);
     return red_id;
 }
 
@@ -1039,6 +1089,31 @@ Board BoardSet::example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_a
     throw(logic_error("No board even though BoardSet is not empty"));
 }
 
+Board BoardSet::random_example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const {
+    if (empty()) throw(logic_error("No board in BoardSet"));
+
+    ArmyId n = subsets();
+    ArmyId step = n == 1 ? 0 : random_coprime(n);
+    for (ArmyId i = random(n); true; i = (i + step) % n) {
+        ArmyId blue_id = from() + i;
+        auto const& subset = at(blue_id);
+        auto const& subset_red = subset.red();
+        ArmyId red_id, symmetry;
+        if (subset_red) {
+            if (subset_red->empty()) continue;
+            red_id = subset_red->random_example(symmetry);
+        } else {
+            if (subset.empty()) continue;
+            red_id = subset.random_example(symmetry);
+        }
+        ArmyZSet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
+        ArmyZSet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
+        ArmyZ const& blue = blue_armies.at(blue_id);
+        ArmyZ const& red  = red_armies .at(red_id);
+        return Board{blue, symmetry ? red.symmetric() : red};
+    }
+}
+
 int Board::min_nr_moves(bool blue_to_move) const {
     blue_to_move = blue_to_move ? true : false;
 
@@ -1461,8 +1536,12 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
             if (largest_red.size()) save_largest_red(largest_red);
             return -1;
         }
-        if (example)
-            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
+        if (example) {
+            if (example > 0)
+                cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
+            else
+                cout << boards_to.random_example(opponent_armies, moved_armies, nr_moves & 1);
+        }
         cout << stats << flush;
         if (boards_to.solution_id()) {
             red_id = boards_to.solution_id();
@@ -1755,7 +1834,7 @@ void set_signals() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpervR:", argv);
+    GetOpt options("b:B:t:sHSjpeErvR:", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -1768,7 +1847,8 @@ void my_main(int argc, char const* const* argv) {
             case 'S': statistics  = true; break;
             case 'v': verbose     = true; break;
             case 'j': prune_jump  = true; break;
-            case 'e': example     = true; break;
+            case 'e': example     =  1; break;
+            case 'E': example     = -1; break;
             case 'R': sample_subset_red = options.arg(); break;
             case 't':
               val = atoll(options.arg());

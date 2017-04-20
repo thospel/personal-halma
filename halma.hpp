@@ -93,7 +93,7 @@ extern int balance_min, balance_max;
 
 extern bool prune_slide;
 extern bool prune_jump;
-extern bool example;
+extern int example;
 
 // There is no fundamental limit. Just make up *SOME* bound
 uint const THREADS_MAX = 256;
@@ -848,6 +848,7 @@ class BoardSubSetRed: public BoardSubSetBase {
     bool empty() const PURE { return size() == 0; }
     ArmyId const* end() const PURE { return &armies_[size()]; }
     ArmyId example(ArmyId& symmetry) const;
+    ArmyId random_example(ArmyId& symmetry) const;
 };
 
 class BoardSubSet: public BoardSubSetBase {
@@ -888,6 +889,7 @@ class BoardSubSet: public BoardSubSetBase {
         return find(red_id | (symmetry < 0 ? ARMY_HIGHBIT : 0));
     }
     ArmyId example(ArmyId& symmetry) const;
+    ArmyId random_example(ArmyId& symmetry) const;
     void print(ostream& os) const;
     void print() const { print(cout); }
 
@@ -1122,6 +1124,7 @@ class BoardSet {
     ArmyId solution_id() const PURE { return solution_id_; }
     ArmyZ const& solution() const PURE { return solution_; }
     NOINLINE Board example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const PURE;
+    NOINLINE Board random_example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const PURE;
     // Non copyable
     BoardSet(BoardSet const&) = delete;
     BoardSet& operator=(BoardSet const&) = delete;
