@@ -15,12 +15,13 @@ bool example = false;
 bool statistics = false;
 bool hash_statistics = false;
 bool verbose = false;
-bool sample_subset_red = false;
+char const* sample_subset_red = nullptr;
 
 string HOSTNAME;
 // 0 means let C++ decide
 uint nr_threads = 0;
 string VCS_COMMIT{STRINGIFY(COMMIT)};
+string VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
@@ -1167,7 +1168,8 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
     out_ <<
         "</td>\n"
         "      <tr><th align='left'>Threads</th><td>" << nr_threads << "</td></tr>\n"
-        "      <tr><th align='left'>Commit</th><td>" << VCS_COMMIT << "</td></tr>\n"
+        "      <tr><th align='left'>Commit id</th><td>" << VCS_COMMIT << "</td></tr>\n"
+        "      <tr><th align='left'>Commit time</th><td>" << VCS_COMMIT_TIME << "</td></tr>\n"
         "      <tr><th align='left'>Host</th><td>" << HOSTNAME << "</td></tr>\n"
         "    </table>\n";
 }
@@ -1253,7 +1255,7 @@ void Svg::write(BoardList const& boards,
     stats("backtrack", stats_list_backtrack);
     html_footer();
     string const svg_file = solution_file(boards.size()-1);
-    string const svg_file_tmp = svg_file + "." + HOSTNAME + "." + to_string(getpid()) + ".new";
+    string const svg_file_tmp = svg_file + "." + HOSTNAME + ".new";
     ofstream svg_fh;
     svg_fh.exceptions(ofstream::failbit | ofstream::badbit);
     try {
@@ -1366,15 +1368,32 @@ void play(bool print_moves=false) {
     }
 }
 
-void show_largest_red(vector<ArmyId> const& largest_red) {
-    cout << hex;
-    for (ArmyId const& red_value: largest_red) {
-        ArmyId red_id;
-        bool symmetry = BoardSubSet::split(red_value, red_id) != 0;
+void save_largest_red(vector<ArmyId> const& largest_red) {
+    string const file{sample_subset_red};
+    string const file_tmp = file + "." + HOSTNAME + ".new";
 
-        cout << red_id << (symmetry ? "-" : "+") << "\n";
+    ofstream fh;
+    fh.exceptions(ofstream::failbit | ofstream::badbit);
+    try {
+        fh.open(file_tmp, ofstream::out);
+        fh << hex;
+        for (ArmyId const& red_value: largest_red) {
+            ArmyId red_id;
+            bool symmetry = BoardSubSet::split(red_value, red_id) != 0;
+
+            fh << red_id << (symmetry ? "-" : "+") << "\n";
+        }
+        fh << dec;
+        fh.close();
+        int rc = rename(file_tmp.c_str(), file.c_str());
+        if (rc)
+            throw(system_error(errno, system_category(),
+                               "Could not rename '" + file_tmp + "' to '" +
+                               file + "'"));
+    } catch(exception& e) {
+        unlink(file_tmp.c_str());
+        throw;
     }
-    cout << dec;
 }
 
 int solve(Board const& board, int nr_moves, ArmyZ& red_army,
@@ -1433,7 +1452,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
             auto stop_solve = chrono::steady_clock::now();
             auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
             cout << stats << setw(6) << duration << " s, no solution" << endl;
-            if (largest_red.size()) show_largest_red(largest_red);
+            if (largest_red.size()) save_largest_red(largest_red);
             return -1;
         }
         if (example)
@@ -1452,7 +1471,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
     auto duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
     cout << setw(6) << duration << " s, solved" << endl;
 
-    if (largest_red.size()) show_largest_red(largest_red);
+    if (largest_red.size()) save_largest_red(largest_red);
 
     if (red_id == 0) throw(logic_error("Solved without solution"));
     return i;
@@ -1693,7 +1712,7 @@ void system_properties() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpervR", argv);
+    GetOpt options("b:B:t:sHSjpervR:", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -1707,7 +1726,7 @@ void my_main(int argc, char const* const* argv) {
             case 'v': verbose     = true; break;
             case 'j': prune_jump  = true; break;
             case 'e': example     = true; break;
-            case 'R': sample_subset_red = true; break;
+            case 'R': sample_subset_red = options.arg(); break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)

@@ -25,6 +25,7 @@
 #ifdef __GNUC__
 # define RESTRICT __restrict__
 # define NOINLINE	__attribute__((__noinline__))
+# define ALWAYS_INLINE  __attribute__((always_inline))
 # define LIKELY(x)	__builtin_expect(!!(x),true)
 # define UNLIKELY(x)	__builtin_expect(!!(x),false)
 # define HOT		__attribute__((__hot__))
@@ -36,6 +37,7 @@
 #else // __GNUC__
 # define RESTRICT
 # define NOINLINE
+# define ALWAYS_INLINE
 # define LIKELY(x)	(x)
 # define UNLIKELY(x)	(x)
 # define HOT
@@ -374,7 +376,8 @@ class ArmyZ: public array<CoordZ, ARMY> {
     }
     NOINLINE ArmyZ symmetric() const PURE {
         ArmyZ result;
-        transform(begin(), end(), result.begin(), [](CoordZ const& pos){ return pos.symmetric(); });
+        transform(begin(), end(), result.begin(),
+                  [](CoordZ const& pos) ALWAYS_INLINE { return pos.symmetric(); });
         sort(result.begin(), result.end());
         return result;
     }
@@ -1605,10 +1608,10 @@ inline StatisticsE make_all_moves
  ArmyZSet& moved_armies,
  int nr_moves) {
     return verbose || statistics || hash_statistics ?
-        make_all_moves_slow(boards_from, boards_to, 
+        make_all_moves_slow(boards_from, boards_to,
                                moving_armies, opponent_armies, moved_armies,
                                nr_moves) :
-        make_all_moves_fast(boards_from, boards_to, 
+        make_all_moves_fast(boards_from, boards_to,
                             moving_armies, opponent_armies, moved_armies,
                             nr_moves);
 }

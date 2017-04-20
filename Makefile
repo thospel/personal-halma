@@ -9,13 +9,15 @@ CXX := ccache $(CXX)
 # CXXFLAGS := $(CXXFLAGS) -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 # LDLIBS := $(LDLIBS) -l:libtcmalloc_minimal.so.4
 
-CXXFLAGS := $(CXXFLAGS) -DCOMMIT=`git rev-parse HEAD`
+CXXFLAGS := $(CXXFLAGS) -DCOMMIT="`git rev-parse HEAD`" -DCOMMIT_TIME="`git show -s --format=%ci HEAD`"
 
 all: halma
 
-halma.o: halma.hpp halma.cpp git_time Makefile
-fast_moves.o: halma.hpp all_moves.cpp fast_moves.cpp moves.cpp Makefile
-slow_moves.o: halma.hpp all_moves.cpp slow_moves.cpp moves.cpp Makefile
+halma.o fast_moves.o slow_moves.o: halma.hpp Makefile
+
+halma.o: halma.cpp git_time
+fast_moves.o: fast_moves.cpp all_moves.cpp moves.cpp
+slow_moves.o: slow_moves.cpp all_moves.cpp moves.cpp
 
 halma: halma.o fast_moves.o slow_moves.o
 	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@
