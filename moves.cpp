@@ -31,7 +31,8 @@
 #define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,CAT(_BACKTRACK,_SLOW))))
 
 NOINLINE
-Statistics NAME(BoardSet& boards_from,
+Statistics NAME(uint thid,
+                BoardSet& boards_from,
                 BoardSet& boards_to,
                 ArmyZSet const& moving_armies,
                 ArmyZSet const& opponent_armies,
@@ -42,7 +43,7 @@ Statistics NAME(BoardSet& boards_from,
                 int solution_moves,
 #endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) {
-    tid = tids.fetch_add(1, memory_order_relaxed);
+    tid = thid;
     signal_generation_seen = signal_generation.load(memory_order_relaxed);
     // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
@@ -74,7 +75,7 @@ Statistics NAME(BoardSet& boards_from,
         uint signal_gen = signal_generation.load(memory_order_relaxed);
         if (UNLIKELY(signal_generation_seen != signal_gen)) {
             signal_generation_seen = signal_gen;
-            logger << "Processing blue " << setw(6) << blue_id << "," << setw(9) << boards_from.size() + subset_from.armies().size() << " boards left\n" << flush;
+            logger << time_string() << ": Processing blue " << setw(6) << blue_id << "," << setw(9) << boards_from.size() + subset_from.armies().size() << " boards left\n" << flush;
             if (signal_gen % 2 == 0) {
                 logger << "Forced exit" << endl;
                 break;
@@ -535,7 +536,6 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
     stats.armyset_untry(moved_armies.size());
     stats.boardset_untry(boards_to.size());
 
-    tids = 1;
     vector<future<Statistics>> results;
     int blue_to_move = nr_moves & 1;
     if (blue_to_move) {
@@ -545,11 +545,11 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
                 results.emplace_back
                     (async
                      (launch::async, BLUE_MOVES_BACKTRACK,
-                      ref(boards_from), ref(boards_to),
+                      i, ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       nr_moves));
             static_cast<Statistics&>(stats) = BLUE_MOVES_BACKTRACK
-                (boards_from, boards_to,
+                (0, boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  nr_moves);
         } else
@@ -559,11 +559,11 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
                     results.emplace_back
                         (async
                          (launch::async, BLUE_MOVES,
-                          ref(boards_from), ref(boards_to),
+                          i, ref(boards_from), ref(boards_to),
                           ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                           nr_moves));
                 static_cast<Statistics&>(stats) = BLUE_MOVES
-                    (boards_from, boards_to,
+                    (0, boards_from, boards_to,
                      moving_armies, opponent_armies, moved_armies,
                      nr_moves);
             }
@@ -574,12 +574,12 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
                 results.emplace_back
                     (async
                      (launch::async, RED_MOVES_BACKTRACK,
-                      ref(boards_from), ref(boards_to),
+                      i, ref(boards_from), ref(boards_to),
                       ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                       ref(red_backtrack), ref(red_backtrack_symmetric),
                       solution_moves, nr_moves));
             static_cast<Statistics&>(stats) = RED_MOVES_BACKTRACK
-                (boards_from, boards_to,
+                (0, boards_from, boards_to,
                  moving_armies, opponent_armies, moved_armies,
                  red_backtrack, red_backtrack_symmetric,
                  solution_moves, nr_moves);
@@ -590,11 +590,11 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
                     results.emplace_back
                         (async
                          (launch::async, RED_MOVES,
-                          ref(boards_from), ref(boards_to),
+                          i, ref(boards_from), ref(boards_to),
                           ref(moving_armies), ref(opponent_armies), ref(moved_armies),
                           nr_moves));
                 static_cast<Statistics&>(stats) = RED_MOVES
-                    (boards_from, boards_to,
+                    (0, boards_from, boards_to,
                      moving_armies, opponent_armies, moved_armies,
                      nr_moves);
             }

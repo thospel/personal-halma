@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 
 #include <algorithm>
 #include <array>
@@ -100,7 +101,6 @@ extern int example;
 uint const THREADS_MAX = 256;
 extern uint nr_threads;
 extern thread_local uint tid;
-extern atomic<uint> tids;
 extern atomic<uint> signal_generation;
 extern thread_local uint signal_generation_seen;
 
@@ -127,6 +127,7 @@ uint64_t hash64(uint64_t v) {
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
 }
 
+extern string time_string();
 extern size_t get_memory(bool set_base_mem = false);
 
 class LogBuffer: public std::streambuf {
@@ -1335,10 +1336,11 @@ class Svg {
         return file("failures", nr_moves);
     }
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
-    void write(int solution_moves, BoardList const& boards,
+    void write(time_t start_time, time_t stop_time,
+               int solution_moves, BoardList const& boards,
                StatisticsList const& stats_list_solve, Sec::rep solve_duration,
                StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration);
-    void parameters(uint x, uint y, uint army, uint rule);
+    void parameters(time_t start_time, time_t stop_time);
     void game(BoardList const& boards);
     void stats(string const& cls, StatisticsList const& stats_list);
     void board(Board const& board) { board.svg(out_, scale_, margin_); }

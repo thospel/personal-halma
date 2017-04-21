@@ -94,6 +94,33 @@ inline bool is_terminated() {
     return UNLIKELY(signal_counter % 2 == 0);
 }
 
+inline string _time_string(time_t time) {
+    struct tm tm;
+
+    if (!localtime_r(&time, &tm))
+        throw(system_error(errno, system_category(),
+                           "Could not convert time to localtime"));
+    char buffer[80];
+    if (!strftime(buffer, sizeof(buffer), "%F %T %z", &tm))
+        throw(logic_error("strtime buffer too short"));
+    return string{buffer};
+}
+
+string time_string(time_t time) {
+    return _time_string(time);
+}
+
+inline time_t now() {
+    time_t tm = time(nullptr);
+    if (tm == static_cast<time_t>(-1))
+        throw(system_error(errno, system_category(), "Could not get time"));
+    return tm;
+}
+
+string time_string() {
+    return _time_string(now());
+}
+
 size_t PAGE_SIZE;
 // Linux specific
 size_t get_memory(bool set_base_mem) {
@@ -112,7 +139,6 @@ size_t get_memory(bool set_base_mem) {
 }
 
 thread_local uint tid;
-atomic<uint> tids;
 inline uint thread_id();
 uint thread_id() {
     return tid;
@@ -366,7 +392,7 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
         os << "M " << margin             << " " << margin + y * scale << " ";
         os << "L " << margin + X * scale << " " << margin + y * scale << " ";
     }
-    os << "'           stroke='black' />\n";
+    os << "'\n            stroke='black' />\n";
     for (auto const& pos: blue())
         pos.svg(os, BLUE, scale);
     for (auto const& pos: red())
@@ -1203,10 +1229,13 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated) {
         "<html>\n"
         "  <head>\n"
         "    <style>\n"
-        "      .blue { color: blue; }\n"
-        "      .red  { color: red; }\n"
+        "      span.blue { color: blue; }\n"
+        "      span.red  { color: red; }\n"
+        "      .blue .available_moves { color: blue; }\n"
+        "      .red  .available_moves { color: red; }\n"
         "      table,tr,td,th { border: 1px solid black; }\n"
         "      .stats td { text-align: right; }\n"
+        "      .parameters th { text-align: left; }\n"
         "    </style>\n"
         "  </head>\n"
         "  <body>\n";
@@ -1229,7 +1258,7 @@ void Svg::header() {
     out_ <<
         "      <defs>\n"
         "        <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "' \n"
-        "        refX='" << w << "' refY='" << h << "' orient='auto'>\n"
+        "                refX='" << w << "' refY='" << h << "' orient='auto'>\n"
         "          <polygon points='0 0, " << w << " " << h << ", 0 " << 2*h << "' />\n"
         "        </marker>\n"
         "      </defs>\n";
@@ -1239,15 +1268,15 @@ void Svg::footer() {
     out_ << "    </svg>\n";
 }
 
-void Svg::parameters(uint x, uint y, uint army, uint rule) {
+void Svg::parameters(time_t start_time, time_t stop_time) {
     out_ <<
         "    <table class='parameters'>\n"
-        "      <tr><th align='left'>X</th><td>" << x << "</td></tr>\n"
-        "      <tr><th align='left'>Y</th><td>" << y << "</td></tr>\n"
-        "      <tr><th align='left'>Army</th><td>" << army << "</td></tr>\n"
-        "      <tr><th align='left'>Rule</th><td>" << rule << "-move</td></tr>\n"
-        "      <tr><th align='left'>Bound</th><td> &ge; " << tables.min_nr_moves() << " moves</td></tr>\n"
-        "      <tr><th align='left'>Heuristics</th><td>";
+        "      <tr class='x'><th>X</th><td>" << X << "</td></tr>\n"
+        "      <tr class='y'><th>Y</th><td>" << Y << "</td></tr>\n"
+        "      <tr class='army'><th>Army</th><td>" << ARMY << "</td></tr>\n"
+        "      <tr class='rule'><th>Rule</th><td>" << RULES << "-move</td></tr>\n"
+        "      <tr class='lower_bound'><th>Bound</th><td> &ge; " << tables.min_nr_moves() << " moves</td></tr>\n"
+        "      <tr class='heuristics'><th>Heuristics</th><td>";
     bool heuristics = false;
     if (balance >= 0) {
         if (heuristics) out_ << "<br />\n";
@@ -1268,10 +1297,12 @@ void Svg::parameters(uint x, uint y, uint army, uint rule) {
         out_ << "None\n";
     out_ <<
         "</td>\n"
-        "      <tr><th align='left'>Threads</th><td>" << nr_threads << "</td></tr>\n"
-        "      <tr><th align='left'>Commit id</th><td>" << VCS_COMMIT << "</td></tr>\n"
-        "      <tr><th align='left'>Commit time</th><td>" << VCS_COMMIT_TIME << "</td></tr>\n"
-        "      <tr><th align='left'>Host</th><td>" << HOSTNAME << "</td></tr>\n"
+        "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
+        "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
+        "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
+        "      <tr class='stop_time'><th>Stop</th><td>"  << time_string(stop_time) << "</td></tr>\n"
+        "      <tr class='commit_id'><th>Commit id</th><td>" << VCS_COMMIT << "</td></tr>\n"
+        "      <tr class='commit_time'><th>Commit time</th><td>" << VCS_COMMIT_TIME << "</td></tr>\n"
         "    </table>\n";
 }
 
@@ -1356,9 +1387,9 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
     Statistics::Counter old_boards = 1;
     for (auto const& st: stats_list) {
         out_ <<
-            "      <tr>\n"
-            "        <td class='" << st.css_color() << "'>" << st.available_moves() << "</td>\n"
-            "        <td>" << st.duration() << "</td>\n"
+            "      <tr class='" << st.css_color() << "'>\n"
+            "        <td class='available_moves'>" << st.available_moves() << "</td>\n"
+            "        <td class='duration'>" << st.duration() << "</td>\n"
             "        <td>" << st.boardset_size() << "</td>\n"
             "        <td>" << st.armyset_size() << "</td>\n"
             "        <td>" << st.memory() / 1000000 << "</td>\n"
@@ -1422,18 +1453,19 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
     out_ << "    </table>\n";
 }
 
-void Svg::write(int solution_moves, BoardList const& boards,
+void Svg::write(time_t start_time, time_t stop_time,
+                int solution_moves, BoardList const& boards,
                 StatisticsList const& stats_list_solve, Sec::rep solve_duration,
                 StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration) {
     bool terminated = is_terminated();
     int target_moves = stats_list_solve[0].available_moves();
     if (solution_moves >= 0) {
         html_header(boards.size()-1, target_moves, terminated);
-        parameters(X, Y, ARMY, RULES);
+        parameters(start_time, stop_time);
         game(boards);
     } else {
         html_header(stats_list_solve.size()-1, target_moves, terminated);
-        parameters(X, Y, ARMY, RULES);
+        parameters(start_time, stop_time);
     }
     out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
     stats("Solve", stats_list_solve);
@@ -1997,6 +2029,7 @@ void my_main(int argc, char const* const* argv) {
     balance_max = (ARMY+3) / 4 + balance;
     if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
 
+    cout << "Time " << time_string() << "\n";
     cout << "Pid: " << getpid() << "\n";
     cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
@@ -2054,6 +2087,7 @@ void my_main(int argc, char const* const* argv) {
 
     if (is_terminated()) return;
 
+    auto start_time = now();
     ArmyZ red_army;
     int solution_moves =
         solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
@@ -2061,17 +2095,20 @@ void my_main(int argc, char const* const* argv) {
         backtrack(start_board, nr_moves, solution_moves, red_army,
                   stats_list_backtrack, backtrack_duration, boards);
 
+    auto stop_time = now();
+
     for (size_t i = 0; i < boards.size(); ++i)
         cout << "Move " << i << "\n" << boards[i];
 
     Svg svg;
-    svg.write(solution_moves, boards,
+    svg.write(start_time, stop_time, solution_moves, boards,
               stats_list_solve, solve_duration,
               stats_list_backtrack, backtrack_duration);
 }
 
 int main(int argc, char const* const* argv) {
     try {
+        tzset();
         system_properties();
 
         my_main(argc, argv);
