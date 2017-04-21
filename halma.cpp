@@ -19,6 +19,7 @@ int example = 0;
 bool statistics = false;
 bool hash_statistics = false;
 bool verbose = false;
+bool attempt = false;
 char const* sample_subset_red = nullptr;
 
 string HOSTNAME;
@@ -84,6 +85,10 @@ class GetOpt {
         }
     }
 };
+
+inline bool heuristics() {
+    return balance >= 0 || prune_slide || prune_jump;
+}
 
 size_t PAGE_SIZE;
 // Linux specific
@@ -1177,11 +1182,11 @@ void Board::do_move(Move const& move_) {
     throw(logic_error("Move not found"));
 }
 
-string const Svg::solution_file(uint nr_moves) {
-    return string("solutions/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + "_" + to_string(nr_moves) + ".html";
+string const Svg::file(string const& prefix, uint nr_moves) {
+    return string(prefix + "/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + "_" + to_string(nr_moves) + ".html";
 }
 
-void Svg::html_header(uint nr_moves) {
+void Svg::html_header(uint nr_moves, int target_moves) {
     out_ <<
         "<html>\n"
         "  <head>\n"
@@ -1193,7 +1198,7 @@ void Svg::html_header(uint nr_moves) {
         "    </style>\n"
         "  </head>\n"
         "  <body>\n"
-        "   <h1>" << nr_moves << " moves</h1>\n";
+        "   <h1>" << nr_moves << " / " << target_moves << " moves</h1>\n";
 }
 
 void Svg::html_footer() {
@@ -1264,7 +1269,6 @@ void Svg::move(FullMove const& move) {
 }
 
 void Svg::game(BoardList const& boards) {
-    parameters(X, Y, ARMY, RULES);
     FullMoves full_moves;
     for (size_t i = 0; i < boards.size(); ++i) {
         header();
@@ -1301,16 +1305,38 @@ void Svg::html(FullMoves const& full_moves) {
 }
 
 void Svg::stats(string const& cls, StatisticsList const& stats_list) {
+    char buffer[1024];
+    buffer[sizeof(buffer)-1] = 0;
     out_ <<
         "    <table class='stats " << cls << "'>\n"
         "      <tr>\n"
-        "        <th>Moves left</th>\n"
+        "        <th>Moves<br/>left</th>\n"
         "        <th>Seconds</th>\n"
         "        <th>Boards</th>\n"
         "        <th>Armies</th>\n"
-        "        <th>Boards per blue army</th>\n"
-        "        <th>Memory (MB)</th>\n"
+        "        <th>Memory<br/>(MB)</th>\n"
+        "        <th>Boards per<br/>blue army</th>\n";
+    if (statistics) {
+        out_ <<
+            "        <th>Late<br/>prunes</th>\n"
+            "        <th>Late<br/>prune<br/>ratio</th>\n"
+            "        <th>Army inserts</th>\n"
+            "        <th>Army<br/>ratio</th>\n"
+            "        <th>Board inserts</th>\n"
+            "        <th>Board<br/>ratio</th>\n";
+    }
+    if (hash_statistics) {
+        out_ <<
+            "        <th>Army immediate</th>\n"
+            "        <th>Army<br/>immediate<br/>ratio</th>\n"
+            "        <th>Army<br/>probes</th>\n"
+            "        <th>Board immediate</th>\n"
+            "        <th>Board<br/>immediate<br/>ratio</th>\n"
+            "        <th>Board<br/>probes</th>\n";
+    }
+    out_ <<
         "      </tr>\n";
+    Statistics::Counter old_boards = 1;
     for (auto const& st: stats_list) {
         out_ <<
             "      <tr>\n"
@@ -1318,24 +1344,85 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <td>" << st.duration() << "</td>\n"
             "        <td>" << st.boardset_size() << "</td>\n"
             "        <td>" << st.armyset_size() << "</td>\n"
-            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n"
             "        <td>" << st.memory() / 1000000 << "</td>\n"
+            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n";
+        if (statistics) {
+            out_ <<
+                "        <td>" << st.late_prunes() << "</td>\n"
+                "        <td>" << st.late_prunes() * 100 / old_boards << "%</td>\n"
+                "        <td>" << st.armyset_size() << " / " << st.armyset_tries() << "</td>\n"
+                "        <td>";
+            if (st.armyset_tries())
+                out_ << st.armyset_size()*100 / st.armyset_tries() << "%";
+            out_ <<
+                "</td>\n"
+                "        <td>" << st.boardset_size() << " / " << st.boardset_tries() << "</td>\n"
+                "        <td>";
+            if (st.boardset_tries())
+                out_ << st.boardset_size()*100 / st.boardset_tries() << "%";
+            out_ << "</td>\n";
+        }
+        if (hash_statistics) {
+            out_ <<
+                "        <td>" << st.armyset_immediate() << " / " << st.armyset_tries() << "</td>\n";
+            if (st.armyset_tries()) {
+                snprintf(buffer, sizeof(buffer)-1,
+                         "        <td>%.0f%%</td>\n"
+                         "        <td>%.2f</td>\n",
+                         st.armyset_immediate() * 100. / st.armyset_tries(),
+                         1 + 1. * st.armyset_probes() / st.armyset_tries());
+                out_ << &buffer[0];
+            } else {
+                out_ <<
+                    "        <td></td>\n"
+                    "        <td></td>\n";
+            }
+            out_ <<
+                "        <td>" << st.boardset_immediate() << " / " << st.boardset_tries() << "</td>\n";
+            if (st.boardset_tries()) {
+                snprintf(buffer, sizeof(buffer)-1,
+                         "        <td>%.0f%%</td>\n"
+                         "        <td>%.2f</td>\n",
+                         st.boardset_immediate() * 100. / st.boardset_tries(),
+                         1 + 1. * st.boardset_probes() / st.boardset_tries());
+                out_ << buffer;
+            } else {
+                out_ <<
+                    "        <td></td>\n"
+                    "        <td></td>\n";
+            }
+        }
+        out_ <<
             "      </tr>\n";
+        old_boards = st.boardset_size();
     }
     out_ << "    </table>\n";
 }
 
-void Svg::write(BoardList const& boards,
+void Svg::write(int solution_moves, BoardList const& boards,
                 StatisticsList const& stats_list_solve, Sec::rep solve_duration,
                 StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration) {
-    html_header(boards.size()-1);
-    game(boards);
+    int target_moves = stats_list_solve[0].available_moves();
+    if (solution_moves >= 0) {
+        html_header(boards.size()-1, target_moves);
+        parameters(X, Y, ARMY, RULES);
+        game(boards);
+    } else {
+        html_header(stats_list_solve.size()-1, target_moves);
+        parameters(X, Y, ARMY, RULES);
+    }
     out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
-    stats("solve", stats_list_solve);
-    out_ << "<h3>Backtrack (" << backtrack_duration << " seconds)</h3>\n";
-    stats("backtrack", stats_list_backtrack);
+    stats("Solve", stats_list_solve);
+    if (stats_list_backtrack.size()) {
+        out_ << "<h3>Backtrack (" << backtrack_duration << " seconds)</h3>\n";
+        stats("Backtrack", stats_list_backtrack);
+    }
     html_footer();
-    string const svg_file = solution_file(boards.size()-1);
+    string const svg_file =
+        attempt             ? attempts_file(target_moves) :
+        solution_moves >= 0 ? solution_file(boards.size()-1) :
+        heuristics()        ? attempts_file(target_moves) :
+        failures_file(target_moves);
     string const svg_file_tmp = svg_file + "." + HOSTNAME + ".new";
     ofstream svg_fh;
     svg_fh.exceptions(ofstream::failbit | ofstream::badbit);
@@ -1834,7 +1921,7 @@ void set_signals() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpeErvR:", argv);
+    GetOpt options("b:B:t:sHSjpeErvR:A", argv);
     long long int val;
     bool replay = false;
     while (options.next())
@@ -1847,6 +1934,7 @@ void my_main(int argc, char const* const* argv) {
             case 'S': statistics  = true; break;
             case 'v': verbose     = true; break;
             case 'j': prune_jump  = true; break;
+            case 'A': attempt     = true; break;
             case 'e': example     =  1; break;
             case 'E': example     = -1; break;
             case 'R': sample_subset_red = options.arg(); break;
@@ -1859,7 +1947,7 @@ void my_main(int argc, char const* const* argv) {
               nr_threads = val;
               break;
             default:
-              cerr << "usage: " << argv[0] << " [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-e]\n";
+              cerr << "usage: " << argv[0] << " [-A] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-e] [-H] [-S] [-R sample_red_file]\n";
               exit(EXIT_FAILURE);
         }
     balance_min = ARMY     / 4 - balance;
@@ -1917,24 +2005,22 @@ void my_main(int argc, char const* const* argv) {
         return;
     }
 
-    StatisticsList stats_list_solve;
-    Sec::rep solve_duration;
+    StatisticsList stats_list_solve, stats_list_backtrack;
+    Sec::rep solve_duration, backtrack_duration;
+    BoardList boards;
+
     ArmyZ red_army;
     int solution_moves =
         solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
-    if (solution_moves < 0) return;
-
-    StatisticsList stats_list_backtrack;
-    Sec::rep backtrack_duration;
-    BoardList boards;
-    backtrack(start_board, nr_moves, solution_moves, red_army,
-              stats_list_backtrack, backtrack_duration, boards);
+    if (solution_moves >= 0)
+        backtrack(start_board, nr_moves, solution_moves, red_army,
+                  stats_list_backtrack, backtrack_duration, boards);
 
     for (size_t i = 0; i < boards.size(); ++i)
         cout << "Move " << i << "\n" << boards[i];
 
     Svg svg;
-    svg.write(boards,
+    svg.write(solution_moves, boards,
               stats_list_solve, solve_duration,
               stats_list_backtrack, backtrack_duration);
 }

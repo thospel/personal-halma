@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -1316,9 +1317,17 @@ class Svg {
   public:
     static uint const SCALE = 20;
 
-    static string const solution_file(uint nr_moves) FUNCTIONAL;
+    static string const solution_file(uint nr_moves) FUNCTIONAL {
+        return file("solutions", nr_moves);
+    }
+    static string const attempts_file(uint nr_moves) FUNCTIONAL {
+        return file("attempts", nr_moves);
+    }
+    static string const failures_file(uint nr_moves) FUNCTIONAL {
+        return file("failures", nr_moves);
+    }
     Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
-    void write(BoardList const& boards,
+    void write(int solution_moves, BoardList const& boards,
                StatisticsList const& stats_list_solve, Sec::rep solve_duration,
                StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration);
     void parameters(uint x, uint y, uint army, uint rule);
@@ -1327,13 +1336,15 @@ class Svg {
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
     void html(FullMoves const& full_moves);
-    void html_header(uint nr_moves);
+    void html_header(uint nr_moves, int tatget_moves);
     void html_footer();
     void header();
     void footer();
     string str() const PURE { return out_.str(); }
 
   private:
+    static string const file(string const& prefix, uint nr_moves) FUNCTIONAL;
+
     uint scale_;
     uint margin_;
     stringstream out_;
