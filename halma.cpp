@@ -254,6 +254,13 @@ void StatisticsE::print(ostream& os) const {
         else
             os << "----";
         os << "\t" << boardset_size() << " / " << boardset_tries() << " " << "\n";
+
+        os << "\tBlue on red base edge: ";
+        if (boardset_size())
+            os << setw(3) << edges()*100 / boardset_size() << "%";
+        else
+            os << "----";
+        os << "\t" << edges() << " / " << boardset_size() << " " << "\n";
     }
     if (hash_statistics) {
         os << "\tArmy immediate:";
@@ -1323,7 +1330,9 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <th>Army inserts</th>\n"
             "        <th>Army<br/>ratio</th>\n"
             "        <th>Board inserts</th>\n"
-            "        <th>Board<br/>ratio</th>\n";
+            "        <th>Board<br/>ratio</th>\n"
+            "        <th>Red base edge</th>\n"
+            "        <th>Edge<br/>ratio</th>\n";
     }
     if (hash_statistics) {
         out_ <<
@@ -1360,6 +1369,12 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
                 "        <td>";
             if (st.boardset_tries())
                 out_ << st.boardset_size()*100 / st.boardset_tries() << "%";
+            out_ << "</td>\n"
+                "</td>\n"
+                "        <td>" << st.edges() << " / " << st.boardset_size() << "</td>\n"
+                "        <td>";
+            if (st.boardset_size())
+                out_ << st.edges()*100 / st.boardset_size() << "%";
             out_ << "</td>\n";
         }
         if (hash_statistics) {

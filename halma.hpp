@@ -590,6 +590,7 @@ class Statistics {
     }
     void clear() {
         late_prunes_ = 0;
+        edge_count_  = 0;
 
         armyset_size_ = 0;
         armyset_tries_ = 0;
@@ -604,6 +605,10 @@ class Statistics {
     inline void late_prune()   {
         if (!STATISTICS) return;
         ++late_prunes_;
+    }
+    inline void edge(Counter add = 1)   {
+        if (!STATISTICS) return;
+        edge_count_ += add;
     }
     inline void armyset_size(Counter size) {
         armyset_tries_ += size;
@@ -638,6 +643,7 @@ class Statistics {
         boardset_immediate_ += probes == 0;
     }
     Counter late_prunes() const PURE { return late_prunes_; }
+    Counter edges() const PURE { return edge_count_; }
     Counter armyset_size() const PURE { return armyset_size_; }
     Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
@@ -664,6 +670,7 @@ class Statistics {
 
   private:
     Counter late_prunes_;
+    Counter edge_count_;
     Counter armyset_size_;
     Counter armyset_tries_;
     Counter armyset_probes_;

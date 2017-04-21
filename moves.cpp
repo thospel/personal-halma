@@ -330,6 +330,9 @@ Statistics NAME(BoardSet& boards_from,
                         logger << image << flush;
                         image.set(val, EMPTY);
                     }
+#if BLUE_TO_MOVE
+                    int edge_c;
+#endif // BLUE_TO_MOVE
 
                     Nbits Ndistance_a = Ndistance_army;
                     {
@@ -337,7 +340,7 @@ Statistics NAME(BoardSet& boards_from,
                         Nbits Ndistance_r = Ndistance_red;
                         auto off      = off_base;
                         auto parity_c = parity_count;
-                        auto edge_c   = edge_count;
+                        edge_c        = edge_count;
 
                         if (val.base_red()) {
                             --off;
@@ -469,20 +472,25 @@ Statistics NAME(BoardSet& boards_from,
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
                     result_symmetry *= red_symmetry;
-                    if (boards_to.insert(moved_id, red_id, result_symmetry, stats) && VERBOSE) {
-                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                        image.set(val, BLUE);
-                        logger << "   Inserted Blue id " << moved_id << "\n" << image << flush;
-                        image.set(val, EMPTY);
+                    if (boards_to.insert(moved_id, red_id, result_symmetry, stats)) {
+                        if (edge_c) stats.edge();
+                        if (VERBOSE) {
+                            // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                            image.set(val, BLUE);
+                            logger << "   Inserted Blue id " << moved_id << "\n" << image << flush;
+                            image.set(val, EMPTY);
+                        }
                     }
 #else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
                     result_symmetry *= blue_symmetry;
-                    if (subset_to.insert(moved_id, result_symmetry, stats) && VERBOSE) {
-                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                        image.set(val, RED);
-                        logger << "   Inserted Red id " << moved_id << "\n" << image << flush;
-                        image.set(val, EMPTY);
+                    if (subset_to.insert(moved_id, result_symmetry, stats)) {
+                        if (VERBOSE) {
+                            // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                            image.set(val, RED);
+                            logger << "   Inserted Red id " << moved_id << "\n" << image << flush;
+                            image.set(val, EMPTY);
+                        }
                     }
 #endif // BLUE_TO_MOVE
                 }
@@ -491,6 +499,7 @@ Statistics NAME(BoardSet& boards_from,
             }
         }
 #if !BLUE_TO_MOVE
+        if (edge_count_from) stats.edge(subset_to.size());
         boards_to.insert(blue_id, subset_to);
 #endif // !BLUE_TO_MOVE
 
