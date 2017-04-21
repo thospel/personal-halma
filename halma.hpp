@@ -658,6 +658,7 @@ class Statistics {
             late_prunes_    += stats.late_prunes();
             armyset_tries_  += stats.armyset_tries();
             boardset_tries_ += stats.boardset_tries();
+            edge_count_     += stats.edges();
         }
         if (HASH_STATISTICS) {
             armyset_probes_	+= stats.armyset_probes_;
@@ -1343,7 +1344,7 @@ class Svg {
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
     void html(FullMoves const& full_moves);
-    void html_header(uint nr_moves, int tatget_moves);
+    void html_header(uint nr_moves, int tatget_moves, bool terminated = false);
     void html_footer();
     void header();
     void footer();

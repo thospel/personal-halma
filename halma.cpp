@@ -19,7 +19,7 @@ int example = 0;
 bool statistics = false;
 bool hash_statistics = false;
 bool verbose = false;
-bool attempt = false;
+bool attempt = true;
 char const* sample_subset_red = nullptr;
 
 string HOSTNAME;
@@ -28,7 +28,7 @@ uint nr_threads = 0;
 string VCS_COMMIT{STRINGIFY(COMMIT)};
 string VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
-int signal_counter = 0;
+int signal_counter = 1;
 atomic<uint> signal_generation;
 thread_local uint signal_generation_seen;
 
@@ -90,6 +90,10 @@ inline bool heuristics() {
     return balance >= 0 || prune_slide || prune_jump;
 }
 
+inline bool is_terminated() {
+    return UNLIKELY(signal_counter % 2 == 0);
+}
+
 size_t PAGE_SIZE;
 // Linux specific
 size_t get_memory(bool set_base_mem) {
@@ -144,6 +148,7 @@ int LogBuffer::sync() {
             std::lock_guard<std::mutex> lock{mutex_out_};
             cout << prefix_;
             cout.write(pbase(), pptr() - pbase());
+            cout.flush();
         }
         pbump(size);
     }
@@ -1193,7 +1198,7 @@ string const Svg::file(string const& prefix, uint nr_moves) {
     return string(prefix + "/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + "_" + to_string(nr_moves) + ".html";
 }
 
-void Svg::html_header(uint nr_moves, int target_moves) {
+void Svg::html_header(uint nr_moves, int target_moves, bool terminated) {
     out_ <<
         "<html>\n"
         "  <head>\n"
@@ -1204,8 +1209,11 @@ void Svg::html_header(uint nr_moves, int target_moves) {
         "      .stats td { text-align: right; }\n"
         "    </style>\n"
         "  </head>\n"
-        "  <body>\n"
-        "   <h1>" << nr_moves << " / " << target_moves << " moves</h1>\n";
+        "  <body>\n";
+    if (terminated)
+        out_ << "    <h1>Warning: Terminated run</h1>\n";
+    out_ <<
+        "    <h1>" << nr_moves << " / " << target_moves << " moves</h1>\n";
 }
 
 void Svg::html_footer() {
@@ -1417,13 +1425,14 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
 void Svg::write(int solution_moves, BoardList const& boards,
                 StatisticsList const& stats_list_solve, Sec::rep solve_duration,
                 StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration) {
+    bool terminated = is_terminated();
     int target_moves = stats_list_solve[0].available_moves();
     if (solution_moves >= 0) {
-        html_header(boards.size()-1, target_moves);
+        html_header(boards.size()-1, target_moves, terminated);
         parameters(X, Y, ARMY, RULES);
         game(boards);
     } else {
-        html_header(stats_list_solve.size()-1, target_moves);
+        html_header(stats_list_solve.size()-1, target_moves, terminated);
         parameters(X, Y, ARMY, RULES);
     }
     out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
@@ -1433,8 +1442,9 @@ void Svg::write(int solution_moves, BoardList const& boards,
         stats("Backtrack", stats_list_backtrack);
     }
     html_footer();
+
     string const svg_file =
-        attempt             ? attempts_file(target_moves) :
+        attempt || terminated ? attempts_file(target_moves) :
         solution_moves >= 0 ? solution_file(boards.size()-1) :
         heuristics()        ? attempts_file(target_moves) :
         failures_file(target_moves);
@@ -1622,6 +1632,8 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         moving_armies.clear();
         boards_from.clear();
 
+        if (is_terminated()) return -1;
+
         if (sample_subset_red && nr_moves % 2 == 0)
             for (auto const& subset: static_cast<BoardSet const&>(boards_to)) {
                 BoardSubSetRed const& subset_red = static_cast<BoardSubSetRed const&>(static_cast<BoardSubSetBase const&>(subset));
@@ -1720,6 +1732,9 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
               moving_armies, opponent_armies, moved_armies,
               solution_moves, red_backtrack, red_backtrack_symmetric,
               nr_moves));
+
+        if (is_terminated()) return;
+
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
         if (example)
@@ -1804,6 +1819,8 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     for (int blue_to_move = 1;
          board_set.size() != 0;
          blue_to_move = 1-blue_to_move, board_set.pop_back(), army_set.pop_back()) {
+        if (is_terminated()) return;
+
         // cout << "Current image:\n" << image;
         BoardSet const& back_boards   = *board_set.back();
         ArmyZSet const& back_armies   = *army_set.back();
@@ -1901,7 +1918,8 @@ void system_properties() {
 void signal_handler(int signum) {
     switch(signum) {
         case SIGSYS:
-          signal_generation.store(++signal_counter, memory_order_relaxed);
+          signal_counter += 2;
+          signal_generation.store(signal_counter, memory_order_relaxed);
           break;
         case SIGUSR1:
           if (nr_threads > 1) --nr_threads;
@@ -1909,6 +1927,10 @@ void signal_handler(int signum) {
         case SIGUSR2:
           ++nr_threads;
           break;
+        case SIGINT:
+        case SIGTERM:
+          signal_counter = 0;
+          signal_generation.store(signal_counter, memory_order_relaxed);
         default:
           // Impossible. Ignore
           break;
@@ -1918,10 +1940,10 @@ void signal_handler(int signum) {
 void set_signals() {
     struct sigaction new_action;
 
-    signal_generation = 0;
+    signal_generation = signal_counter;
 
     new_action.sa_handler = signal_handler;
-    sigemptyset (&new_action.sa_mask);
+    sigfillset(&new_action.sa_mask);
     new_action.sa_flags = 0;
 
     if (sigaction(SIGSYS, &new_action, nullptr))
@@ -1933,6 +1955,12 @@ void set_signals() {
     if (sigaction(SIGUSR2, &new_action, nullptr))
         throw(system_error(errno, system_category(),
                            "Could not set SIGUSR2 handler"));
+    if (sigaction(SIGINT, &new_action, nullptr))
+        throw(system_error(errno, system_category(),
+                           "Could not set SIGUNT handler"));
+    if (sigaction(SIGTERM, &new_action, nullptr))
+        throw(system_error(errno, system_category(),
+                           "Could not set SIGTERM handler"));
 }
 
 void my_main(int argc, char const* const* argv) {
@@ -1949,7 +1977,7 @@ void my_main(int argc, char const* const* argv) {
             case 'S': statistics  = true; break;
             case 'v': verbose     = true; break;
             case 'j': prune_jump  = true; break;
-            case 'A': attempt     = true; break;
+            case 'A': attempt     = false; break;
             case 'e': example     =  1; break;
             case 'E': example     = -1; break;
             case 'R': sample_subset_red = options.arg(); break;
@@ -2024,6 +2052,8 @@ void my_main(int argc, char const* const* argv) {
     Sec::rep solve_duration, backtrack_duration;
     BoardList boards;
 
+    if (is_terminated()) return;
+
     ArmyZ red_army;
     int solution_moves =
         solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
@@ -2045,6 +2075,8 @@ int main(int argc, char const* const* argv) {
         system_properties();
 
         my_main(argc, argv);
+        if (is_terminated())
+            cout << "Terminated by signal" << endl;
     } catch(exception& e) {
         cerr << "Exception: " << e.what() << endl;
         exit(EXIT_FAILURE);

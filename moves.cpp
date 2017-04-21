@@ -72,9 +72,13 @@ Statistics NAME(BoardSet& boards_from,
         if (VERBOSE) logger << "Processing blue " << blue_id << "\n" << flush;
 
         uint signal_gen = signal_generation.load(memory_order_relaxed);
-        if (signal_generation_seen != signal_gen) {
+        if (UNLIKELY(signal_generation_seen != signal_gen)) {
             signal_generation_seen = signal_gen;
             logger << "Processing blue " << setw(6) << blue_id << "," << setw(9) << boards_from.size() + subset_from.armies().size() << " boards left\n" << flush;
+            if (signal_gen % 2 == 0) {
+                logger << "Forced exit" << endl;
+                break;
+            }
         }
 
         ArmyZ const& bZ = BLUE_TO_MOVE ?
