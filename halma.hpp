@@ -683,41 +683,6 @@ class Statistics {
     Counter boardset_immediate_;
 };
 
-class StatisticsE: public Statistics {
-  public:
-    StatisticsE(int available_moves, Counter opponent_armies_size):
-        opponent_armies_size_{opponent_armies_size},
-        available_moves_{available_moves} {}
-    void start() { start_ = chrono::steady_clock::now(); }
-    void stop () {
-        stop_  = chrono::steady_clock::now();
-        memory_ = get_memory();
-    }
-    size_t const& memory() const PURE { return memory_; }
-    Sec::rep duration() const PURE {
-        return chrono::duration_cast<Sec>(stop_-start_).count();
-    }
-    int available_moves() const PURE { return available_moves_; }
-    bool blue_move() const PURE { return available_moves() & 1; }
-    string css_color() const PURE { return blue_move() ? "blue" : "red"; }
-    Counter blue_armies_size() const PURE {
-        return blue_move() ? armyset_size() : opponent_armies_size_;
-    }
-    void print(ostream& os) const;
-  private:
-    size_t memory_;
-    chrono::steady_clock::time_point start_, stop_;
-    Counter opponent_armies_size_;
-    int available_moves_;
-};
-
-inline ostream& operator<<(ostream& os, StatisticsE const& stats) {
-    stats.print(os);
-    return os;
-}
-
-using StatisticsList = vector<StatisticsE>;
-
 STATIC const int ARMY_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMY_HIGHBIT = static_cast<ArmyId>(1) << (ARMY_BITS-1);
 STATIC const ArmyId ARMY_MASK = ARMY_HIGHBIT-1;
@@ -826,6 +791,49 @@ class Board {
     }
 };
 using BoardList = vector<Board>;
+
+class StatisticsE: public Statistics {
+  public:
+    StatisticsE(int available_moves, Counter opponent_armies_size):
+        opponent_armies_size_{opponent_armies_size},
+        available_moves_{available_moves} {}
+    void start() { start_ = chrono::steady_clock::now(); }
+    void stop () {
+        stop_  = chrono::steady_clock::now();
+        memory_ = get_memory();
+    }
+    size_t const& memory() const PURE { return memory_; }
+    Sec::rep duration() const PURE {
+        return chrono::duration_cast<Sec>(stop_-start_).count();
+    }
+    int available_moves() const PURE { return available_moves_; }
+    bool blue_move() const PURE { return available_moves() & 1; }
+    string css_color() const PURE { return blue_move() ? "blue" : "red"; }
+    Counter blue_armies_size() const PURE {
+        return blue_move() ? armyset_size() : opponent_armies_size_;
+    }
+    void print(ostream& os) const;
+    void example_board(Board const& board) {
+        example_board_ = board;
+        example_ = true;
+    }
+    Board const& example_board() const FUNCTIONAL { return example_board_; }
+    bool const example() const FUNCTIONAL { return example_; }
+  private:
+    size_t memory_;
+    chrono::steady_clock::time_point start_, stop_;
+    Counter opponent_armies_size_;
+    int available_moves_;
+    bool example_ = false;
+    Board example_board_;
+};
+
+inline ostream& operator<<(ostream& os, StatisticsE const& stats) {
+    stats.print(os);
+    return os;
+}
+
+using StatisticsList = vector<StatisticsE>;
 
 class BoardSubSetBase {
   public:

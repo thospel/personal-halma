@@ -1451,6 +1451,21 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         old_boards = st.boardset_size();
     }
     out_ << "    </table>\n";
+
+    if (any_of(stats_list.begin(), stats_list.end(),
+               [](StatisticsE const& st) { return st.example(); })) {
+        out_ << "<h4>Sample boards</h4>\n";
+        header();
+        board(tables.start());
+        footer();
+    }
+
+    for (auto const& st: stats_list)
+        if (st.example()) {
+            header();
+            board(st.example_board());
+            footer();
+        }
 }
 
 void Svg::write(time_t start_time, time_t stop_time,
@@ -1674,7 +1689,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
             }
 
         // if (verbose) cout << moved_armies << boards_to;
-        auto const& stats = stats_list.back();
+        auto& stats = stats_list.back();
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
             duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
@@ -1683,10 +1698,11 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
             return -1;
         }
         if (example) {
-            if (example > 0)
-                cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
-            else
-                cout << boards_to.random_example(opponent_armies, moved_armies, nr_moves & 1);
+            stats.example_board
+                (example > 0 ?
+                 boards_to.example(opponent_armies, moved_armies, nr_moves & 1) :
+                 boards_to.random_example(opponent_armies, moved_armies, nr_moves & 1));
+            cout << stats.example_board();
         }
         cout << stats << flush;
         if (boards_to.solution_id()) {
@@ -1769,9 +1785,15 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
-        if (example)
-            cout << boards_to.example(opponent_armies, moved_armies, nr_moves & 1);
-        cout << stats_list.back() << flush;
+        auto& stats = stats_list.back();
+        if (example) {
+            stats.example_board
+                (example > 0 ?
+                 boards_to.example(opponent_armies, moved_armies, nr_moves & 1) :
+                 boards_to.random_example(opponent_armies, moved_armies, nr_moves & 1));
+            cout << stats.example_board();
+        }
+        cout << stats << flush;
     }
     auto stop_solve = chrono::steady_clock::now();
     duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
