@@ -161,15 +161,16 @@ using Norm = uint8_t;
 using Nbits = uint;
 int const NBITS = std::numeric_limits<Nbits>::digits;
 Nbits const NLEFT = static_cast<Nbits>(1) << (NBITS-1);
-enum Color : uint8_t { EMPTY, BLUE, RED, COLORS };
-inline Color operator+(Color from, int value) {
-    return static_cast<Color>(static_cast<int>(from) + value);
+enum Color : uint8_t { EMPTY, BLUE=2, RED, COLORS };
+
+inline bool RED_or_COLORS(Color c) {
+    // return (c & 2) != 0;
+    return (c & 5) != 0;
 }
-inline Color operator-(Color from, int value) {
-    return static_cast<Color>(static_cast<int>(from) - value);
-}
-inline Color operator~(Color color) {
-    return RED+BLUE-color;
+
+inline bool RED_or_BLUE(Color c) {
+    // return c == RED || c == BLUE;
+    return (c & 2) != 0;
 }
 
 inline string svg_color(Color color) {

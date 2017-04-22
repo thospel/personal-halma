@@ -741,7 +741,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     for (int i=0; i < nr_reachable; ++i) {
         for (auto direction: Coord::directions()) {
             Coord jumpee{reachable[i], direction};
-            if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+            if (!RED_or_BLUE(image.get(jumpee))) continue;
             Coord target{jumpee, direction};
             if (image.get(target) != EMPTY) continue;
             image.set(target, COLORS);
@@ -1947,7 +1947,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
             for (int i=0; i < nr_reachable; ++i) {
                 for (auto move: Coord::directions()) {
                     Coord jumpee{reachable[i], move};
-                    if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+                    if (!RED_or_BLUE(image.get(jumpee))) continue;
                     Coord target{jumpee, move};
                     if (image.get(target) != EMPTY) continue;
                     image.set(target, COLORS);

@@ -268,7 +268,7 @@ Statistics NAME(uint thid,
                     for (int i=0; i < nr_reachable; ++i) {
                         for (auto move: Coord::directions()) {
                             Coord jumpee{reachable[i], move};
-                            if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+                            if (!RED_or_BLUE(image.get(jumpee))) continue;
                             Coord target{jumpee, move};
                             if (image.get(target) != EMPTY) continue;
                             image.set(target, COLORS);
@@ -440,10 +440,10 @@ Statistics NAME(uint thid,
                         for (uint i = reachable.size()-1; i > r_top; --i) {
                             for (auto move: Coord::directions()) {
                                 Coord jumpee{reachable[i], move};
-                                if (image.get(jumpee) != RED && image.get(jumpee) != BLUE) continue;
+                                if (!RED_or_BLUE(image.get(jumpee))) continue;
                                 Coord target{jumpee, move};
                                 Color c = image.get(target);
-                                if (c & RED) continue;
+                                if (RED_or_COLORS(c)) continue;
                                 if (c == BLUE) {
                                     if (!target.base_red()) goto ACCEPTABLE;
                                     continue;
