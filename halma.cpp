@@ -1679,7 +1679,11 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
         moving_armies.clear();
         boards_from.clear();
 
-        if (is_terminated()) return -1;
+        if (is_terminated()) {
+            auto stop_solve = chrono::steady_clock::now();
+            duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+            return -1;
+        }
 
         if (sample_subset_red && nr_moves % 2 == 0)
             for (auto const& subset: static_cast<BoardSet const&>(boards_to)) {
@@ -1730,7 +1734,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
                BoardList& boards) {
     cout << "Start backtracking\n";
 
-    auto start_solve = chrono::steady_clock::now();
+    auto start_backtrack = chrono::steady_clock::now();
     vector<unique_ptr<BoardSet>> board_set;
     board_set.reserve(nr_moves+1);
     vector<unique_ptr<ArmyZSet>>  army_set;
@@ -1781,7 +1785,11 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
               solution_moves, red_backtrack, red_backtrack_symmetric,
               nr_moves));
 
-        if (is_terminated()) return;
+        if (is_terminated()) {
+            auto stop_backtrack = chrono::steady_clock::now();
+            duration = chrono::duration_cast<Sec>(stop_backtrack-start_backtrack).count();
+            return;
+        }
 
         if (boards_to.size() == 0)
             throw(logic_error("No solution while backtracking"));
@@ -1795,8 +1803,8 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         }
         cout << stats << flush;
     }
-    auto stop_solve = chrono::steady_clock::now();
-    duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
+    auto stop_backtrack = chrono::steady_clock::now();
+    duration = chrono::duration_cast<Sec>(stop_backtrack-start_backtrack).count();
     cout << setw(6) << duration << " s, backtrack tables built" << endl;
 
     // Do some sanity checking
