@@ -103,6 +103,8 @@ extern uint nr_threads;
 extern thread_local uint tid;
 extern atomic<uint> signal_generation;
 extern thread_local uint signal_generation_seen;
+extern thread_local ssize_t allocated_;
+extern atomic<ssize_t> total_allocated_;
 
 const char letters[] = "abcdefghijklmnopqrstuvwxyz";
 
@@ -691,13 +693,15 @@ STATIC const ArmyId ARMY_MAX  = std::numeric_limits<ArmyId>::max();
 class ArmyZSet {
   public:
     static ArmyId const INITIAL_SIZE = 32;
-    ArmyZSet(ArmyId size = INITIAL_SIZE);
-    ~ArmyZSet();
-    void clear(ArmyId size = INITIAL_SIZE);
+
+    NOINLINE ArmyZSet(ArmyId size = INITIAL_SIZE);
+    NOINLINE ~ArmyZSet();
+    NOINLINE void clear(ArmyId size = INITIAL_SIZE);
     void drop_hash() {
         delete [] values_;
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
         values_ = nullptr;
+        allocated_ -= values_bytes();
     }
     ArmyId size() const PURE { return used_; }
     size_t allocated() const PURE {
@@ -728,8 +732,11 @@ class ArmyZSet {
 
   private:
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
-    inline void _clear(ArmyId size) RESTRICT;
+    inline void _clear0() RESTRICT;
+    inline void _clear1(ArmyId size) RESTRICT;
     NOINLINE void resize() RESTRICT;
+    size_t armies_bytes() const PURE { return armies_size_ * sizeof(ArmyZ); }
+    size_t values_bytes() const PURE { return allocated()  * sizeof(ArmyId); }
 
     ArmyZ* armies_;
     ArmyId* values_;
@@ -792,6 +799,8 @@ class Board {
 };
 using BoardList = vector<Board>;
 
+ssize_t total_allocated() PURE;
+
 class StatisticsE: public Statistics {
   public:
     StatisticsE(int available_moves, Counter opponent_armies_size):
@@ -801,8 +810,10 @@ class StatisticsE: public Statistics {
     void stop () {
         stop_  = chrono::steady_clock::now();
         memory_ = get_memory();
+        allocated_ = total_allocated();
     }
-    size_t const& memory() const PURE { return memory_; }
+    size_t const memory()    const PURE { return memory_; }
+    size_t const allocated() const PURE { return allocated_; }
     Sec::rep duration() const PURE {
         return chrono::duration_cast<Sec>(stop_-start_).count();
     }
@@ -821,6 +832,7 @@ class StatisticsE: public Statistics {
     bool const example() const FUNCTIONAL { return example_; }
   private:
     size_t memory_;
+    ssize_t allocated_;
     chrono::steady_clock::time_point start_, stop_;
     Counter opponent_armies_size_;
     int available_moves_;
@@ -843,10 +855,7 @@ class BoardSubSetBase {
         return value & ARMY_HIGHBIT;
     }
     ArmyId const* begin() const PURE { return &armies_[0]; }
-    void destroy() {
-        // cout << "Destroy BoardSubSetBase " << static_cast<void const*>(armies_) << "\n";
-        delete[] armies_;
-    }
+    inline void destroy();
   protected:
     ArmyId* begin() PURE { return &armies_[0]; }
 
@@ -955,6 +964,17 @@ BoardSubSetRed const* BoardSubSet::red() const {
     return static_cast<BoardSubSetRed const*>(static_cast<BoardSubSetBase const*>(this));
 }
 
+void BoardSubSetBase::destroy() {
+    if (armies_) {
+        delete [] armies_;
+        BoardSubSet const* subset = static_cast<BoardSubSet const*>(this);
+        BoardSubSetRed const* subset_red = subset->red();
+        ArmyId size = subset_red ? subset_red->size() : subset->allocated();
+        allocated_ -= size * sizeof(ArmyId);
+        // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << "\n" << flush;
+    }
+}
+
 class BoardSubSetRedBuilder: public BoardSubSetBase {
   public:
     static ArmyId const INITIAL_SIZE = 32;
@@ -962,7 +982,11 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
     BoardSubSetRedBuilder(ArmyId allocate = INITIAL_SIZE);
     ~BoardSubSetRedBuilder() {
         delete [] armies_;
-        delete [] (army_list_ - size());
+        allocated_ -= real_allocated_ * sizeof(ArmyId);
+        auto army_list = army_list_ - size();
+        delete [] army_list;
+        allocated_ -= FACTOR(real_allocated_) * sizeof(ArmyId);
+        // logger << "Destroy BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
     }
     ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
@@ -980,6 +1004,8 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
     inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {
         ArmyId sz = size();
         ArmyId* new_list = new ArmyId[sz];
+        allocated_ += sz * sizeof(ArmyId);
+        // logger << "Extract BoardSubSetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
         ArmyId* old_list = army_list_ - sz;
         army_list_ = old_list;
         std::copy(&old_list[0], &old_list[sz], new_list);
@@ -1041,7 +1067,8 @@ class BoardSet {
         for (auto& subset: *this)
             subset.destroy();
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
-        delete [] subsets_;
+        delete [] (subsets_+1);
+        allocated_ -= subsets_bytes();
     }
     ArmyId subsets() const PURE { return top_ - from(); }
     size_t size() const PURE { return size_; }
@@ -1064,7 +1091,7 @@ class BoardSet {
         if (blue_id >= top_) {
             // Only in the multithreaded case blue_id can be different from top_
             // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
-            while (blue_id >= capacity_) resize();
+            while (blue_id > capacity_) resize();
             while (blue_id >= top_) at(top_++).create();
         }
         bool result = at(blue_id).insert(red_id, symmetry, stats);
@@ -1090,7 +1117,7 @@ class BoardSet {
         if (blue_id >= top_) {
             // Only in the multithreaded case blue_id can be different from top_
             // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
-            while (blue_id >= capacity_) resize();
+            while (blue_id > capacity_) resize();
             while (blue_id > top_) at(top_++).zero();
             ++top_;
         }
@@ -1108,7 +1135,7 @@ class BoardSet {
         if (blue_id >= top_) {
             // Only in the multithreaded case can blue_id be different from top_
             // if (blue_id != top_) throw(logic_error("Cannot grow more than 1"));
-            while (blue_id >= capacity_) resize();
+            while (blue_id > capacity_) resize();
             while (blue_id > top_) at(top_++).zero();
             ++top_;
         }
@@ -1148,7 +1175,10 @@ class BoardSet {
     BoardSet& operator=(BoardSet const&) = delete;
     void print(ostream& os) const;
   private:
-    ArmyId capacity() const PURE { return capacity_-1; }
+    ArmyId capacity() const PURE { return capacity_; }
+    size_t subsets_bytes() const PURE {
+        return capacity() * sizeof(BoardSubSetBase);
+    }
     ArmyId next() {
         lock_guard<mutex> lock{exclude_};
         return from_ < top_ ? from_++ : 0;

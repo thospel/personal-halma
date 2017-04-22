@@ -30,6 +30,9 @@
 
 #define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,CAT(_BACKTRACK,_SLOW))))
 
+#define SCOPE_OPEN	{
+#define SCOPE_CLOSE	}
+
 NOINLINE
 Statistics NAME(uint thid,
                 BoardSet& boards_from,
@@ -44,6 +47,7 @@ Statistics NAME(uint thid,
 #endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) {
     tid = thid;
+    if (tid) allocated_ = 0;
     signal_generation_seen = signal_generation.load(memory_order_relaxed);
     // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
@@ -57,10 +61,11 @@ Statistics NAME(uint thid,
     ParityCount balance_count_from, balance_count;
 #endif
 
+    Statistics stats;
+    SCOPE_OPEN;
 #if RED_NORMAL
     BoardSubSetRedBuilder subset_to;
 #endif // RED_NORMAL
-    Statistics stats;
     while (true) {
 #if BLUE_NORMAL
         BoardSubSetRedRef subset_from{boards_from};
@@ -509,6 +514,9 @@ Statistics NAME(uint thid,
 #endif // !BLUE_TO_MOVE
 
     }
+    SCOPE_CLOSE;
+
+    if (tid) total_allocated_ += allocated_;
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
     return stats;
 }

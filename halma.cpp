@@ -31,6 +31,8 @@ string VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 int signal_counter = 1;
 atomic<uint> signal_generation;
 thread_local uint signal_generation_seen;
+thread_local ssize_t allocated_;
+atomic<ssize_t> total_allocated_;
 
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
@@ -119,6 +121,13 @@ inline time_t now() {
 
 string time_string() {
     return _time_string(now());
+}
+
+ssize_t total_allocated() {
+    if (tid) throw(logic_error("Use of total_allocated inside a thread"));
+    total_allocated_ += allocated_;
+    allocated_ = 0;
+    return total_allocated_;
 }
 
 size_t PAGE_SIZE;
@@ -403,7 +412,8 @@ void BoardSubSet::create(ArmyId size) {
     mask_ = size-1;
     left_ = FACTOR(size);
     armies_ = new ArmyId[size];
-    // cout << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n";
+    allocated_ += size * sizeof(ArmyId);
+    // logger << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
     fill(begin(), end(), 0);
 }
 
@@ -430,6 +440,7 @@ void BoardSubSet::resize() {
     auto old_size = allocated();
     ArmyId size = old_size*2;
     auto new_armies = new ArmyId[size];
+    allocated_ += size * sizeof(ArmyId);
     armies_ = new_armies;
     // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n" << flush;
 
@@ -452,14 +463,18 @@ void BoardSubSet::resize() {
         // cout << "Found empty\n";
     }
     delete [] old_armies;
+    allocated_ -= old_size * sizeof(ArmyId);
 }
 
 void BoardSubSet::convert_red() {
     ArmyId sz = size();
     auto new_armies = new ArmyId[sz];
+    allocated_ += sz * sizeof(ArmyId);
     for (ArmyId const& red_value: *this)
         if (red_value) *new_armies++ = red_value;
     delete [] armies_;
+    allocated_ -= allocated() * sizeof(ArmyId);
+    // logger << "Convert BoardSubSet " << static_cast<void const*>(armies_) << " (size " << allocated() << ") to red -> " << static_cast<void const*>(new_armies-sz) << " (size " << sz << ")\n" << flush;
     auto subset_red = BoardSubSetRed{new_armies - sz, sz};
     static_cast<BoardSubSetBase&>(*this) = static_cast<BoardSubSetBase&>(subset_red);
 }
@@ -525,8 +540,11 @@ BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId allocate) {
     mask_ = allocate-1;
     left_ = capacity();
     armies_ = new ArmyId[allocate];
+    allocated_ += allocate * sizeof(ArmyId);
     fill(begin(), end(), 0);
     army_list_ = new ArmyId[left_];
+    allocated_ += left_ * sizeof(ArmyId);
+    // logger << "Create BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << allocate << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ")\n" << flush;
 }
 
 void BoardSubSetRedBuilder::resize() {
@@ -536,12 +554,20 @@ void BoardSubSetRedBuilder::resize() {
     ArmyId nr_elems = size();
     if (new_allocated > real_allocated_) {
         armies = new ArmyId[new_allocated];
+        allocated_ += new_allocated * sizeof(ArmyId);
         delete [] armies_;
+        allocated_ -= real_allocated_ * sizeof(ArmyId);
+        // logger << "Resize BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies) << " (size " << new_allocated << ")\n" << flush;
         armies_ = armies;
-        army_list = new ArmyId[FACTOR(new_allocated)];
+
+        ArmyId new_left = FACTOR(new_allocated);
+        army_list = new ArmyId[new_left];
+        allocated_ += new_left * sizeof(ArmyId);
         army_list_ -= nr_elems;
         std::copy(&army_list_[0], &army_list_[size()], army_list);
         delete [] army_list_;
+        allocated_ -= FACTOR(real_allocated_) * sizeof(ArmyId);
+        // logger << "Resize BoardSubSetRedBuilder list " << static_cast<void const *>(army_list_) << " (size " << FACTOR(real_allocated_) << ") -> " << static_cast<void const *>(army_list) << " (size " << new_left << ")\n" << flush;
         army_list_ = army_list + nr_elems;
         real_allocated_ = new_allocated;
     } else {
@@ -568,8 +594,9 @@ void BoardSubSetRedBuilder::resize() {
     }
 }
 
-BoardSet::BoardSet(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size+1}, from_{1}, top_{1}, keep_{keep} {
-    subsets_ = new BoardSubSet[capacity_];
+BoardSet::BoardSet(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
+    subsets_ = (new BoardSubSet[capacity_])-1;
+    allocated_ += subsets_bytes();
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
 
@@ -579,26 +606,27 @@ void BoardSet::clear(ArmyId size) {
     from_ = top_ = 1;
     size_ = 0;
     solution_id_ = keep_;
-    if (true) {
-        auto old_subsets = subsets_;
-        ++size;
-        subsets_ = new BoardSubSet[size];
-        delete[] old_subsets;
-        capacity_ = size;
-    }
+    auto old_subsets = subsets_+1;
+    subsets_ = (new BoardSubSet[size])-1;
+    delete [] old_subsets;
+    allocated_ -= subsets_bytes();
+    capacity_ = size;
+    allocated_ += subsets_bytes();
 }
 
 void BoardSet::resize() {
     auto old_subsets = subsets_;
-    subsets_ = new BoardSubSet[capacity_*2];
-    capacity_ *= 2;
+    subsets_ = (new BoardSubSet[capacity_*2])-1;
     // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n" << flush;
     copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
     if (!keep_) {
         top_ -= from_ - 1;
         from_ = 1;
     }
-    delete [] old_subsets;
+    delete [] (old_subsets+1);
+    allocated_ -= subsets_bytes();
+    capacity_ *= 2;
+    allocated_ += subsets_bytes();
 }
 
 void BoardSet::convert_red() {
@@ -958,7 +986,18 @@ void Tables::print_red_parity_count(ostream& os) const {
 
 Tables const tables;
 
-void ArmyZSet::_clear(ArmyId size) {
+void ArmyZSet::_clear0() {
+    delete [] armies_;
+    allocated_ -= armies_bytes();
+    // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
+    // if (values_) cout << "Destroy values " << static_cast<void const *>(values_) << "\n";
+    if (values_) {
+        delete [] values_;
+        allocated_ -= values_bytes();
+    }
+}
+
+void ArmyZSet::_clear1(ArmyId size) {
     if (size > ARMY_HIGHBIT)
         throw(overflow_error("ArmyZSet size too large"));
 
@@ -970,30 +1009,27 @@ void ArmyZSet::_clear(ArmyId size) {
         throw(logic_error("ArmyZSet clear size too small"));
 
     armies_ = new ArmyZ [size];
+    allocated_ += armies_bytes();
     values_ = new ArmyId[size];
+    allocated_ += values_bytes();
+    
     std::fill(&values_[0], &values_[size], 0);
     // logger << "New value  " << static_cast<void const *>(values_) << "\n";
     // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
 }
 
 ArmyZSet::ArmyZSet(ArmyId size) : armies_{nullptr}, values_{nullptr} {
-    _clear(size);
+    _clear1(size);
 }
 
 ArmyZSet::~ArmyZSet() {
-    delete [] armies_;
-    // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
-    // if (values_) cout << "Destroy values " << static_cast<void const *>(values_) << "\n";
-    delete [] values_;
+    _clear0();
 }
 
 void ArmyZSet::clear(ArmyId size) {
     // cout << "Clear\n";
-    delete [] armies_;
-    armies_ = nullptr;
-    delete [] values_;
-    values_ = nullptr;
-    _clear(size);
+    _clear0();
+    _clear1(size);
 }
 
 ArmyId ArmyZSet::find(ArmyZ const& army) const {
@@ -1039,9 +1075,11 @@ void ArmyZSet::resize() {
         // some very fast copy code
         std::copy(&armies_[0], &armies_[armies_size_], &new_armies[0]);
         delete [] armies_;
+        allocated_ -= armies_bytes();
         armies_ = new_armies;
         armies_size_ = size;
         armies_limit = size - 1;
+        allocated_ += armies_bytes();
     }
 
     if (used_ >= values_limit) {
@@ -1052,11 +1090,13 @@ void ArmyZSet::resize() {
 
         delete [] values_;
         values_ = nullptr;
+        allocated_ -= values_bytes();
         auto mask = size-1;
-        auto values = new ArmyId[size];
-        std::fill(&values[0], &values[size], 0);
-        values_ = values;
         mask_ = mask;
+        auto values = new ArmyId[size];
+        values_ = values;
+        allocated_ += values_bytes();
+        std::fill(&values[0], &values[size], 0);
         auto used = used_;
         auto armies = armies_;
         for (ArmyId i = 1; i <= used; ++i) {
@@ -1361,6 +1401,7 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Boards</th>\n"
         "        <th>Armies</th>\n"
         "        <th>Memory<br/>(MB)</th>\n"
+        "        <th>Allocated<br/>(MB)</th>\n"
         "        <th>Boards per<br/>blue army</th>\n";
     if (statistics) {
         out_ <<
@@ -1390,9 +1431,10 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "      <tr class='" << st.css_color() << "'>\n"
             "        <td class='available_moves'>" << st.available_moves() << "</td>\n"
             "        <td class='duration'>" << st.duration() << "</td>\n"
-            "        <td>" << st.boardset_size() << "</td>\n"
-            "        <td>" << st.armyset_size() << "</td>\n"
-            "        <td>" << st.memory() / 1000000 << "</td>\n"
+            "        <td class='boards'>" << st.boardset_size() << "</td>\n"
+            "        <td class='armies'>" << st.armyset_size() << "</td>\n"
+            "        <td class='memory'>" << st.memory()    / 1000000 << "</td>\n"
+            "        <td class='allocate'>" << st.allocated() / 1000000 << "</td>\n"
             "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n";
         if (statistics) {
             out_ <<
@@ -2138,14 +2180,20 @@ void my_main(int argc, char const* const* argv) {
 
 int main(int argc, char const* const* argv) {
     try {
+        tid = 0;
+        allocated_ = 0;
+        total_allocated_ = 0;
+
         tzset();
         system_properties();
 
         my_main(argc, argv);
+        cout << "Final memory " << total_allocated() << "\n";
         if (is_terminated())
             cout << "Terminated by signal" << endl;
     } catch(exception& e) {
         cerr << "Exception: " << e.what() << endl;
+        cerr << "Final memory " << total_allocated() << "\n";
         exit(EXIT_FAILURE);
     }
     exit(EXIT_SUCCESS);
