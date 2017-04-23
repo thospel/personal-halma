@@ -37,9 +37,9 @@ NOINLINE
 Statistics NAME(uint thid,
                 BoardSet& boards_from,
                 BoardSet& boards_to,
-                ArmyZSet const& moving_armies,
-                ArmyZSet const& opponent_armies,
-                ArmyZSet& moved_armies,
+                ArmySet const& moving_armies,
+                ArmySet const& opponent_armies,
+                ArmySet& moved_armies,
 #if BACKTRACK && !BLUE_TO_MOVE
                 BoardTable<uint8_t> const& backtrack,
                 BoardTable<uint8_t> const& backtrack_symmetric,
@@ -53,7 +53,7 @@ Statistics NAME(uint thid,
 #if !BLUE_TO_MOVE
     BalanceMask balance_mask;
     if (balance >= 0) {
-        int balance_moves = max(available_moves/2 + balance_delay - ARMY, 0);
+        int balance_moves = max(available_moves/2 + balance_delay - static_cast<int>(ARMY), 0);
         balance_mask = make_balance_mask(balance_min-balance_moves, balance_max+balance_moves);
         balance_mask = ~balance_mask;
     } else
@@ -87,26 +87,23 @@ Statistics NAME(uint thid,
             }
         }
 
-        ArmyZ const& bZ = BLUE_TO_MOVE ?
+        Army const& bZ = BLUE_TO_MOVE ?
             moving_armies.at(blue_id) :
             opponent_armies.at(blue_id);
+        Army const bZ_symmetric = bZ.symmetric();
 #if BLUE_TO_MOVE
-        ArmyZ const bZ_symmetric = bZ.symmetric();
-        ArmyPair const blue_pair{bZ, bZ_symmetric};
-        if (CHECK) blue_pair.check(__LINE__);
-        ArmyMapperPair const b_mapper{blue_pair};
+        ArmyMapperPair const b_mapper{bZ, bZ_symmetric};
 #else  // BLUE_TO_MOVE
-        ArmyPair const blue_pair{bZ};
-        if (CHECK) blue_pair.check(__LINE__);
-        // Will return 0 for symmetric or 1 for asymmetric
-        int b_symmetry = blue_pair.symmetry();
+        // Will be 0 for symmetric or 1 for asymmetric
+        int b_symmetry = !SYMMETRY ? 0 :
+            bZ == bZ_symmetric ? 0 : 1;
 #endif  // BLUE_TO_MOVE
 
         Nbits Ndistance_red = NLEFT >> tables.infinity();
         int off_base_from   = 0;
         int edge_count_from = 0;
         ParityCount parity_blue = tables.parity_count();
-        for (auto const& b: blue_pair.normal()) {
+        for (auto const& b: bZ) {
             --parity_blue[b.parity()];
             if (b.base_red()) continue;
             ++off_base_from;
@@ -136,7 +133,7 @@ Statistics NAME(uint thid,
             auto const symmetry = BoardSubSet::split(red_value, red_id);
             if (VERBOSE) logger << " Sub Processing red " << red_id << "," << symmetry << "\n" << flush;
             Army const& blue =
-                symmetry ? blue_pair.symmetric() : blue_pair.normal();
+                symmetry ? bZ_symmetric : bZ;
 #if BLUE_TO_MOVE
             ParityCount const& parity_count_from =
                 symmetry ? parity_blue_symmetric : parity_blue;
@@ -147,10 +144,9 @@ Statistics NAME(uint thid,
                 symmetry ? -b_symmetry : b_symmetry;
 #endif // BLUE_TO_MOVE
 
-            ArmyZ const& rZ = BLUE_TO_MOVE ?
+            Army const& red = BLUE_TO_MOVE ?
                 opponent_armies.at(red_id) :
                 moving_armies.at(red_id);
-            Army const red{rZ};
             if (CHECK) red.check(__LINE__);
 
             Image image{blue, red};
@@ -161,7 +157,7 @@ Statistics NAME(uint thid,
             for (auto const& b: blue) {
                 if (b.base_red()) continue;
                 for (auto const& r: red)
-                    Ndistance_army |= tables.Ndistance(r, b);
+                    Ndistance_army |= tables.Ndistance(b, r);
             }
             int const distance_army = __builtin_clz(Ndistance_army);
 
@@ -186,15 +182,13 @@ Statistics NAME(uint thid,
             // jump_only indicates that all blue moves must now be jumps
             bool const jump_only = available_moves <= off_base_from*2 && !slides;
 #if BLUE_TO_MOVE
-            int const red_symmetry = rZ.symmetry();
-            Army const& army             = blue;
-            ArmyZ const& armyZ           = symmetry ? bZ_symmetric : bZ;
-            ArmyZ const& armyZ_symmetric = symmetry ? bZ : bZ_symmetric;
+            int const red_symmetry = red.symmetry();
+            Army const& army           = blue;
+            Army const& army_symmetric = symmetry ? bZ : bZ_symmetric;
 #else  // BLUE_TO_MOVE
-            Army  const& army            = red;
-            ArmyZ const& armyZ           = rZ;
-            ArmyZ const armyZ_symmetric  = rZ.symmetric();
-            ArmyMapper const mapper{armyZ_symmetric};
+            Army const& army           = red;
+            Army const  army_symmetric = red.symmetric();
+            ArmyMapper const mapper{army_symmetric};
 
 #if BACKTRACK
             int backtrack_count_from = 2*ARMY;
@@ -213,11 +207,11 @@ Statistics NAME(uint thid,
 
 #endif // BLUE_TO_MOVE
 
-            ArmyZPos armyE, armyESymmetric;
+            ArmyPos armyE, armyESymmetric;
 #if BLUE_TO_MOVE
-            array<Coord, X*Y-2*ARMY+1> reachable;
+            array<Coord, MAX_X*MAX_Y/4+1> reachable;
 #else  // BLUE_TO_MOVE
-            array<Coord, X*Y-2*ARMY+1+ARMY+1> reachable;
+            array<Coord, MAX_X*MAX_Y/4+1+ARMY_MAX+1> reachable;
             uint red_top_from = 0;
             if (jump_only) {
                 red_top_from = reachable.size()-1;
@@ -229,12 +223,11 @@ Statistics NAME(uint thid,
 #endif // BLUE_TO_MOVE
 
             // Finally, finally we are going to do the actual moves
-            for (int a=0; a<ARMY; ++a) {
-                armyE.copy(armyZ, a);
+            for (uint a=0; a<ARMY; ++a) {
+                armyE.copy(army, a);
                 // The piece that is going to move
                 auto const soldier = army[a];
-                image.set(soldier, EMPTY);
-                armyESymmetric.copy(armyZ_symmetric, mapper.map(soldier));
+                armyESymmetric.copy(army_symmetric, mapper.map(soldier));
 #if BLUE_TO_MOVE
                 auto off_base = off_base_from;
                 off_base += soldier.base_red();
@@ -264,19 +257,21 @@ Statistics NAME(uint thid,
                 int nr_reachable = 1;
                 if (!(BLUE_TO_MOVE && jump_only) || !soldier.base_red()) {
                     reachable[0] = soldier;
-                    if (!CLOSED_LOOP) image.set(soldier, COLORS);
+                    image.set(soldier, CLOSED_LOOP ? EMPTY : COLORS);
                     for (int i=0; i < nr_reachable; ++i) {
-                        for (auto move: Coord::directions()) {
-                            Coord jumpee{reachable[i], move};
-                            if (!RED_or_BLUE(image.get(jumpee))) continue;
-                            Coord target{jumpee, move};
-                            if (image.get(target) != EMPTY) continue;
+                        auto jumpees      = reachable[i].jumpees();
+                        auto jump_targets = reachable[i].jump_targets();
+                        for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                            auto const jumpee = jumpees.current();
+                            auto const target = jump_targets.current();
+                            if (!image.jumpable(jumpee, target)) continue;
                             image.set(target, COLORS);
                             reachable[nr_reachable++] = target;
                         }
                     }
-                    for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
+                    for (int i=1; i < nr_reachable; ++i)
                         image.set(reachable[i], EMPTY);
+                    image.set(soldier, BLUE_TO_MOVE ? BLUE : RED);
 
                     // Only allow jumps off base...
                     if ((BLUE_TO_MOVE && jump_only) ||
@@ -308,9 +303,9 @@ Statistics NAME(uint thid,
                         // Either slide off base...
                         if (soldier.base_blue()) goto NORMAL_SLIDES;
                         // ... or slide onto target
-                        for (auto move: Coord::directions()) {
-                            Coord target{soldier, move};
-                            if (image.get(target) != EMPTY) continue;
+                        auto slide_targets = soldier.slide_targets();
+                        for (uint r = 0; r < RULES; ++r, slide_targets.next()) {
+                            auto const target = slide_targets.current();
                             if (!target.base_red()) {
                                 if (VERBOSE) {
                                     logger << "   Move " << soldier << " to " << target << "\n";
@@ -325,21 +320,19 @@ Statistics NAME(uint thid,
                     }
                 } else {
                   NORMAL_SLIDES:
-                    for (auto move: Coord::directions()) {
-                        Coord target{soldier, move};
+                    auto slide_targets = soldier.slide_targets();
+                    for (uint r = 0; r < RULES; ++r, slide_targets.next()) {
+                        auto const target = slide_targets.current();
                         if (image.get(target) != EMPTY) continue;
                         reachable[nr_reachable++] = target;
                     }
                 }
 
                 for (int i=1; i < nr_reachable; ++i) {
-                    // armyZ[a] = CoordZ{reachable[i]};
+                    // army[a] = Coord{reachable[i]};
                     auto const val = reachable[i];
-                    if (false) {
-                        image.set(val, BLUE_TO_MOVE ? BLUE : RED);
-                        logger << image << flush;
-                        image.set(val, EMPTY);
-                    }
+                    if (false)
+                        logger << image.str(soldier, val, BLUE_TO_MOVE ? BLUE : RED) << flush;
 #if BLUE_TO_MOVE
                     int edge_c;
 #endif // BLUE_TO_MOVE
@@ -356,11 +349,9 @@ Statistics NAME(uint thid,
                             --off;
                             if (off == 0) {
 #if !BACKTRACK
-                                if (boards_to.solve(red_id, rZ)) {
-                                    image.set(val, BLUE_TO_MOVE ? BLUE : RED);
+                                if (boards_to.solve(red_id, red)) {
                                     logger << "==================================\n";
-                                    logger << image << "Solution!" << endl;
-                                    image.set(val, EMPTY);
+                                    logger << image.str(soldier, val, BLUE_TO_MOVE ? BLUE : RED) << "Solution!" << endl;
                                 }
 #endif // !BACKTRACK
                                 goto SOLUTION;
@@ -432,18 +423,22 @@ Statistics NAME(uint thid,
                   SOLUTION:
 #else  // BLUE_TO_MOVE
                     if (jump_only) {
+                        image.set(soldier, EMPTY);
                         uint r_top = red_top;
                         for (uint i = reachable.size()-1; i > r_top; --i)
                             image.set(reachable[i], COLORS);
                         // Setting pos val must be able to override COLORS
                         image.set(val, RED);
+                        // logger << "Start mass backtrack:\n" << image;
                         for (uint i = reachable.size()-1; i > r_top; --i) {
-                            for (auto move: Coord::directions()) {
-                                Coord jumpee{reachable[i], move};
-                                if (!RED_or_BLUE(image.get(jumpee))) continue;
-                                Coord target{jumpee, move};
+                            auto jumpees      = reachable[i].jumpees();
+                            auto jump_targets = reachable[i].jump_targets();
+                            for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                                auto const jumpee = jumpees.current();
+                                auto const target = jump_targets.current();
+                                if (!image.blue_jumpable(jumpee, target))
+                                    continue;
                                 Color c = image.get(target);
-                                if (RED_or_COLORS(c)) continue;
                                 if (c == BLUE) {
                                     if (!target.base_red()) goto ACCEPTABLE;
                                     continue;
@@ -452,9 +447,11 @@ Statistics NAME(uint thid,
                                 reachable[r_top--] = target;
                             }
                         }
+                        // logger << "Failed mass backtrack:\n" << image;
                         for (uint i = reachable.size()-1; i > r_top; --i)
                             image.set(reachable[i], EMPTY);
                         image.set(val, EMPTY);
+                        image.set(soldier, RED);
                         if (VERBOSE) {
                             logger << "   Move " << soldier << " to " << val << "\n";
                             logger << "   Prune blue cannot jump to target\n";
@@ -462,23 +459,24 @@ Statistics NAME(uint thid,
                         }
                         continue;
                       ACCEPTABLE:
+                        // logger << "Succeeded mass backtrack:\n" << image;
                         for (uint i = reachable.size()-1; i > r_top; --i)
                             image.set(reachable[i], EMPTY);
                         image.set(val, EMPTY);
+                        image.set(soldier, RED);
                     }
 #endif // BLUE_TO_MOVE
-                    CoordZ valZ{val};
-                    armyE.store(valZ);
+                    armyE.store(val);
                     // logger << "   Final Set pos " << pos << armyE[pos] << "\n";
                     // logger << armyE << "----------------\n";
                     // logger.flush();
                     if (CHECK) armyE.check(__LINE__);
-                    armyESymmetric.store(valZ.symmetric());
+                    armyESymmetric.store(val.symmetric());
                     if (CHECK) armyESymmetric.check(__LINE__);
                     int result_symmetry = cmp(armyE, armyESymmetric);
                     auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric, stats);
                     if (CHECK && moved_id == 0)
-                        throw(logic_error("ArmyZ Insert returns 0"));
+                        throw(logic_error("Army Insert returns 0"));
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
                     result_symmetry *= red_symmetry;
@@ -486,9 +484,7 @@ Statistics NAME(uint thid,
                         if (edge_c) stats.edge();
                         if (VERBOSE) {
                             // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                            image.set(val, BLUE);
-                            logger << "   Inserted Blue id " << moved_id << "\n" << image << flush;
-                            image.set(val, EMPTY);
+                            logger << "   Inserted Blue id " << moved_id << "\n" << image.str(soldier, val, BLUE) << flush;
                         }
                     }
 #else  // BLUE_TO_MOVE
@@ -497,15 +493,11 @@ Statistics NAME(uint thid,
                     if (subset_to.insert(moved_id, result_symmetry, stats)) {
                         if (VERBOSE) {
                             // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                            image.set(val, RED);
-                            logger << "   Inserted Red id " << moved_id << "\n" << image << flush;
-                            image.set(val, EMPTY);
+                            logger << "   Inserted Red id " << moved_id << "\n" << image.str(soldier, val, RED) << flush;
                         }
                     }
 #endif // BLUE_TO_MOVE
                 }
-
-                image.set(soldier, BLUE_TO_MOVE ? BLUE : RED);
             }
         }
 #if !BLUE_TO_MOVE
@@ -530,9 +522,9 @@ Statistics NAME(uint thid,
 
 StatisticsE ALL_NAME(BoardSet& boards_from,
                      BoardSet& boards_to,
-                     ArmyZSet const& moving_armies,
-                     ArmyZSet const& opponent_armies,
-                     ArmyZSet& moved_armies,
+                     ArmySet const& moving_armies,
+                     ArmySet const& opponent_armies,
+                     ArmySet& moved_armies,
 #if BACKTRACK
                      int solution_moves,
                      BoardTable<uint8_t> const& red_backtrack,

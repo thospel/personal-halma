@@ -1282,6 +1282,22 @@ Minimum possible number of moves: 45
  38561 s, set 32 done,9479484862 boards /   975054 armies    9722 32% ( 99760 MB)
 Out of memory (430G swap)
 
+          set 49 done (nas, no heuristics)
+     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
+     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
+     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
+     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
+     5 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
+    45 s, set 43 done,  64228527 boards /    11884 armies    9589 (  667 MB)
+    89 s, set 42 done,  74418075 boards /    27116 armies    2744 (  790 MB)
+   279 s, set 41 done, 361710211 boards /   217512 armies   13339 ( 3198 MB)
+   439 s, set 40 done, 204451594 boards /    43572 armies    4692 ( 3123 MB)
+   985 s, set 39 done, 790838475 boards /  2553497 armies   18150 ( 7609 MB)
+   934 s, set 38 done, 247016643 boards /    33602 armies    7351 ( 7468 MB)
+  1217 s, set 37 done, 971718999 boards / 18086135 armies   28918 (11174 MB)
+  1237 s, set 36 done, 232461917 boards /   200445 armies    1159 ( 7959 MB)
+killed
+
 Commit: fc47092651c680cd305a89c65f39115d12c8121f
 Minimum possible number of moves: 45
           set 49 done (nas, prune slides, prune jumps)
@@ -1327,22 +1343,6 @@ Minimum possible number of moves: 45
      0 s, set  9 done,    706692 boards /   706692 armies  235564 (   727 MB)
      2 s, set  8 done,         0 boards /        0 armies       0 (   504 MB)
  64459 s, no solution
-
-          set 49 done (nas, no heuristics)
-     0 s, set 48 done,        21 boards /       21 armies       1 (   92 MB)
-     0 s, set 47 done,       802 boards /       21 armies      38 (  226 MB)
-     0 s, set 46 done,     21342 boards /      544 armies      39 (  226 MB)
-     0 s, set 45 done,    584976 boards /      561 armies    1075 (  227 MB)
-     5 s, set 44 done,   6634978 boards /     6698 armies     990 (  240 MB)
-    45 s, set 43 done,  64228527 boards /    11884 armies    9589 (  667 MB)
-    89 s, set 42 done,  74418075 boards /    27116 armies    2744 (  790 MB)
-   279 s, set 41 done, 361710211 boards /   217512 armies   13339 ( 3198 MB)
-   439 s, set 40 done, 204451594 boards /    43572 armies    4692 ( 3123 MB)
-   985 s, set 39 done, 790838475 boards /  2553497 armies   18150 ( 7609 MB)
-   934 s, set 38 done, 247016643 boards /    33602 armies    7351 ( 7468 MB)
-  1217 s, set 37 done, 971718999 boards / 18086135 armies   28918 (11174 MB)
-  1237 s, set 36 done, 232461917 boards /   200445 armies    1159 ( 7959 MB)
-killed
 
 BALANCE 0 DELAY 0 49
 Minimum possible number of moves: 45

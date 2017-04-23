@@ -8,6 +8,10 @@
 
 #include <random>
 
+uint X = 0;
+uint Y = 0;
+uint RULES = 6;
+
 int balance = -1;
 int balance_delay = 0;
 int balance_min, balance_max;
@@ -87,6 +91,28 @@ class GetOpt {
         }
     }
 };
+
+class Diff {
+  public:
+    Diff() {}
+    Diff(int dx, int dy): dx_{dx}, dy_{dy} {}
+    int dx() const PURE { return dx_; }
+    int dy() const PURE { return dy_; }
+  private:
+    int dx_;
+    int dy_;
+
+    friend inline bool operator<(Diff const& l, Diff const& r) {
+        if (l.dy_ < r.dy_) return true;
+        if (l.dy_ > r.dy_) return false;
+        return l.dx_ < r.dx_;
+    }
+};
+
+inline ostream& operator<<(ostream& os, Diff const& diff) {
+    os << "[" << setw(2) << diff.dx() << "," << setw(2) << diff.dy() << "]";
+    return os;
+}
 
 inline bool heuristics() {
     return balance >= 0 || prune_slide || prune_jump;
@@ -217,42 +243,8 @@ ArmyId random_coprime(ArmyId range) {
     }
 }
 
-void CoordZ::svg(ostream& os, Color color, uint scale) const {
+void Coord::svg(ostream& os, Color color, uint scale) const {
     os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
-}
-
-ostream& operator<<(ostream& os, ArmyZ const& army) {
-    for (auto const& pos: army)
-        os << pos << "\n";
-    return os;
-}
-
-void ArmyZ::check(int line) const {
-    // for (int i=0; i<ARMY; ++i) (*this)[i].check(line);
-    for (int i=0; i<ARMY-1; ++i)
-        if ((*this)[i] >= (*this)[i+1]) {
-            cerr << *this;
-            throw(logic_error("ArmyZ out of order at line " + to_string(line)));
-        }
-}
-
-ostream& operator<<(ostream& os, ArmyZE const& army) {
-    for (int i=-1; i<=ARMY; ++i)
-        os << army.at(i) << "\n";
-    return os;
-}
-
-void ArmyZE::check(int line) const {
-    for (int i=0; i<ARMY; ++i) at(i).check(line);
-    for (int i=0; i<ARMY-1; ++i)
-        if (at(i) >= at(i+1)) {
-            cerr << *this;
-            throw(logic_error("ArmyZE out of order at line " + to_string(line)));
-        }
-    if (at(-1) != CoordZ::MIN())
-        throw(logic_error("ArmyZE wrong bottom at line " + to_string(line)));
-    if (at(ARMY) != CoordZ::MAX())
-        throw(logic_error("ArmyZE wrong top at line " + to_string(line)));
 }
 
 ostream& operator<<(ostream& os, Army const& army) {
@@ -262,21 +254,31 @@ ostream& operator<<(ostream& os, Army const& army) {
 }
 
 void Army::check(int line) const {
-    for (int i=0; i<ARMY; ++i) (*this)[i].check(line);
-    for (int i=0; i<ARMY-1; ++i)
+    // for (int i=0; i<ARMY; ++i) (*this)[i].check(line);
+    for (uint i=0; i<ARMY-1; ++i)
         if ((*this)[i] >= (*this)[i+1]) {
             cerr << *this;
             throw(logic_error("Army out of order at line " + to_string(line)));
         }
 }
 
-ArmyPair::ArmyPair(ArmyZ const& army) {
-    for (int i=0; i < ARMY; ++i) {
-        auto& p = army[i].coord_pair();
-        normal_   [i] = p.normal();
-        symmetric_[i] = p.symmetric();
-    }
-    sort(symmetric_.begin(), symmetric_.end());
+ostream& operator<<(ostream& os, ArmyE const& army) {
+    for (int i=-1; i<=static_cast<int>(ARMY); ++i)
+        os << army.at(i) << "\n";
+    return os;
+}
+
+void ArmyE::check(int line) const {
+    for (uint i=0; i<ARMY; ++i) at(i).check(line);
+    for (uint i=0; i<ARMY-1; ++i)
+        if (at(i) >= at(i+1)) {
+            cerr << *this;
+            throw(logic_error("ArmyE out of order at line " + to_string(line)));
+        }
+    if (at(-1) != Coord::MIN())
+        throw(logic_error("ArmyE wrong bottom at line " + to_string(line)));
+    if (at(ARMY) != Coord::MAX())
+        throw(logic_error("ArmyE wrong top at line " + to_string(line)));
 }
 
 void StatisticsE::print(ostream& os) const {
@@ -341,12 +343,12 @@ void StatisticsE::print(ostream& os) const {
     os << " (" << setw(6) << memory() / 1000000 << " MB)\n";
 }
 
-Move::Move(ArmyZ const& army_from, ArmyZ const& army_to): from{-1,-1}, to{-1, -1} {
-    ArmyZE const fromE{army_from};
-    ArmyZE const toE  {army_to};
+Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} {
+    ArmyE const fromE{army_from};
+    ArmyE const toE  {army_to};
 
-    int i = 0;
-    int j = 0;
+    uint i = 0;
+    uint j = 0;
     int diffs = 0;
     while (i < ARMY || j < ARMY) {
         if (fromE.at(i) == toE.at(j)) {
@@ -368,12 +370,12 @@ Move::Move(ArmyZ const& army_from, ArmyZ const& army_to): from{-1,-1}, to{-1, -1
         throw(logic_error("Move going nowhere"));
 }
 
-Move::Move(ArmyZ const& army_from, ArmyZ const& army_to, int& diffs): from{-1,-1}, to{-1, -1} {
-    ArmyZE const fromE{army_from};
-    ArmyZE const toE  {army_to};
+Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1}, to{-1, -1} {
+    ArmyE const fromE{army_from};
+    ArmyE const toE  {army_to};
 
-    int i = 0;
-    int j = 0;
+    uint i = 0;
+    uint j = 0;
     diffs = 0;
     while (i < ARMY || j < ARMY) {
         if (fromE.at(i) == toE.at(j)) {
@@ -393,11 +395,11 @@ Move::Move(ArmyZ const& army_from, ArmyZ const& army_to, int& diffs): from{-1,-1
 
 void Board::svg(ostream& os, uint scale, uint margin) const {
     os << "      <path d='";
-    for (int x=0; x<=X; ++x) {
+    for (uint x=0; x<=X; ++x) {
         os << "M " << margin + x * scale << " " << margin << " ";
         os << "L " << margin + x * scale << " " << margin + Y * scale << " ";
     }
-    for (int y=0; y<=X; ++y) {
+    for (uint y=0; y<=X; ++y) {
         os << "M " << margin             << " " << margin + y * scale << " ";
         os << "L " << margin + X * scale << " " << margin + y * scale << " ";
     }
@@ -643,33 +645,48 @@ void BoardSet::print(ostream& os) const {
     os << "-----\n";
 }
 
-string Image::str() const {
+string Image::_str() const {
     string result;
     result.reserve((2*X+3)*(Y+2));
     result += "+";
-    for (int x=0; x < X; ++x) result += "--";
+    for (uint x=0; x < X; ++x) result += "--";
     result += "+\n";
 
-    for (int y=0; y < Y; ++y) {
+    for (uint y=0; y < Y; ++y) {
         result += "|";
-        for (int x=0; x < X; ++x) {
+        for (uint x=0; x < X; ++x) {
             auto c = get(x, y);
             result += (c == EMPTY ? ". " :
-                   c == RED   ? "X " :
-                   c == BLUE  ? "O " :
-                   "? ");
+                       c == RED   ? "X " :
+                       c == BLUE  ? "O " :
+                       "? ");
         }
         result += "|\n";
     }
 
     result += "+";
-    for (int x=0; x < X; ++x) result += "--";
+    for (uint x=0; x < X; ++x) result += "--";
     result += "+\n";
 
     return result;
 }
 
-void ArmyZSet::print(ostream& os) const {
+string Image::str() const {
+    return _str();
+}
+
+string Image::str(Coord from, Coord to, Color color) {
+    if (get(from) != color) abort();
+    set(from, EMPTY);
+    if (get(to) != EMPTY) abort();
+    set(to, color);
+    auto string = _str();
+    set(to, EMPTY);
+    set(from, color);
+    return string;
+}
+
+void ArmySet::print(ostream& os) const {
     os << "[";
     if (values_) {
         for (size_t i=0; i < allocated(); ++i)
@@ -687,8 +704,9 @@ FullMove::FullMove(char const* str): FullMove{} {
     while (true) {
         char ch = *ptr++;
         if (ch < letters[0] || ch >= letters[X]) break;
-        int x = ch - 'a';
-        int y = 0;
+        uint x = ch - 'a';
+        if (x >= X) break;
+        uint y = 0;
         while (true) {
             ch = *ptr++;
             if (ch < '0' || ch > '9') break;
@@ -696,7 +714,7 @@ FullMove::FullMove(char const* str): FullMove{} {
             if (y > Y) break;
         }
         --y;
-        if (y < 0 || y >= Y) break;
+        if (y >= Y) break;
         emplace_back(x, y);
         if (!ch) return;
         if (ch != '-') break;
@@ -704,12 +722,12 @@ FullMove::FullMove(char const* str): FullMove{} {
     throw(logic_error("Could not parse full move '" + string(str) + "'"));
 }
 
-CoordZ FullMove::from() const {
+Coord FullMove::from() const {
     if (size() == 0) throw(logic_error("Empty full_move"));
     return (*this)[0];
 }
 
-CoordZ FullMove::to()   const {
+Coord FullMove::to()   const {
     if (size() == 0) throw(logic_error("Empty full_move"));
     return (*this)[size()-1];
 }
@@ -721,34 +739,34 @@ Move FullMove::move() const {
 
 void FullMove::move_expand(Board const& board_from, Board const& board_to, Move const& move) {
     emplace_back(move.from);
-    Coord from{move.from};
-    Coord to  {move.to};
     if (move.from.parity() != move.to.parity()) {
         // Must be a slide. Check though
         emplace_back(move.to);
-        for (auto const& step: Coord::directions())
-            if (to == Coord{from, step}) return;
+        auto slide_targets = move.from.slide_targets();
+        for (uint r = 0; r < RULES; ++r, slide_targets.next())
+            if (slide_targets.current() == move.to) return;
         throw(logic_error("Move is not a slide but has different parity"));
     }
 
     // Must be a jump
     Image image{board_from};
     if (CLOSED_LOOP) image.set(move.from, EMPTY);
-    array<Coord, X*Y-2*ARMY+1> reachable;
-    array<int, ARMY*2*RULES+(1+RULES)> previous;
-    reachable[0] = from;
+    array<Coord, MAX_X*MAX_Y/4+1> reachable;
+    array<int,    MAX_X*MAX_Y/4+1> previous;
+    reachable[0] = move.from;
     int nr_reachable = 1;
     for (int i=0; i < nr_reachable; ++i) {
-        for (auto direction: Coord::directions()) {
-            Coord jumpee{reachable[i], direction};
-            if (!RED_or_BLUE(image.get(jumpee))) continue;
-            Coord target{jumpee, direction};
-            if (image.get(target) != EMPTY) continue;
+        auto jumpees      = reachable[i].jumpees();
+        auto jump_targets = reachable[i].jump_targets();
+        for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+            auto const jumpee = jumpees.current();
+            auto const target = jump_targets.current();
+            if (!image.jumpable(jumpee, target)) continue;
             image.set(target, COLORS);
             previous [nr_reachable] = i;
             reachable[nr_reachable] = target;
-            if (target == to) {
-                array<Coord, ARMY*2*RULES+(1+RULES)> trace;
+            if (target == move.to) {
+                array<Coord, MAX_X*MAX_Y/4+1> trace;
                 int t = 0;
                 while (nr_reachable) {
                     trace[t++] = reachable[nr_reachable];
@@ -794,41 +812,101 @@ string FullMove::str() const {
     return result;
 }
 
-Tables::Tables() {
-    fill(norm_.begin(), norm_.end(), std::numeric_limits<Norm>::max());
-    int rule = 0;
+void Tables::init() {
+    array<array<Norm, 2*MAX_X-1>, 2*MAX_Y-1> norm;
+    array<array<Norm, 2*MAX_X-1>, 2*MAX_Y-1> distance;
+    array<Diff,MAX_RULES> directions;
+    uint rule = 0;
     infinity_ = 0;
-    for (int y=1-Y; y < Y; ++y) {
-        int ay = abs(y);
-        for (int x=1-X; x < X; ++x) {
-            int ax = abs(x);
-            auto diff = Diff{x,y};
+    for (uint y=0; y<2*Y-1; ++y) {
+        int const dy = y - (Y-1);
+        int const ay = abs(dy);
+        for (uint x=0; x<2*X-1; ++x) {
+            int const dx = x - (X-1);
+            int const ax = abs(dx);
             Norm n =
                 RULES == 8 ? max(ax, ay) :
-                RULES == 6 ? (ax+ay+abs(x+y))/2 :
+                RULES == 6 ? (ax+ay+abs(dx+dy))/2 :
                 RULES == 4 ? ax+ay :
                 throw(logic_error("Unknown rule " + to_string(RULES)));
-            norm_[diff.index2()] = n;
-            distance_[diff.index2()] = n <= 2 ? 0 : n-2;
+            norm[y][x] = n;
+            distance[y][x] = n <= 2 ? 0 : n-2;
             infinity_ = max(infinity_, n);
             if (n == 1) {
                 if (rule >= RULES) throw(logic_error("too many moves"));
-                directions_[rule++] = diff;
+                directions[rule++] = Diff{dx, dy};
             }
         }
     }
     if (rule < RULES) throw(logic_error("too few directions"));
-    sort(directions_.begin(), directions_.end());
+    sort(&directions[0], &directions[RULES]);
+    if (false) {
+        cout << "Rules:\n";
+        for (uint r=0; r<RULES; ++r) cout << "  " << directions[r] << "\n";
+    }
     if (infinity_ >= NBITS)
         throw(logic_error("Max distance does not fit in Nbits"));
     ++infinity_;
 
+    // Set up distance tables
+    for (uint y_slow = 0; y_slow < Y; ++y_slow) {
+        auto y_top = y_slow + (Y-1);
+        for (uint x_slow = 0; x_slow < X; ++x_slow) {
+            auto& distances = distance_[Coord{x_slow, y_slow}];
+            auto x_top = x_slow + (X-1);
+            for (uint y=0; y<Y; ++y) {
+                auto dy = y_top - y;
+                for (uint x=0; x<X; ++x) {
+                    auto dx = x_top - x;
+                    distances[Coord{x, y}] = distance[dy][dx];
+                }
+            }
+        }
+    }
+
+    // Set up move tables (slide and jump)
+    for (uint y=0; y<Y; ++y) {
+        for (uint x=0; x<X; ++x) {
+            Coord pos{x, y};
+            array<Coord, 8> slide_targets, jumpees, jump_targets;
+            int jump  = 0;
+            int slide = 0;
+            for (uint r=0; r<RULES; ++r) {
+                int tx = x + directions[r].dx();
+                if (tx < 0 || tx >= static_cast<int>(X)) continue;
+                int ty = y + directions[r].dy();
+                if (ty < 0 || ty >= static_cast<int>(Y)) continue;
+                slide_targets[slide] = Coord{tx, ty};
+                ++slide;
+
+                int jx = tx + directions[r].dx();
+                if (jx < 0 || jx >= static_cast<int>(X)) continue;
+                int jy = ty + directions[r].dy();
+                if (jy < 0 || jy >= static_cast<int>(Y)) continue;
+                jumpees     [jump] = Coord{tx, ty};
+                jump_targets[jump] = Coord{jx, jy};
+                ++jump;
+            }
+            while (slide < 8) {
+                slide_targets[slide] = pos;
+                ++slide;
+            }
+            slide_targets_[pos].set(slide_targets);
+            while (jump < 8) {
+                jumpees     [jump] = pos;
+                jump_targets[jump] = pos;
+                ++jump;
+            }
+            jumpees_     [pos].set(jumpees);
+            jump_targets_[pos].set(jump_targets);
+        }
+    }
+
     // Fill base
     base_blue_.fill(0);
     base_red_ .fill(0);
-    Army blue, red;
-    auto& blueZ = start_.blue();
-    auto& redZ  = start_.red();
+    auto& blue = start_.blue();
+    auto& red  = start_.red();
     int d = 0;
     int a = ARMY;
     int i = 0;
@@ -839,10 +917,8 @@ Tables::Tables() {
         int y = d-x;
         // cout << "[" << x << ", " << y << "]\n";
         while (n--) {
-            blueZ[i] = CoordZ{x, y};
-            blue [i] = Coord {x, y};
-            redZ[i]  = CoordZ{X-1-x, Y-1-y};
-            red [i]  = Coord {X-1-x, Y-1-y};
+            blue[i] = Coord{x, y};
+            red[i]  = Coord{X-1-x, Y-1-y};
             base_blue_[blue[i]] = 1;
             base_red_ [red [i]] = 1;
             ++i;
@@ -851,26 +927,21 @@ Tables::Tables() {
         }
         d++;
     }
-    sort(blueZ.begin(), blueZ.end());
-    sort(redZ.begin(),  redZ.end());
+    sort(blue.begin(), blue.end());
+    sort(red.begin(),  red.end());
     for (auto const& pos: blue)
         if (base_red_[pos]) throw(logic_error("Red and blue overlap"));
 
-    for (int y=0; y < Y; ++y) {
-        start_image_.set(-1, y, COLORS);
-        start_image_.set( X, y, COLORS);
+    for (uint y=0; y < Y; ++y) {
         Norm d = infinity_;
         Parity y_parity = y%2;
-        for (int x=0; x < X; ++x) {
-            auto pos  = Coord {x, y};
-            auto posZ = CoordZ{x, y};
-            coordZ_[pos] = posZ;
-            symmetricZ_[posZ] = CoordZ{y, x};
-            symmetric_ [pos ] = Coord {y, x};
-            coord_pair_[posZ] = CoordPair{pos, Coord{y, x}};
+        for (uint x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
             start_image_.set(pos, EMPTY);
-            for (int i=0; i<ARMY; ++i) {
-                Norm d1 = norm(pos, red[i]);
+            for (uint i=0; i<ARMY; ++i) {
+                uint dy = (Y-1)+y-red[i].y();
+                uint dx = (X-1)+x-red[i].x();
+                Norm d1 = norm[dy][dx];
                 if (d1 < d) d = d1;
             }
             distance_base_red_[pos] = d > 2 ? d-2 : 0;
@@ -879,32 +950,19 @@ Tables::Tables() {
             parity_pair_ [pos]  = ParityPair(
                 2*y_parity + x_parity,
                 2*x_parity + y_parity);
-            parity_pairZ_[posZ] = ParityPair(
-                2*y_parity + x_parity,
-                2*x_parity + y_parity);
         }
-    }
-    for (int x=-1; x <= X; ++x) {
-        start_image_.set(x, -1, COLORS);
-        start_image_.set(x,  Y, COLORS);
     }
 
     parity_count_.fill(0);
     for (auto const& r: red)
         ++parity_count_[r.parity()];
-    army_red_ = Army{red};
 
     min_nr_moves_ = start_.min_nr_moves();
 }
 
-void Tables::print_directions(ostream& os) const {
-    for (int i=0; i<RULES; ++i)
-        os << directions_[i] << "\n";
-}
-
 void Tables::print_distance_base_red(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << setw(3) << static_cast<uint>(distance_base_red(pos));
         }
@@ -913,8 +971,8 @@ void Tables::print_distance_base_red(ostream& os) const {
 }
 
 void Tables::print_base_red(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(base_red(pos));
         }
@@ -923,8 +981,8 @@ void Tables::print_base_red(ostream& os) const {
 }
 
 void Tables::print_base_blue(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(base_blue(pos));
         }
@@ -933,8 +991,8 @@ void Tables::print_base_blue(ostream& os) const {
 }
 
 void Tables::print_edge_red(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(edge_red(pos));
         }
@@ -943,8 +1001,8 @@ void Tables::print_edge_red(ostream& os) const {
 }
 
 void Tables::print_parity(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(parity(pos));
         }
@@ -953,20 +1011,10 @@ void Tables::print_parity(ostream& os) const {
 }
 
 void Tables::print_parity_symmetric(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(parity_symmetric(pos));
-        }
-        os << "\n";
-    }
-}
-
-void Tables::print_symmetric(ostream& os) const {
-    for (int y=0; y < Y; ++y) {
-        for (int x=0; x < X; ++x) {
-            auto pos = Coord{x, y};
-            os << "|" << symmetric(pos);
         }
         os << "\n";
     }
@@ -984,9 +1032,9 @@ void Tables::print_red_parity_count(ostream& os) const {
     os << "\n";
 }
 
-Tables const tables;
+Tables tables;
 
-void ArmyZSet::_clear0() {
+void ArmySet::_clear0() {
     delete [] armies_;
     allocated_ -= armies_bytes();
     // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
@@ -997,42 +1045,42 @@ void ArmyZSet::_clear0() {
     }
 }
 
-void ArmyZSet::_clear1(ArmyId size) {
+void ArmySet::_clear1(ArmyId size) {
     if (size > ARMY_HIGHBIT)
-        throw(overflow_error("ArmyZSet size too large"));
+        throw(overflow_error("ArmySet size too large"));
 
     armies_size_ = size;
     mask_ = size-1;
     used_ = 0;
     limit_ = FACTOR(size);
     if (used_ >= limit_)
-        throw(logic_error("ArmyZSet clear size too small"));
+        throw(logic_error("ArmySet clear size too small"));
 
-    armies_ = new ArmyZ [size];
+    armies_ = new Army [size];
     allocated_ += armies_bytes();
     values_ = new ArmyId[size];
     allocated_ += values_bytes();
-    
+
     std::fill(&values_[0], &values_[size], 0);
     // logger << "New value  " << static_cast<void const *>(values_) << "\n";
     // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
 }
 
-ArmyZSet::ArmyZSet(ArmyId size) : armies_{nullptr}, values_{nullptr} {
+ArmySet::ArmySet(ArmyId size) : armies_{nullptr}, values_{nullptr} {
     _clear1(size);
 }
 
-ArmyZSet::~ArmyZSet() {
+ArmySet::~ArmySet() {
     _clear0();
 }
 
-void ArmyZSet::clear(ArmyId size) {
+void ArmySet::clear(ArmyId size) {
     // cout << "Clear\n";
     _clear0();
     _clear1(size);
 }
 
-ArmyId ArmyZSet::find(ArmyZ const& army) const {
+ArmyId ArmySet::find(Army const& army) const {
     ArmyId const mask = mask_;
     ArmyId pos = army.hash() & mask;
     auto values = values_;
@@ -1047,7 +1095,7 @@ ArmyId ArmyZSet::find(ArmyZ const& army) const {
     }
 }
 
-ArmyId ArmyZSet::find(ArmyZE const& army) const {
+ArmyId ArmySet::find(ArmyE const& army) const {
     ArmyId const mask = mask_;
     ArmyId pos = army.hash() & mask;
     auto values = values_;
@@ -1062,14 +1110,14 @@ ArmyId ArmyZSet::find(ArmyZE const& army) const {
     }
 }
 
-void ArmyZSet::resize() {
+void ArmySet::resize() {
     ArmyId values_limit = FACTOR(allocated());
     ArmyId armies_limit = armies_size_ - 1;
 
     if (used_ >= armies_limit) {
         size_t size = armies_size_ * 2;
-        // logger << "Resize ArmyZSet armies: new size=" << size << endl;
-        auto new_armies = new ArmyZ[size];
+        // logger << "Resize ArmySet armies: new size=" << size << endl;
+        auto new_armies = new Army[size];
         // 0 is a dummy element we don't need to copy
         // But it's probably nicely aligned so the compiler can generate
         // some very fast copy code
@@ -1084,9 +1132,9 @@ void ArmyZSet::resize() {
 
     if (used_ >= values_limit) {
         size_t size = allocated() * 2;
-        // logger << "Resize ArmyZSet values: new size=" << size << "\n" << flush;
+        // logger << "Resize ArmySet values: new size=" << size << "\n" << flush;
         if (size > ARMY_HIGHBIT)
-            throw(overflow_error("ArmyZ size grew too large"));
+            throw(overflow_error("Army size grew too large"));
 
         delete [] values_;
         values_ = nullptr;
@@ -1100,7 +1148,7 @@ void ArmyZSet::resize() {
         auto used = used_;
         auto armies = armies_;
         for (ArmyId i = 1; i <= used; ++i) {
-            ArmyZ const& army = armies[i];
+            Army const& army = armies[i];
             ArmyId hash = army.hash();
             ArmyId pos = hash & mask;
             ArmyId offset = 0;
@@ -1116,15 +1164,15 @@ void ArmyZSet::resize() {
     // logger << "Resize done\n" << flush;
 }
 
-bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armies_red) {
+bool BoardSet::insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) {
     Statistics dummy_stats;
 
-    ArmyZ const& blue = board.blue();
+    Army const& blue = board.blue();
     auto blue_symmetric = blue.symmetric();
     int blue_symmetry = cmp(blue, blue_symmetric);
     auto blue_id = armies_blue.insert(blue_symmetry >= 0 ? blue : blue_symmetric, dummy_stats);
 
-    ArmyZ const& red  = board.red();
+    Army const& red  = board.red();
     auto red_symmetric = red.symmetric();
     int red_symmetry = cmp(red, red_symmetric);
     auto red_id = armies_red.insert(red_symmetry >= 0 ? red : red_symmetric, dummy_stats);
@@ -1133,14 +1181,14 @@ bool BoardSet::insert(Board const& board, ArmyZSet& armies_blue, ArmyZSet& armie
     return insert(blue_id, red_id, symmetry, dummy_stats);
 }
 
-bool BoardSet::find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet const& armies_red) const {
-    ArmyZ const& blue = board.blue();
+bool BoardSet::find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const {
+    Army const& blue = board.blue();
     auto blue_symmetric = blue.symmetric();
     int blue_symmetry = cmp(blue, blue_symmetric);
     auto blue_id = armies_blue.find(blue_symmetry >= 0 ? blue : blue_symmetric);
     if (blue_id == 0) return false;
 
-    ArmyZ const& red = board.red();
+    Army const& red = board.red();
     auto red_symmetric = red.symmetric();
     int red_symmetry = cmp(red, red_symmetric);
     auto red_id = armies_red.find(red_symmetry >= 0 ? red : red_symmetric);
@@ -1150,7 +1198,7 @@ bool BoardSet::find(Board const& board, ArmyZSet const& armies_blue, ArmyZSet co
     return find(blue_id, red_id, symmetry);
 }
 
-Board BoardSet::example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const {
+Board BoardSet::example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
     if (empty()) throw(logic_error("No board in BoardSet"));
     for (ArmyId blue_id = from(); blue_id <= back_id(); ++blue_id) {
         auto const& subset = at(blue_id);
@@ -1163,16 +1211,16 @@ Board BoardSet::example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_a
             if (subset.empty()) continue;
             red_id = subset.example(symmetry);
         }
-        ArmyZSet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
-        ArmyZSet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
-        ArmyZ const& blue = blue_armies.at(blue_id);
-        ArmyZ const& red  = red_armies .at(red_id);
+        ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
+        ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
+        Army const& blue = blue_armies.at(blue_id);
+        Army const& red  = red_armies .at(red_id);
         return Board{blue, symmetry ? red.symmetric() : red};
     }
     throw(logic_error("No board even though BoardSet is not empty"));
 }
 
-Board BoardSet::random_example(ArmyZSet const& opponent_armies, ArmyZSet const& moved_armies, bool blue_moved) const {
+Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
     if (empty()) throw(logic_error("No board in BoardSet"));
 
     ArmyId n = subsets();
@@ -1189,10 +1237,10 @@ Board BoardSet::random_example(ArmyZSet const& opponent_armies, ArmyZSet const& 
             if (subset.empty()) continue;
             red_id = subset.random_example(symmetry);
         }
-        ArmyZSet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
-        ArmyZSet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
-        ArmyZ const& blue = blue_armies.at(blue_id);
-        ArmyZ const& red  = red_armies .at(red_id);
+        ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
+        ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
+        Army const& blue = blue_armies.at(blue_id);
+        Army const& red  = red_armies .at(red_id);
         return Board{blue, symmetry ? red.symmetric() : red};
     }
 }
@@ -1206,15 +1254,13 @@ int Board::min_nr_moves(bool blue_to_move) const {
     ParityCount parity_count_from = tables.parity_count();
     int edge_count_from = 0;
 
-    Army blue_{blue()};
-    Army red_ {red()};
-    for (auto const& b: blue_) {
+    for (auto const& b: blue()) {
         --parity_count_from[b.parity()];
         if (b.base_red()) continue;
         ++off_base_from;
         edge_count_from += b.edge_red();
         Ndistance_red |= b.Ndistance_base_red();
-        for (auto const& r: red_)
+        for (auto const& r: red())
             Ndistance_army |= tables.Ndistance(r, b);
     }
     int slides = 0;
@@ -1274,6 +1320,8 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated) {
         "      .blue .available_moves { color: blue; }\n"
         "      .red  .available_moves { color: red; }\n"
         "      table,tr,td,th { border: 1px solid black; }\n"
+        "      .red  td { border: 1px solid red; }\n"
+        "      .blue td { border: 1px solid blue; }\n"
         "      .stats td { text-align: right; }\n"
         "      .parameters th { text-align: left; }\n"
         "    </style>\n"
@@ -1624,7 +1672,7 @@ void play(bool print_moves=false) {
         // cout << board.symmetric();
 
         BoardSet board_set[2];
-        ArmyZSet  army_set[3];
+        ArmySet  army_set[3];
         board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
 
         auto stats = make_all_moves(board_set[0], board_set[1],
@@ -1678,11 +1726,11 @@ void save_largest_red(vector<ArmyId> const& largest_red) {
     }
 }
 
-int solve(Board const& board, int nr_moves, ArmyZ& red_army,
+int solve(Board const& board, int nr_moves, Army& red_army,
           StatisticsList& stats_list, Sec::rep& duration) {
     auto start_solve = chrono::steady_clock::now();
     array<BoardSet, 2> board_set;
-    array<ArmyZSet, 3>  army_set;
+    array<ArmySet, 3>  army_set;
     board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
     cout << setw(14) << "set " << setw(2) << nr_moves << " done (" << HOSTNAME;
     bool heuristics = false;
@@ -1771,7 +1819,7 @@ int solve(Board const& board, int nr_moves, ArmyZ& red_army,
 }
 
 void backtrack(Board const& board, int nr_moves, int solution_moves,
-               ArmyZ const& last_red_army,
+               Army const& last_red_army,
                StatisticsList& stats_list, Sec::rep& duration,
                BoardList& boards) {
     cout << "Start backtracking\n";
@@ -1779,31 +1827,30 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     auto start_backtrack = chrono::steady_clock::now();
     vector<unique_ptr<BoardSet>> board_set;
     board_set.reserve(nr_moves+1);
-    vector<unique_ptr<ArmyZSet>>  army_set;
+    vector<unique_ptr<ArmySet>>  army_set;
     army_set.reserve(nr_moves+2);
 
     board_set.emplace_back(new BoardSet(true));
-    army_set.emplace_back(new ArmyZSet);
-    army_set.emplace_back(new ArmyZSet);
-    board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves);
+    army_set.emplace_back(new ArmySet);
+    army_set.emplace_back(new ArmySet);
+    board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves, false);
 
-    ArmyPair const last_army{last_red_army};
     BoardTable<uint8_t> red_backtrack{};
     red_backtrack.fill(0);
-    red_backtrack.set(last_army.normal(), 2);
+    red_backtrack.set(last_red_army, 2);
     BoardTable<uint8_t> red_backtrack_symmetric{};
     red_backtrack_symmetric.fill(0);
-    red_backtrack_symmetric.set(last_army.symmetric(), 2);
+    red_backtrack_symmetric.set(last_red_army.symmetric(), 2);
     if (verbose) {
         cout << "red_backtrack:\n";
-        for (int y=0; y<Y; ++y) {
-            for (int x=0; x<X; ++x)
+        for (uint y=0; y<Y; ++y) {
+            for (uint x=0; x<X; ++x)
                 cout << " " << static_cast<uint>(red_backtrack[Coord{x, y}]);
             cout << "\n";
         }
         cout << "red_backtrack_symmetric:\n";
-        for (int y=0; y<Y; ++y) {
-            for (int x=0; x<X; ++x)
+        for (uint y=0; y<Y; ++y) {
+            for (uint x=0; x<X; ++x)
                 cout << " " << static_cast<uint>(red_backtrack_symmetric[Coord{x, y}]);
             cout << "\n";
         }
@@ -1815,7 +1862,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         auto& boards_from = *board_set[i];
         auto& boards_to   = *board_set[i+1];
 
-        army_set.emplace_back(new ArmyZSet);
+        army_set.emplace_back(new ArmySet);
         auto const& moving_armies   = *army_set[i];
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies        = *army_set[i+2];
@@ -1851,7 +1898,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
     // Do some sanity checking
     BoardSet const& final_board_set = *board_set.back();
-    ArmyZSet const& final_army_set = *army_set.back();
+    ArmySet const& final_army_set = *army_set.back();
 
     ArmyId blue_id;
     if (nr_moves == solution_moves) {
@@ -1865,7 +1912,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         if (final_board_set.size() != 1)
             throw(logic_error("More than 1 solution while backtracking"));
     } else {
-        ArmyZ blue_army = tables.start().red();
+        Army blue_army = tables.start().red();
         blue_id = final_army_set.find(blue_army);
         if (blue_id == 0)
             throw(logic_error("Could not find final blue army"));
@@ -1892,8 +1939,8 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     if (skewed)
         throw(logic_error("Unexpected red army skewed"));
 
-    ArmyZ blueZ = final_army_set.at(blue_id);
-    ArmyZ redZ  = last_red_army;
+    Army blueZ = final_army_set.at(blue_id);
+    Army redZ  = last_red_army;
 
     // It's probably more useful to generate a FullMove sequence
     // instead of a board sequence. Punt for now. --Note
@@ -1913,13 +1960,13 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     army_set.pop_back();
     army_set.pop_back();
 
-    ArmyZ blueSymmetricZ = blueZ.symmetric();
-    ArmyZ redSymmetricZ  = redZ.symmetric();
+    Army blueSymmetricZ = blueZ.symmetric();
+    Army redSymmetricZ  = redZ.symmetric();
     int blue_symmetry = cmp(blueZ, blueSymmetricZ);
     int red_symmetry  = cmp(redZ , redSymmetricZ);
 
     Image image{blueZ, redZ};
-    ArmyZPos armyE, armySymmetricE;
+    ArmyPos armyE, armySymmetricE;
     for (int blue_to_move = 1;
          board_set.size() != 0;
          blue_to_move = 1-blue_to_move, board_set.pop_back(), army_set.pop_back()) {
@@ -1927,48 +1974,48 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
         // cout << "Current image:\n" << image;
         BoardSet const& back_boards   = *board_set.back();
-        ArmyZSet const& back_armies   = *army_set.back();
+        ArmySet const& back_armies   = *army_set.back();
 
-        ArmyZ const& armyZ          = blue_to_move ? blueZ          : redZ;
-        ArmyZ const& armySymmetricZ = blue_to_move ? blueSymmetricZ : redSymmetricZ;
-        ArmyMapper const& mapper{armySymmetricZ};
-        Army army{armyZ};
-        for (int a=0; a<ARMY; ++a) {
+        Army const& army          = blue_to_move ? blueZ          : redZ;
+        Army const& armySymmetric = blue_to_move ? blueSymmetricZ : redSymmetricZ;
+        ArmyMapper const& mapper{armySymmetric};
+        for (uint a=0; a<ARMY; ++a) {
             auto const soldier = army[a];
-            image.set(soldier, EMPTY);
-            armyE         .copy(armyZ         , a);
-            armySymmetricE.copy(armySymmetricZ, mapper.map(soldier));
-            array<Coord, X*Y-2*ARMY+1> reachable;
+            armyE         .copy(army         , a);
+            armySymmetricE.copy(armySymmetric, mapper.map(soldier));
+            array<Coord, MAX_X*MAX_Y/4+1> reachable;
 
             // Jumps
             reachable[0] = soldier;
             int nr_reachable = 1;
-            if (!CLOSED_LOOP) image.set(soldier, COLORS);
+            image.set(soldier, CLOSED_LOOP ? EMPTY : COLORS);
             for (int i=0; i < nr_reachable; ++i) {
-                for (auto move: Coord::directions()) {
-                    Coord jumpee{reachable[i], move};
-                    if (!RED_or_BLUE(image.get(jumpee))) continue;
-                    Coord target{jumpee, move};
-                    if (image.get(target) != EMPTY) continue;
+                auto jumpees      = reachable[i].jumpees();
+                auto jump_targets = reachable[i].jump_targets();
+                for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                    auto const jumpee = jumpees.current();
+                    auto const target = jump_targets.current();
+                    if (!image.jumpable(jumpee, target)) continue;
                     image.set(target, COLORS);
                     reachable[nr_reachable++] = target;
                 }
             }
-            for (int i=CLOSED_LOOP; i < nr_reachable; ++i)
+            for (int i=1; i < nr_reachable; ++i)
                 image.set(reachable[i], EMPTY);
+            image.set(soldier, blue_to_move ? BLUE : RED);
 
             // Slides
-            for (auto move: Coord::directions()) {
-                Coord target{soldier, move};
-                if (image.get(target) != EMPTY) continue;
-                reachable[nr_reachable++] = target;
+            auto slide_targets = soldier.slide_targets();
+            for (uint r = 0; r < RULES; ++r, slide_targets.next()) {
+                auto const target = slide_targets.current();
+                if (image.get(target) == EMPTY)
+                    reachable[nr_reachable++] = target;
             }
 
             for (int i=1; i < nr_reachable; ++i) {
                 auto const val = reachable[i];
-                CoordZ valZ{val};
-                armyE         .store(valZ);
-                armySymmetricE.store(valZ.symmetric());
+                armyE         .store(val);
+                armySymmetricE.store(val.symmetric());
                 if (blue_to_move) {
                     blue_symmetry = cmp(armyE, armySymmetricE);
                     blue_id = back_armies.find(blue_symmetry >= 0 ? armyE : armySymmetricE);
@@ -1976,6 +2023,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
                     int symmetry = blue_symmetry * red_symmetry;
                     auto board_id = back_boards.find(blue_id, red_id, symmetry);
                     if (board_id == 0) continue;
+                    image.set(soldier, EMPTY);
                     image.set(val,     BLUE);
                     blueZ          = armyE;
                     blueSymmetricZ = armySymmetricE;
@@ -1986,13 +2034,13 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
                     int symmetry = red_symmetry * blue_symmetry;
                     auto board_id = back_boards.find(blue_id, red_id, symmetry);
                     if (board_id == 0) continue;
+                    image.set(soldier, EMPTY);
                     image.set(val,     RED);
                     redZ          = armyE;
                     redSymmetricZ = armySymmetricE;
                 }
                 goto MOVE_DONE;
             }
-            image.set(soldier, blue_to_move ? BLUE : RED);
         }
         cerr << "Blue:\n" << blueZ;
         cerr << "Red:\n" << redZ;
@@ -2068,9 +2116,10 @@ void set_signals() {
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpeErvR:A", argv);
+    GetOpt options("b:B:t:sHSjpeErvR:Ax:y:r:T", argv);
     long long int val;
     bool replay = false;
+    bool show_tables = false;
     while (options.next())
         switch (options.option()) {
             case 'b': balance       = atoi(options.arg()); break;
@@ -2084,6 +2133,7 @@ void my_main(int argc, char const* const* argv) {
             case 'A': attempt     = false; break;
             case 'e': example     =  1; break;
             case 'E': example     = -1; break;
+            case 'T': show_tables = true; break;
             case 'R': sample_subset_red = options.arg(); break;
             case 't':
               val = atoll(options.arg());
@@ -2093,21 +2143,52 @@ void my_main(int argc, char const* const* argv) {
                   throw(range_error("Too many threads"));
               nr_threads = val;
               break;
+            case 'r':
+              val = atoll(options.arg());
+              if (val == 4 || val == 6 || val == 8)
+                  RULES = val;
+              else
+                  throw(range_error("Invalid ruleset"));
+              break;
+            case 'x':
+              val = atoll(options.arg());
+              if (val < 1)
+                  throw(range_error("X must be positive"));
+              if (val > MAX_X)
+                  throw(range_error("X must be <= " STRINGIFY(MAX_X)));
+              X = val;
+              break;
+            case 'y':
+              val = atoll(options.arg());
+              if (val < 1)
+                  throw(range_error("Y must be positive"));
+              if (val > MAX_X)
+                  throw(range_error("Y must be <= " STRINGIFY(MAX_Y)));
+              Y = val;
+              break;
             default:
               cerr << "usage: " << argv[0] << " [-A] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-e] [-H] [-S] [-R sample_red_file]\n";
               exit(EXIT_FAILURE);
         }
+
+    if (X == 0)
+        if (Y == 0) X = Y = 9;
+        else X = Y;
+    else
+        if (Y == 0) Y = X;
+
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;
     if (nr_threads == 0) nr_threads = thread::hardware_concurrency();
+
+    tables.init();
 
     cout << "Time " << time_string() << "\n";
     cout << "Pid: " << getpid() << "\n";
     cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
-    if (false) {
+    if (show_tables) {
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
-        tables.print_directions();
         cout << "Red:\n";
         cout << start_board.red();
         cout << "Blue:\n";
@@ -2122,17 +2203,15 @@ void my_main(int argc, char const* const* argv) {
         tables.print_parity();
         cout << "Parity Symmetric:\n";
         tables.print_parity_symmetric();
-        cout << "Symmetric:\n";
-        tables.print_symmetric();
         cout << "Blue Base parity count:\n";
         tables.print_blue_parity_count();
         cout << "Red Base parity count:\n";
         tables.print_red_parity_count();
-        cout << "Army red:\n" << tables.army_red();
     }
 
     int needed_moves = tables.min_nr_moves();
     cout << "Minimum possible number of moves: " << needed_moves << "\n";
+    if (show_tables) return;
     int nr_moves = needed_moves;
     auto arg = options.next_arg();
     if (arg) {
@@ -2160,7 +2239,7 @@ void my_main(int argc, char const* const* argv) {
     if (is_terminated()) return;
 
     auto start_time = now();
-    ArmyZ red_army;
+    Army red_army;
     int solution_moves =
         solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
     if (solution_moves >= 0)
