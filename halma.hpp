@@ -76,11 +76,12 @@ bool const BALANCE  = true;
 extern uint X;
 extern uint Y;
 extern uint RULES;
+extern uint ARMY;
 
 uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
 uint const MAX_RULES = 8;
-uint const ARMY = 10;
+uint const MAX_ARMY  = 32;
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -315,42 +316,86 @@ class Coords {
     void next() { coords_ >>= 8; }
     void set(array<Coord, 8>& targets) {
         coords_ = 0;
-        for (int i=7; i>=0; --i) 
+        for (int i=7; i>=0; --i)
             coords_ = coords_ << 8 | targets[i]._pos();
     }
   private:
     uint64_t coords_;
 };
 
+inline uint64_t army_hash(Coord const* base) {
+    return XXHash64::hash(reinterpret_cast<void const*>(base),
+                          sizeof(*base) * ARMY,
+                          SEED);
+}
+
+using ArmyId = uint32_t;
+ArmyId const SYMMETRIC = 1;
 class ArmyE;
+class Tables;
+struct Move;
 // Army as a set of Coord
-class Army: public array<Coord, ARMY> {
+class Army {
+    // Allow tables to build red and blue armies
+    friend Tables;
+
   public:
     Army() {}
+    explicit inline Army(Coord const* army, ArmyId symmetry = 0) {
+        if (symmetry) {
+            transform(army, army+ARMY, begin(),
+                      [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
+            sort();
+        } else 
+            std::copy(army, army+ARMY, begin());
+    }
+    explicit inline Army(Army const& army, ArmyId symmetry = 0) {
+        if (symmetry) {
+            transform(army.begin(), army.end(), begin(),
+                      [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
+            sort();
+        } else 
+            std::copy(army.begin(), army.end(), begin());
+    }
     uint64_t hash() const PURE {
-        return XXHash64::hash(reinterpret_cast<void const*>(&(*this)[0]), sizeof((*this)[0]) * ARMY, SEED);
+        return army_hash(begin());
     }
-    NOINLINE Army symmetric() const PURE {
-        Army result;
-        transform(begin(), end(), result.begin(),
-                  [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
-        sort(result.begin(), result.end());
-        return result;
-    }
-
     NOINLINE void check(int line) const;
     inline int symmetry() const;
     Army& operator=(Army const& army) {
         std::copy(army.begin(), army.end(), begin());
         return *this;
     }
+
+    void do_move(Move const& move);
+    inline bool _try_move(Move const& move);
+
     inline Army& operator=(ArmyE const& army);
+    Coord const& operator[](size_t i) const PURE { return army_[i];}
+    // The end() versions aren't *really* FUNCTIONAL but ARMY will never change 
+    Coord const*cbegin() const FUNCTIONAL { return &army_[0]; }
+    Coord const*cend  () const FUNCTIONAL { return &army_[ARMY]; }
+    Coord const* begin() const FUNCTIONAL { return &army_[0]; }
+    Coord const* end  () const FUNCTIONAL { return &army_[ARMY]; }
 
     friend bool operator==(Army const& l, Army const& r) {
         for (uint i=0; i<ARMY; ++i)
             if (l[i] != r[i]) return false;
         return true;
     }
+    friend bool operator!=(Army const& l, Army const& r) {
+        for (uint i=0; i<ARMY; ++i)
+            if (l[i] != r[i]) return true;
+        return false;
+    }
+  private:
+    Coord& operator[](size_t i) PURE { return army_[i];}
+    Coord      * begin()       FUNCTIONAL { return &army_[0]; }
+    Coord      * end  ()       FUNCTIONAL { return &army_[ARMY]; }
+
+    NOINLINE void sort();
+
+    array<Coord, MAX_ARMY> army_;
 };
 
 ostream& operator<<(ostream& os, Army const& army);
@@ -363,18 +408,19 @@ inline int cmp(Army const& left, Army const& right) {
 }
 
 // Army as a set of Coord
-class ArmyE: public array<Coord, ARMY+2> {
+class ArmyE {
   public:
     ArmyE() {
-        at(-1)   = Coord::MIN();
-        at(ARMY) = Coord::MAX();
+        army_[0]      = Coord::MIN();
+        army_[ARMY+1] = Coord::MAX();
     }
-    explicit ArmyE(Army const& army) : ArmyE{} { *this = army; }
-    // Coord operator[](ssize_t) = delete;
-    Coord& at(int i) { return (*this)[i+1]; }
-    Coord const& at(int i) const FUNCTIONAL { return (*this)[i+1]; }
+    explicit ArmyE(Army  const& army): ArmyE{} {
+        std::copy(army.begin(), army.end(), begin()); }
+    explicit ArmyE(ArmyE const& army): ArmyE{} {
+        std::copy(army.begin(), army.end(), begin());
+    }
     uint64_t hash() const PURE {
-        return XXHash64::hash(reinterpret_cast<void const*>(&at(0)), sizeof((*this)[0]) * ARMY, SEED);
+        return army_hash(begin());
     }
     NOINLINE void check(int line) const;
     ArmyE& operator=(ArmyE const& army) {
@@ -385,10 +431,20 @@ class ArmyE: public array<Coord, ARMY+2> {
         std::copy(army.begin(), army.end(), begin());
         return *this;
     }
-    Coord* begin() FUNCTIONAL { return &at(0); }
-    Coord* end  () FUNCTIONAL { return &at(ARMY); }
-    Coord const* begin() const FUNCTIONAL { return &at(0); }
-    Coord const* end  () const FUNCTIONAL { return &at(ARMY); }
+
+    Coord const& operator[](ssize_t i) const PURE { return army_[i+1];}
+    // The end() versions aren't *really* FUNCTIONAL but ARMY will never change 
+    Coord const*cbegin() const FUNCTIONAL { return &army_[1]; }
+    Coord const*cend  () const FUNCTIONAL { return &army_[ARMY+1]; }
+    Coord const* begin() const FUNCTIONAL { return &army_[1]; }
+    Coord const* end  () const FUNCTIONAL { return &army_[ARMY+1]; }
+
+  protected:
+    Coord& operator[](ssize_t i) PURE { return army_[i+1];}
+    Coord      * begin()       FUNCTIONAL { return &army_[1]; }
+    Coord      * end  ()       FUNCTIONAL { return &army_[ARMY+1]; }
+
+    array<Coord, MAX_ARMY+2> army_;
 };
 
 Army& Army::operator=(ArmyE const& army) {
@@ -398,20 +454,20 @@ Army& Army::operator=(ArmyE const& army) {
 
 inline int cmp(ArmyE const& left, ArmyE const& right) {
     if (!SYMMETRY || X != Y) return 0;
-    return memcmp(reinterpret_cast<void const *>(&left.at(0)),
-                  reinterpret_cast<void const *>(&right.at(0)),
+    return memcmp(reinterpret_cast<void const *>(&left[0]),
+                  reinterpret_cast<void const *>(&right[0]),
                   sizeof(left[0]) * ARMY);
 }
 
 inline bool operator==(ArmyE const& l, Army const& r) {
     for (uint i=0; i<ARMY; ++i)
-        if (l.at(i) != r[i]) return false;
+        if (l[i] != r[i]) return false;
     return true;
 }
 
 inline bool operator==(Army const& l, ArmyE const& r) {
     for (uint i=0; i<ARMY; ++i)
-        if (l[i] != r.at(i)) return false;
+        if (l[i] != r[i]) return false;
     return true;
 }
 
@@ -424,23 +480,23 @@ class ArmyPos: public ArmyE {
         pos_ = pos;
     }
     void store(Coord const& val) {
-        if (val > at(pos_+1)) {
+        if (val > (*this)[pos_+1]) {
             do {
-                at(pos_) = at(pos_+1);
-                // cout << "Set pos_ > " << pos_ << at(pos_) << "\n";
+                (*this)[pos_] = (*this)[pos_+1];
+                // cout << "Set pos_ > " << pos_ << (*this)[pos_] << "\n";
                 ++pos_;
-            } while (val > at(pos_+1));
-        } else if (val < at(pos_-1)) {
+            } while (val > (*this)[pos_+1]);
+        } else if (val < (*this)[pos_-1]) {
             do {
-                at(pos_) = at(pos_-1);
-                // cout << "Set pos_ < " << pos_ << at(pos_) << "\n";
+                (*this)[pos_] = (*this)[pos_-1];
+                // cout << "Set pos_ < " << pos_ << (*this)[pos_] << "\n";
                 --pos_;
-            } while (val < at(pos_-1));
+            } while (val < (*this)[pos_-1]);
         }
         if (pos_ < 0) throw(logic_error("Negative pos_"));
         if (pos_ >= static_cast<int>(ARMY))
             throw(logic_error("Excessive pos_"));
-        at(pos_) = val;
+        (*this)[pos_] = val;
     }
   private:
     int pos_;
@@ -509,7 +565,6 @@ class ArmyMapperPair {
     ArmyMapper normal_, symmetric_;
 };
 
-using ArmyId = uint32_t;
 class Statistics {
   public:
     using Counter = uint64_t;
@@ -617,11 +672,11 @@ STATIC const ArmyId ARMY_MAX  = std::numeric_limits<ArmyId>::max();
 
 class ArmySet {
   public:
-    static ArmyId const INITIAL_SIZE = 32;
+    static size_t const INITIAL_SIZE = 32;
 
-    NOINLINE ArmySet(ArmyId size = INITIAL_SIZE);
+    NOINLINE ArmySet(size_t size = INITIAL_SIZE);
     NOINLINE ~ArmySet();
-    NOINLINE void clear(ArmyId size = INITIAL_SIZE);
+    NOINLINE void clear(size_t size = INITIAL_SIZE);
     void drop_hash() {
         delete [] values_;
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
@@ -636,19 +691,19 @@ class ArmySet {
         return limit_;
     }
 #if CHECK
-    Army const& at(ArmyId i) const {
+    Coord const& at(ArmyId i) const {
         if (i > used_) throw(logic_error("Army id " + to_string(i) + " out of range of set"));
-        return armies_[i];
+        return armies_[i * static_cast<size_t>(ARMY)];
     }
 #else  // CHECK
-    Army const& at(ArmyId i) const PURE { return armies_[i]; }
+    Coord const& at(ArmyId i) const PURE { return armies_[i * static_cast<size_t>(ARMY)]; }
 #endif // CHECK
     inline ArmyId insert(Army  const& value, Statistics& stats) RESTRICT;
     inline ArmyId insert(ArmyE const& value, Statistics& stats) RESTRICT;
     ArmyId find(Army  const& value) const PURE;
     ArmyId find(ArmyE const& value) const PURE;
-    inline Army const* begin() const PURE { return &armies_[1]; }
-    inline Army const* end()   const PURE { return &armies_[used_+1]; }
+    inline Coord const* begin() const PURE { return &armies_[ARMY]; }
+    inline Coord const* end()   const PURE { return &armies_[used_*static_cast<size_t>(ARMY)+ARMY]; }
 
     void print(ostream& os) const;
     // Non copyable
@@ -657,13 +712,24 @@ class ArmySet {
 
   private:
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
+
     inline void _clear0() RESTRICT;
-    inline void _clear1(ArmyId size) RESTRICT;
+    inline void _clear1(size_t size) RESTRICT;
     NOINLINE void resize() RESTRICT;
-    size_t armies_bytes() const PURE { return armies_size_ * sizeof(Army); }
+
+#if CHECK
+    Coord& at(ArmyId i) {
+        if (i > used_) throw(logic_error("Army id " + to_string(i) + " out of range of set"));
+        return armies_[i * static_cast<size_t>(ARMY)];
+    }
+#else  // CHECK
+    Coord& at(ArmyId i) PURE { return armies_[i * static_cast<size_t>(ARMY)]; }
+#endif // CHECK
+
+    size_t armies_bytes() const PURE { return armies_size_ * ARMY * sizeof(Coord); }
     size_t values_bytes() const PURE { return allocated()  * sizeof(ArmyId); }
 
-    Army* armies_;
+    Coord* armies_;
     ArmyId* values_;
     size_t armies_size_;
     mutex exclude_;
@@ -698,7 +764,10 @@ class Board {
     Board() {}
     Board(Army const& blue, Army const& red): blue_{blue}, red_{red} {}
     void do_move(Move const& move_);
-    void do_move(Move const& move_, bool blue_to_move);
+    void do_move(Move const& move, bool blue_to_move) {
+        auto& army = blue_to_move ? blue() : red();
+        army.do_move(move);
+    }
     inline void do_move(FullMove const& move_);
     inline void do_move(FullMove const& move_, bool blue_to_move);
     Army& blue() { return blue_; }
@@ -1188,11 +1257,17 @@ class Image {
     inline explicit Image(ArmyE const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
-    inline void clear();
+    inline explicit Image(Coord const* army, Color color = BLUE): Image{} {
+        set(army, color);
+    }
+    inline void clear() { image_.fill(EMPTY); }
     inline Color get(Coord const& pos) const PURE { return image_[pos]; }
     inline Color get(int x, int y) const PURE { return get(Coord{x,y}); }
     inline void  set(Coord const& pos, Color c) { image_[pos] = c; }
     inline void  set(int x, int y, Color c) { set(Coord{x,y}, c); }
+    inline void  set(Coord const* army, Color c) {
+        for (uint i=0; i<ARMY; ++i) set(army[i], c);
+    }
     inline void  set(Army const& army, Color c) {
         for (auto const& pos: army) set(pos, c);
     }
@@ -1377,7 +1452,6 @@ class Tables {
     inline Army const& army_red()  const FUNCTIONAL { return start().red(); }
     Norm infinity() const FUNCTIONAL { return infinity_; }
     Board const& start() const FUNCTIONAL { return start_; }
-    Image const& start_image() const FUNCTIONAL { return start_image_; }
 
     void print_directions(ostream& os) const;
     void print_directions() const {
@@ -1428,7 +1502,6 @@ class Tables {
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
     BoardTable<ParityPair> parity_pair_;
-    Image start_image_;
     BoardTable<BoardTable<Norm>> distance_;
 };
 
@@ -1470,7 +1543,7 @@ Coords Coord::jump_targets() const {
     return tables.jump_targets(*this);
 }
 
-ArmyId ArmySet::insert(Army  const& value, Statistics& stats) {
+ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
     // cout << "Insert:\n" << Image{value};
     // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
@@ -1482,20 +1555,20 @@ ArmyId ArmySet::insert(Army  const& value, Statistics& stats) {
     ArmyId offset = 0;
     auto values = values_;
     while (true) {
-        // logger << "Try " << pos << " of " << size_ << "\n" << flush;
+        // logger << "Try " << pos << " of " << allocated() << "\n" << flush;
         ArmyId i = values[pos];
         if (i == 0) {
             stats.armyset_probe(offset);
             ArmyId id = ++used_;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
-            armies_[id] = value;
+            std::copy(value.begin(), value.end(), &at(id));
             return id;
         }
-        if (armies_[i] == value) {
+        if (std::equal(value.begin(), value.end(), &at(i))) {
             stats.armyset_probe(offset);
             stats.armyset_try();
-            // cout << "Found duplicate " << hash << "\n";
+            // logger << "Found duplicate " << hash << "\n" << flush;
             return i;
         }
         ++offset;
@@ -1515,29 +1588,25 @@ ArmyId ArmySet::insert(ArmyE const& value, Statistics& stats) {
     ArmyId offset = 0;
     auto values = values_;
     while (true) {
-        // logger << "Try " << pos << " of " << size_ << "\n" << flush;
+        // logger << "Try " << pos << " of " << allocated() << "\n" << flush;
         ArmyId i = values[pos];
         if (i == 0) {
             stats.armyset_probe(offset);
             ArmyId id = ++used_;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
-            armies_[id] = value;
+            std::copy(value.begin(), value.end(), &at(id));
             return id;
         }
-        if (armies_[i] == value) {
+        if (std::equal(value.begin(), value.end(), &at(i))) {
             stats.armyset_probe(offset);
             stats.armyset_try();
-            // cout << "Found duplicate " << hash << "\n";
+            // logger << "Found duplicate " << hash << "\n" << flush;
             return i;
         }
         ++offset;
         pos = (pos + offset) & mask;
     }
-}
-
-void Image::clear() {
-    image_ = tables.start_image().image_;
 }
 
 void Board::do_move(FullMove const& move_, bool blue_to_move) {

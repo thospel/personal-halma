@@ -87,10 +87,10 @@ Statistics NAME(uint thid,
             }
         }
 
-        Army const& bZ = BLUE_TO_MOVE ?
-            moving_armies.at(blue_id) :
-            opponent_armies.at(blue_id);
-        Army const bZ_symmetric = bZ.symmetric();
+        Army const bZ{BLUE_TO_MOVE ?
+                &moving_armies.at(blue_id) :
+                &opponent_armies.at(blue_id)};
+        Army const bZ_symmetric{bZ, SYMMETRIC};
 #if BLUE_TO_MOVE
         ArmyMapperPair const b_mapper{bZ, bZ_symmetric};
 #else  // BLUE_TO_MOVE
@@ -144,9 +144,9 @@ Statistics NAME(uint thid,
                 symmetry ? -b_symmetry : b_symmetry;
 #endif // BLUE_TO_MOVE
 
-            Army const& red = BLUE_TO_MOVE ?
-                opponent_armies.at(red_id) :
-                moving_armies.at(red_id);
+            Army const red{BLUE_TO_MOVE ?
+                    &opponent_armies.at(red_id) :
+                    &moving_armies.at(red_id)};
             if (CHECK) red.check(__LINE__);
 
             Image image{blue, red};
@@ -187,7 +187,7 @@ Statistics NAME(uint thid,
             Army const& army_symmetric = symmetry ? bZ : bZ_symmetric;
 #else  // BLUE_TO_MOVE
             Army const& army           = red;
-            Army const  army_symmetric = red.symmetric();
+            Army const  army_symmetric{red, SYMMETRIC};
             ArmyMapper const mapper{army_symmetric};
 
 #if BACKTRACK
