@@ -14,13 +14,15 @@ CXXFLAGS := $(CXXFLAGS) -DCOMMIT="`git rev-parse HEAD`" -DCOMMIT_TIME="`git show
 
 all: halma
 
-halma.o fast_moves.o slow_moves.o: halma.hpp Makefile
+halma.o fast_moves.o slow_moves.o: halma.hpp system.hpp Makefile
+system.o: system.hpp Makefile
 
 halma.o: halma.cpp git_time
 fast_moves.o: fast_moves.cpp all_moves.cpp moves.cpp
 slow_moves.o: slow_moves.cpp all_moves.cpp moves.cpp
+system.o: system.cpp
 
-halma: halma.o fast_moves.o slow_moves.o
+halma: halma.o fast_moves.o slow_moves.o system.o
 	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 git_time: FORCE

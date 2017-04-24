@@ -378,7 +378,7 @@ Statistics NAME(uint thid,
                                 logger << "   Prune backtrack: bactrack " << backtrack_count - backtrack[val] << " >= " << solution_moves << " && backtrack_count_symmetric " << backtrack_count_symmetric - backtrack_symmetric[val] << " >= " << solution_moves << "\n";
                                 logger.flush();
                             }
-                          continue;
+                            continue;
                         }
 # endif // BACKTRACK
 

@@ -1,10 +1,7 @@
 #define SLOW 0
 #include "halma.hpp"
 
-#include <csignal>
-
-#include <sys/types.h>
-#include <unistd.h>
+#include <fstream>
 
 #include <random>
 
@@ -12,6 +9,7 @@ uint X = 0;
 uint Y = 0;
 uint RULES = 6;
 uint ARMY = 10;
+uint ARMY_ALIGNED = 0;
 
 int balance = -1;
 int balance_delay = 0;
@@ -27,17 +25,10 @@ bool verbose = false;
 bool attempt = true;
 char const* sample_subset_red = nullptr;
 
-string HOSTNAME;
 // 0 means let C++ decide
 uint nr_threads = 0;
 string VCS_COMMIT{STRINGIFY(COMMIT)};
 string VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
-
-int signal_counter = 1;
-atomic<uint> signal_generation;
-thread_local uint signal_generation_seen;
-thread_local ssize_t allocated_;
-atomic<ssize_t> total_allocated_;
 
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
@@ -119,105 +110,12 @@ inline bool heuristics() {
     return balance >= 0 || prune_slide || prune_jump;
 }
 
-inline bool is_terminated() {
-    return UNLIKELY(signal_counter % 2 == 0);
-}
-
-inline string _time_string(time_t time) {
-    struct tm tm;
-
-    if (!localtime_r(&time, &tm))
-        throw(system_error(errno, system_category(),
-                           "Could not convert time to localtime"));
-    char buffer[80];
-    if (!strftime(buffer, sizeof(buffer), "%F %T %z", &tm))
-        throw(logic_error("strtime buffer too short"));
-    return string{buffer};
-}
-
-string time_string(time_t time) {
-    return _time_string(time);
-}
-
-inline time_t now() {
-    time_t tm = time(nullptr);
-    if (tm == static_cast<time_t>(-1))
-        throw(system_error(errno, system_category(), "Could not get time"));
-    return tm;
-}
-
-string time_string() {
-    return _time_string(now());
-}
-
 ssize_t total_allocated() {
     if (tid) throw(logic_error("Use of total_allocated inside a thread"));
     total_allocated_ += allocated_;
     allocated_ = 0;
     return total_allocated_;
 }
-
-size_t PAGE_SIZE;
-// Linux specific
-size_t get_memory(bool set_base_mem) {
-    static size_t base_mem = 0;
-
-    size_t mem = 0;
-    std::ifstream statm;
-    statm.open("/proc/self/statm");
-    statm >> mem;
-    mem *= PAGE_SIZE;
-    if (set_base_mem) {
-        base_mem = mem;
-        // cout << "Base mem=" << mem / 1000000 << " MB\n";
-    } else mem -= base_mem;
-    return mem;
-}
-
-thread_local uint tid;
-inline uint thread_id();
-uint thread_id() {
-    return tid;
-}
-
-inline string thread_name();
-string thread_name() {
-    return to_string(thread_id());
-}
-
-LogBuffer::LogBuffer(): prefix_{nr_threads == 1 ? "" : "Thread " + thread_name() + ": "} {
-    buffer_.resize(BLOCK);
-    setp(&buffer_[0], &buffer_[BLOCK]);
-}
-
-int LogBuffer::overflow(int ch) {
-    if (ch == EOF) return ch;
-    int offset = pptr() - pbase();
-    auto size = buffer_.size() * 2;
-    buffer_.resize(size);
-    setp(&buffer_[0], &buffer_[size]);
-    pbump(offset+1);
-    buffer_[offset] = ch;
-    return ch;
-}
-
-static mutex mutex_out_;
-
-int LogBuffer::sync() {
-    int size = pbase() - pptr();
-    if (size) {
-        {
-            std::lock_guard<std::mutex> lock{mutex_out_};
-            cout << prefix_;
-            cout.write(pbase(), pptr() - pbase());
-            cout.flush();
-        }
-        pbump(size);
-    }
-    return 0;
-}
-
-thread_local LogStream logger;
 
 std::random_device rnd;
 template <class T>
@@ -267,23 +165,24 @@ void Army::sort() {
     std::sort(begin(), end());
 }
 
-ostream& operator<<(ostream& os, ArmyE const& army) {
-    for (ssize_t i=-1; i<=static_cast<ssize_t>(ARMY); ++i)
-        os << army[i] << "\n";
-    return os;
+void ArmyPos::check(int line) const {
+    for (uint i=0; i<ARMY; ++i) army_[i].check(line);
+    for (uint i=0; i<ARMY-1; ++i)
+        if (army_[i] >= army_[i+1]) {
+            cerr << *this;
+            throw(logic_error("ArmyPos out of order at line " + to_string(line)));
+        }
+    if (army_[-1] != Coord::MIN())
+        throw(logic_error("ArmyPos wrong bottom at line " + to_string(line)));
+    if (army_[ARMY] != Coord::MAX())
+        throw(logic_error("ArmyPos wrong top at line " + to_string(line)));
 }
 
-void ArmyE::check(int line) const {
-    for (uint i=0; i<ARMY; ++i) (*this)[i].check(line);
-    for (uint i=0; i<ARMY-1; ++i)
-        if ((*this)[i] >= (*this)[i+1]) {
-            cerr << *this;
-            throw(logic_error("ArmyE out of order at line " + to_string(line)));
-        }
-    if ((*this)[-1] != Coord::MIN())
-        throw(logic_error("ArmyE wrong bottom at line " + to_string(line)));
-    if ((*this)[ARMY] != Coord::MAX())
-        throw(logic_error("ArmyE wrong top at line " + to_string(line)));
+ostream& operator<<(ostream& os, ArmyPos const& army) {
+    os << "pos=" << army.pos_ << "\n";
+    for (ssize_t i=-1; i<=static_cast<ssize_t>(ARMY); ++i)
+        os << "  " << army[i] << "\n";
+    return os;
 }
 
 void StatisticsE::print(ostream& os) const {
@@ -349,8 +248,8 @@ void StatisticsE::print(ostream& os) const {
 }
 
 Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} {
-    ArmyE const fromE{army_from};
-    ArmyE const toE  {army_to};
+    ArmyPos const fromE{army_from};
+    ArmyPos const toE  {army_to};
 
     uint i = 0;
     uint j = 0;
@@ -376,8 +275,8 @@ Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} 
 }
 
 Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1}, to{-1, -1} {
-    ArmyE const fromE{army_from};
-    ArmyE const toE  {army_to};
+    ArmyPos const fromE{army_from};
+    ArmyPos const toE  {army_to};
 
     uint i = 0;
     uint j = 0;
@@ -939,7 +838,9 @@ void Tables::init() {
 
     for (uint y=0; y < Y; ++y) {
         Norm d = infinity_;
+#if !__BMI2__
         Parity y_parity = y%2;
+#endif // !__BMI2__
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             for (uint i=0; i<ARMY; ++i) {
@@ -950,16 +851,16 @@ void Tables::init() {
             }
             distance_base_red_[pos] = d > 2 ? d-2 : 0;
             edge_red_[pos] = d == 1;
+#if !__BMI2__
             Parity x_parity = x % 2;
-            parity_pair_ [pos]  = ParityPair(
-                2*y_parity + x_parity,
-                2*x_parity + y_parity);
+            parity_[pos]  = 2*y_parity + x_parity;
+#endif // !__BMI2__
         }
     }
 
     parity_count_.fill(0);
     for (auto const& r: red)
-        ++parity_count_[r.parity()];
+        ++parity_count_[parity(r)];
 
     min_nr_moves_ = start_.min_nr_moves();
 }
@@ -1009,16 +910,6 @@ void Tables::print_parity(ostream& os) const {
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(parity(pos));
-        }
-        os << "\n";
-    }
-}
-
-void Tables::print_parity_symmetric(ostream& os) const {
-    for (uint y=0; y < Y; ++y) {
-        for (uint x=0; x < X; ++x) {
-            auto pos = Coord{x, y};
-            os << " " << static_cast<uint>(parity_symmetric(pos));
         }
         os << "\n";
     }
@@ -1085,21 +976,6 @@ void ArmySet::clear(size_t size) {
 }
 
 ArmyId ArmySet::find(Army const& army) const {
-    ArmyId const mask = mask_;
-    ArmyId pos = army.hash() & mask;
-    auto values = values_;
-    uint offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        ArmyId i = values[pos];
-        if (i == 0) return 0;
-        if (std::equal(army.begin(), army.end(), &at(i))) return i;
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
-}
-
-ArmyId ArmySet::find(ArmyE const& army) const {
     ArmyId const mask = mask_;
     ArmyId pos = army.hash() & mask;
     auto values = values_;
@@ -1600,7 +1476,7 @@ void Svg::write(time_t start_time, time_t stop_time,
                                "Could not rename '" + svg_file_tmp + "' to '" +
                                svg_file + "'"));
     } catch(exception& e) {
-        unlink(svg_file_tmp.c_str());
+        rm_file(svg_file_tmp);
         throw;
     }
 }
@@ -1723,7 +1599,7 @@ void save_largest_red(vector<ArmyId> const& largest_red) {
                                "Could not rename '" + file_tmp + "' to '" +
                                file + "'"));
     } catch(exception& e) {
-        unlink(file_tmp.c_str());
+        rm_file(file_tmp);
         throw;
     }
 }
@@ -2054,69 +1930,6 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     // cout << "Final image:\n" << image;
 }
 
-void system_properties() {
-    char hostname[100];
-    hostname[sizeof(hostname)-1] = 0;
-    int rc = gethostname(hostname, sizeof(hostname)-1);
-    if (rc) throw(system_error(errno, system_category(),
-                               "Could not determine host name"));
-    HOSTNAME.assign(hostname);
-
-    long tmp = sysconf(_SC_PAGE_SIZE);
-    if (tmp == -1)
-        throw(system_error(errno, system_category(),
-                           "Could not determine PAGE SIZE"));
-    PAGE_SIZE = tmp;
-}
-
-void signal_handler(int signum) {
-    switch(signum) {
-        case SIGSYS:
-          signal_counter += 2;
-          signal_generation.store(signal_counter, memory_order_relaxed);
-          break;
-        case SIGUSR1:
-          if (nr_threads > 1) --nr_threads;
-          break;
-        case SIGUSR2:
-          ++nr_threads;
-          break;
-        case SIGINT:
-        case SIGTERM:
-          signal_counter = 0;
-          signal_generation.store(signal_counter, memory_order_relaxed);
-        default:
-          // Impossible. Ignore
-          break;
-    }
-}
-
-void set_signals() {
-    struct sigaction new_action;
-
-    signal_generation = signal_counter;
-
-    new_action.sa_handler = signal_handler;
-    sigfillset(&new_action.sa_mask);
-    new_action.sa_flags = 0;
-
-    if (sigaction(SIGSYS, &new_action, nullptr))
-        throw(system_error(errno, system_category(),
-                           "Could not set SIGSYS handler"));
-    if (sigaction(SIGUSR1, &new_action, nullptr))
-        throw(system_error(errno, system_category(),
-                           "Could not set SIGUSR1 handler"));
-    if (sigaction(SIGUSR2, &new_action, nullptr))
-        throw(system_error(errno, system_category(),
-                           "Could not set SIGUSR2 handler"));
-    if (sigaction(SIGINT, &new_action, nullptr))
-        throw(system_error(errno, system_category(),
-                           "Could not set SIGUNT handler"));
-    if (sigaction(SIGTERM, &new_action, nullptr))
-        throw(system_error(errno, system_category(),
-                           "Could not set SIGTERM handler"));
-}
-
 void my_main(int argc, char const* const* argv) {
     GetOpt options("b:B:t:sHSjpeErvR:Ax:y:r:a:T", argv);
     long long int val;
@@ -2157,7 +1970,7 @@ void my_main(int argc, char const* const* argv) {
               if (val < 1)
                   throw(range_error("X must be positive"));
               if (val > MAX_X)
-                  throw(range_error("X must be <= " STRINGIFY(MAX_X)));
+                  throw(range_error("X must be <= " + to_string(MAX_X)));
               X = val;
               break;
             case 'y':
@@ -2165,7 +1978,7 @@ void my_main(int argc, char const* const* argv) {
               if (val < 1)
                   throw(range_error("Y must be positive"));
               if (val > MAX_X)
-                  throw(range_error("Y must be <= " STRINGIFY(MAX_Y)));
+                  throw(range_error("Y must be <= " + to_string(MAX_Y)));
               Y = val;
               break;
             case 'a':
@@ -2173,7 +1986,7 @@ void my_main(int argc, char const* const* argv) {
               if (val < 1)
                   throw(range_error("ARMY must be positive"));
               if (val > MAX_ARMY)
-                  throw(range_error("Y must be <= " STRINGIFY(MAX_ARMY)));
+                  throw(range_error("ARMY must be <= " + to_string(MAX_ARMY)));
               ARMY = val;
               break;
             default:
@@ -2186,6 +1999,7 @@ void my_main(int argc, char const* const* argv) {
         else X = Y;
     else
         if (Y == 0) Y = X;
+    ARMY_ALIGNED = (ARMY*sizeof(Coord)+sizeof(Align)-1) / sizeof(Align);
 
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;
@@ -2194,10 +2008,15 @@ void my_main(int argc, char const* const* argv) {
     tables.init();
 
     cout << "Time " << time_string() << "\n";
-    cout << "Pid: " << getpid() << "\n";
+    cout << "Pid: " << PID << "\n";
     cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
     if (show_tables) {
+        cout << "Sizeof(Coord)   =" << sizeof(Coord)   << "\n";
+        cout << "Sizeof(Army)    =" << sizeof(Army)    << "\n";
+        cout << "Sizeof(ArmyPos) =" << sizeof(ArmyPos) << "\n";
+        cout << "Sizeof(Board)   =" << sizeof(Board)   << "\n";
+        cout << "Sizeof(Image)   =" << sizeof(Image)   << "\n";
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
         cout << "Red:\n";
         cout << start_board.red();
@@ -2211,8 +2030,6 @@ void my_main(int argc, char const* const* argv) {
         tables.print_edge_red();
         cout << "Parity:\n";
         tables.print_parity();
-        cout << "Parity Symmetric:\n";
-        tables.print_parity_symmetric();
         cout << "Blue Base parity count:\n";
         tables.print_blue_parity_count();
         cout << "Red Base parity count:\n";
@@ -2269,12 +2086,11 @@ void my_main(int argc, char const* const* argv) {
 
 int main(int argc, char const* const* argv) {
     try {
+        init_system();
+
         tid = 0;
         allocated_ = 0;
         total_allocated_ = 0;
-
-        tzset();
-        system_properties();
 
         my_main(argc, argv);
         cout << "Final memory " << total_allocated() << "\n";

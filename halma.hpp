@@ -2,59 +2,32 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
-#include <ctime>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <limits>
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <streambuf>
 #include <thread>
 #include <vector>
 
 #include "xxhash64.h"
 
-// #define STATIC static
-#define STATIC
-
-#ifdef __GNUC__
-# define RESTRICT __restrict__
-# define NOINLINE	__attribute__((__noinline__))
-# define ALWAYS_INLINE  __attribute__((always_inline))
-# define LIKELY(x)	__builtin_expect(!!(x),true)
-# define UNLIKELY(x)	__builtin_expect(!!(x),false)
-# define HOT		__attribute__((__hot__))
-# define COLD		__attribute__((__cold__))
-// pure means does not modify any (non const) global memory.
-# define PURE		__attribute__((__pure__))
-// const means does not read/modify any (non const) global memory.
-# define FUNCTIONAL	__attribute__((__const__))
-#else // __GNUC__
-# define RESTRICT
-# define NOINLINE
-# define ALWAYS_INLINE
-# define LIKELY(x)	(x)
-# define UNLIKELY(x)	(x)
-# define HOT
-# define COLD
-# define PURE
-# define FUNCTIONAL
-#endif // __GNUC__
-
-#define CAT(x, y) _CAT(x,y)
-#define _CAT(x, y)	x ## y
-
-#define STRINGIFY(x) _STRINGIFY(x)
-#define _STRINGIFY(x) #x
-
+#include "system.hpp"
 using namespace std;
+
+#if __AVX2__ || __AVX__
+// using Align = __m256i;
+using Align = __m128i;
+#elif __SSE2__
+using Align = __m128i;
+#else
+using Align = uint64_t;
+#endif
 
 extern bool statistics;
 extern bool hash_statistics;
@@ -69,6 +42,7 @@ bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
 // bool const DOUBLE_CROSS = true;
 bool const BALANCE  = true;
+bool const VECTOR   = true;
 
 #define CHECK   0
 #define RED_BUILDER 1
@@ -77,11 +51,16 @@ extern uint X;
 extern uint Y;
 extern uint RULES;
 extern uint ARMY;
+extern uint ARMY_ALIGNED;
 
 uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
 uint const MAX_RULES = 8;
-uint const MAX_ARMY  = 32;
+uint const MIN_MAX_ARMY = 21;
+// In principle we should multiply MIN_MAX_ARMY by sizeof(Coord) but we don't
+// have that type yet and it is 1 anyways
+uint const MAX_ARMY_ALIGNED = (MIN_MAX_ARMY+sizeof(Align)-1)/sizeof(Align);
+uint const MAX_ARMY  = MAX_ARMY_ALIGNED * sizeof(Align);
 
 // ARMY < 32
 using BalanceMask = uint32_t;
@@ -105,19 +84,12 @@ extern int example;
 // There is no fundamental limit. Just make up *SOME* bound
 uint const THREADS_MAX = 256;
 extern uint nr_threads;
-extern thread_local uint tid;
-extern atomic<uint> signal_generation;
-extern thread_local uint signal_generation_seen;
-extern thread_local ssize_t allocated_;
-extern atomic<ssize_t> total_allocated_;
 
 const char letters[] = "abcdefghijklmnopqrstuvwxyz";
 
 uint64_t const SEED = 123456789;
 
 using Sec      = chrono::seconds;
-
-extern string HOSTNAME;
 
 uint64_t const murmur_multiplier = UINT64_C(0xc6a4a7935bd1e995);
 
@@ -133,34 +105,6 @@ uint64_t hash64(uint64_t v) {
     // return murmur_mix(murmur_mix(murmur_mix(v)));
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
 }
-
-extern string time_string();
-extern size_t get_memory(bool set_base_mem = false);
-
-class LogBuffer: public std::streambuf {
-  public:
-    size_t const BLOCK = 80;
-
-    LogBuffer();
-    ~LogBuffer() {
-        sync();
-    }
-  protected:
-    int sync();
-    int overflow(int ch);
-  private:
-    string prefix_;
-    std::vector<char> buffer_;
-};
-
-class LogStream: public std::ostream {
-  public:
-    LogStream(): std::ostream{&buffer_} {}
-  private:
-    LogBuffer buffer_;
-};
-
-extern thread_local LogStream logger;
 
 using Norm = uint8_t;
 using Nbits = uint;
@@ -203,36 +147,6 @@ int min_slides(ParityCount const& parity_count) {
     return slides;
 }
 
-template<class T>
-class Pair {
-  public:
-    inline Pair() {}
-    inline Pair(T const& normal, T const& symmetric):
-        normal_{normal}, symmetric_{symmetric} {}
-    inline Pair(T const& normal) : Pair{normal, normal.symmetric()} {}
-    inline T const& normal() const FUNCTIONAL {
-        return normal_;
-    }
-    inline T const& symmetric() const FUNCTIONAL {
-        return symmetric_;
-    }
-    template<class X>
-    void fill(X const& value) {
-        std::fill(normal_.begin(), normal_.end(), value);
-        std::fill(symmetric_.begin(), symmetric_.end(), value);
-    }
-    inline T& _normal() FUNCTIONAL {
-        return normal_;
-    }
-    inline T& _symmetric() FUNCTIONAL {
-        return symmetric_;
-    }
-  private:
-    T normal_, symmetric_;
-};
-
-using ParityPair = Pair<Parity>;
-
 class Coords;
 class Coord {
     friend class Coords;
@@ -246,10 +160,9 @@ class Coord {
     inline Coord() {}
     inline Coord(uint x, uint y): pos_{static_cast<value_type>(y*MAX_X+x)} {}
     inline Coord( int x,  int y): pos_{static_cast<value_type>(y*MAX_X+x)} {}
-    // Mirror over SW-NE diagonal
-    Coord mirror() const PURE { return Coord{static_cast<value_type>((SIZE-1) - pos_)}; }
     // Mirror over NW-SE diagonal
     inline Coord symmetric() const PURE {
+        // This will compile to a rol instruction on x86
         return Coord(pos_ << 4 | pos_ >> 4);
     }
     inline Parity parity() const PURE;
@@ -331,14 +244,15 @@ inline uint64_t army_hash(Coord const* base) {
 
 using ArmyId = uint32_t;
 ArmyId const SYMMETRIC = 1;
-class ArmyE;
 class Tables;
 struct Move;
+class ArmyPos;
 // Army as a set of Coord
 class Army {
     // Allow tables to build red and blue armies
     friend Tables;
-
+    // Allow ArmyPos to set the before and after elements
+    friend ArmyPos;
   public:
     Army() {}
     explicit inline Army(Coord const* army, ArmyId symmetry = 0) {
@@ -346,7 +260,7 @@ class Army {
             transform(army, army+ARMY, begin(),
                       [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
             sort();
-        } else 
+        } else
             std::copy(army, army+ARMY, begin());
     }
     explicit inline Army(Army const& army, ArmyId symmetry = 0) {
@@ -354,29 +268,36 @@ class Army {
             transform(army.begin(), army.end(), begin(),
                       [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
             sort();
-        } else 
-            std::copy(army.begin(), army.end(), begin());
+        } else
+            (*this) = army;
     }
-    uint64_t hash() const PURE {
+    inline uint64_t hash() const PURE {
         return army_hash(begin());
     }
     NOINLINE void check(int line) const;
     inline int symmetry() const;
-    Army& operator=(Army const& army) {
-        std::copy(army.begin(), army.end(), begin());
+    inline Army& operator=(Army const& army) {
+        if (VECTOR) {
+            Align const* RESTRICT from = army._aligned();
+            Align      * RESTRICT to   = _aligned();
+            int n = ALIGNEDS();
+            for (int i=0; i<n; ++i) to[i] = from[i];
+        } else {
+            std::copy(army.begin(), army.end(), begin());
+        }
         return *this;
     }
+    inline Army& operator=(ArmyPos const& army);
 
     void do_move(Move const& move);
     inline bool _try_move(Move const& move);
 
-    inline Army& operator=(ArmyE const& army);
-    Coord const& operator[](size_t i) const PURE { return army_[i];}
-    // The end() versions aren't *really* FUNCTIONAL but ARMY will never change 
-    Coord const*cbegin() const FUNCTIONAL { return &army_[0]; }
-    Coord const*cend  () const FUNCTIONAL { return &army_[ARMY]; }
-    Coord const* begin() const FUNCTIONAL { return &army_[0]; }
-    Coord const* end  () const FUNCTIONAL { return &army_[ARMY]; }
+    inline Coord const& operator[](ssize_t i) const PURE { return army_[i];}
+    // The end() versions aren't *really* FUNCTIONAL but ARMY will never change
+    inline Coord const*cbegin() const FUNCTIONAL { return &army_[0]; }
+    inline Coord const*cend  () const FUNCTIONAL { return &army_[ARMY]; }
+    inline Coord const* begin() const FUNCTIONAL { return &army_[0]; }
+    inline Coord const* end  () const FUNCTIONAL { return &army_[ARMY]; }
 
     friend bool operator==(Army const& l, Army const& r) {
         for (uint i=0; i<ARMY; ++i)
@@ -389,13 +310,26 @@ class Army {
         return false;
     }
   private:
-    Coord& operator[](size_t i) PURE { return army_[i];}
-    Coord      * begin()       FUNCTIONAL { return &army_[0]; }
-    Coord      * end  ()       FUNCTIONAL { return &army_[ARMY]; }
+    // Really only PURE but the value never changes
+    static inline int ALIGNEDS() FUNCTIONAL {
+        return MAX_ARMY_ALIGNED <= 1 ? MAX_ARMY_ALIGNED : ARMY_ALIGNED; }
+    inline Align* _aligned() FUNCTIONAL {
+        return reinterpret_cast<Align *>(&army_[0]);
+    }
+    inline Align const* _aligned() const FUNCTIONAL {
+        return reinterpret_cast<Align const*>(&army_[0]);
+    }
+
+    inline Coord& operator[](ssize_t i) PURE { return army_[i];}
+    inline Coord      * begin()       FUNCTIONAL { return &army_[0]; }
+    inline Coord      * end  ()       FUNCTIONAL { return &army_[ARMY]; }
 
     NOINLINE void sort();
 
-    array<Coord, MAX_ARMY> army_;
+    union {
+        Align align;
+        array<Coord, MAX_ARMY> army_;
+    };
 };
 
 ostream& operator<<(ostream& os, Army const& army);
@@ -407,100 +341,63 @@ inline int cmp(Army const& left, Army const& right) {
                   sizeof(left[0]) * ARMY);
 }
 
-// Army as a set of Coord
-class ArmyE {
+class ArmyPos {
   public:
-    ArmyE() {
-        army_[0]      = Coord::MIN();
-        army_[ARMY+1] = Coord::MAX();
+    ArmyPos() {
+        pos_ = -1;
+        army_[-1]   = Coord::MIN();
+        army_[ARMY] = Coord::MAX();
     }
-    explicit ArmyE(Army  const& army): ArmyE{} {
-        std::copy(army.begin(), army.end(), begin()); }
-    explicit ArmyE(ArmyE const& army): ArmyE{} {
-        std::copy(army.begin(), army.end(), begin());
+    ArmyPos(Army const& army): army_{army} {
+        pos_ = -1;
+        army_[-1]   = Coord::MIN();
+        army_[ARMY] = Coord::MAX();
     }
-    uint64_t hash() const PURE {
-        return army_hash(begin());
-    }
-    NOINLINE void check(int line) const;
-    ArmyE& operator=(ArmyE const& army) {
-        std::copy(army.begin(), army.end(), begin());
-        return *this;
-    }
-    ArmyE& operator=(Army const& army) {
-        std::copy(army.begin(), army.end(), begin());
-        return *this;
-    }
-
-    Coord const& operator[](ssize_t i) const PURE { return army_[i+1];}
-    // The end() versions aren't *really* FUNCTIONAL but ARMY will never change 
-    Coord const*cbegin() const FUNCTIONAL { return &army_[1]; }
-    Coord const*cend  () const FUNCTIONAL { return &army_[ARMY+1]; }
-    Coord const* begin() const FUNCTIONAL { return &army_[1]; }
-    Coord const* end  () const FUNCTIONAL { return &army_[ARMY+1]; }
-
-  protected:
-    Coord& operator[](ssize_t i) PURE { return army_[i+1];}
-    Coord      * begin()       FUNCTIONAL { return &army_[1]; }
-    Coord      * end  ()       FUNCTIONAL { return &army_[ARMY+1]; }
-
-    array<Coord, MAX_ARMY+2> army_;
-};
-
-Army& Army::operator=(ArmyE const& army) {
-    std::copy(army.begin(), army.end(), begin());
-    return *this;
-}
-
-inline int cmp(ArmyE const& left, ArmyE const& right) {
-    if (!SYMMETRY || X != Y) return 0;
-    return memcmp(reinterpret_cast<void const *>(&left[0]),
-                  reinterpret_cast<void const *>(&right[0]),
-                  sizeof(left[0]) * ARMY);
-}
-
-inline bool operator==(ArmyE const& l, Army const& r) {
-    for (uint i=0; i<ARMY; ++i)
-        if (l[i] != r[i]) return false;
-    return true;
-}
-
-inline bool operator==(Army const& l, ArmyE const& r) {
-    for (uint i=0; i<ARMY; ++i)
-        if (l[i] != r[i]) return false;
-    return true;
-}
-
-ostream& operator<<(ostream& os, ArmyE const& army);
-
-class ArmyPos: public ArmyE {
-  public:
-    void copy(Army const& army, int pos) {
-        std::copy(army.begin(), army.end(), begin());
-        pos_ = pos;
+    inline Coord const& operator[](ssize_t i) const PURE { return army()[i];}
+    inline void copy(Army const& army, int pos) {
+        pos_  = pos;
+        army_ = army;
+        if (VECTOR) army_[ARMY] = Coord::MAX();
     }
     void store(Coord const& val) {
-        if (val > (*this)[pos_+1]) {
+        if (val > army_[pos_+1]) {
             do {
-                (*this)[pos_] = (*this)[pos_+1];
-                // cout << "Set pos_ > " << pos_ << (*this)[pos_] << "\n";
+                army_[pos_] = army_[pos_+1];
+                // cout << "Set pos_ > " << pos_ << army_[pos_] << "\n";
                 ++pos_;
-            } while (val > (*this)[pos_+1]);
-        } else if (val < (*this)[pos_-1]) {
+            } while (val > army_[pos_+1]);
+        } else if (val < army_[pos_-1]) {
             do {
-                (*this)[pos_] = (*this)[pos_-1];
-                // cout << "Set pos_ < " << pos_ << (*this)[pos_] << "\n";
+                army_[pos_] = army_[pos_-1];
+                // cout << "Set pos_ < " << pos_ << army_[pos_] << "\n";
                 --pos_;
-            } while (val < (*this)[pos_-1]);
+            } while (val < army_[pos_-1]);
         }
         if (pos_ < 0) throw(logic_error("Negative pos_"));
         if (pos_ >= static_cast<int>(ARMY))
             throw(logic_error("Excessive pos_"));
-        (*this)[pos_] = val;
+        army_[pos_] = val;
     }
+    void check(int line) const;
+    Army const& army() const FUNCTIONAL { return army_; }
+
   private:
     int pos_;
+    Coord const _spacer_before_; // Make sure we can safely do army_[-1]
+    Army army_;
+    Coord const _spacer_after_;  // Make sure we can safely do army_[ARMY]
+
+    friend inline int cmp(ArmyPos const& left, ArmyPos const& right) {
+        return cmp(left.army_, right.army_);
+    }
+    friend ostream& operator<<(ostream& os, ArmyPos const& army);
 };
+
+
+Army& Army::operator=(ArmyPos const& army) {
+    (*this) = army.army();
+    return *this;
+}
 
 template<class T>
 class BoardTable {
@@ -539,7 +436,6 @@ int Army::symmetry() const {
 }
 
 class ArmyMapper {
-    // friend class ArmyMapperPair;
   public:
     ArmyMapper(Army const& army_symmetric) {
         for (uint i=0; i<ARMY; ++i)
@@ -552,6 +448,34 @@ class ArmyMapper {
     ArmyMapper() {}
 
     BoardTable<uint8_t> mapper_;
+};
+
+template<class T>
+class Pair {
+  public:
+    inline Pair() {}
+    inline Pair(T const& normal, T const& symmetric):
+        normal_{normal}, symmetric_{symmetric} {}
+    inline Pair(T const& normal) : Pair{normal, normal.symmetric()} {}
+    inline T const& normal() const FUNCTIONAL {
+        return normal_;
+    }
+    inline T const& symmetric() const FUNCTIONAL {
+        return symmetric_;
+    }
+    template<class X>
+    void fill(X const& value) {
+        std::fill(normal_.begin(), normal_.end(), value);
+        std::fill(symmetric_.begin(), symmetric_.end(), value);
+    }
+    inline T& _normal() FUNCTIONAL {
+        return normal_;
+    }
+    inline T& _symmetric() FUNCTIONAL {
+        return symmetric_;
+    }
+  private:
+    T normal_, symmetric_;
 };
 
 class ArmyMapperPair {
@@ -698,10 +622,14 @@ class ArmySet {
 #else  // CHECK
     Coord const& at(ArmyId i) const PURE { return armies_[i * static_cast<size_t>(ARMY)]; }
 #endif // CHECK
-    inline ArmyId insert(Army  const& value, Statistics& stats) RESTRICT;
-    inline ArmyId insert(ArmyE const& value, Statistics& stats) RESTRICT;
-    ArmyId find(Army  const& value) const PURE;
-    ArmyId find(ArmyE const& value) const PURE;
+    inline ArmyId insert(Army const& army, Statistics& stats) RESTRICT;
+    inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT {
+        return insert(army.army(), stats);
+    }
+    ArmyId find(Army    const& value) const PURE;
+    inline ArmyId find(ArmyPos const& army) const PURE {
+        return find(army.army());
+    }
     inline Coord const* begin() const PURE { return &armies_[ARMY]; }
     inline Coord const* end()   const PURE { return &armies_[used_*static_cast<size_t>(ARMY)+ARMY]; }
 
@@ -748,10 +676,6 @@ struct Move {
     Move(Coord const& from_, Coord const& to_): from{from_}, to{to_} {}
     Move(Army const& army_from, Army const& army_to);
     Move(Army const& army_from, Army const& army_to, int& diff);
-
-    Move mirror() const PURE {
-        return Move{from.mirror(), to.mirror()};
-    }
 
     Coord from, to;
 };
@@ -1254,9 +1178,6 @@ class Image {
     inline explicit Image(Army const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
-    inline explicit Image(ArmyE const& army, Color color = BLUE): Image{} {
-        set(army, color);
-    }
     inline explicit Image(Coord const* army, Color color = BLUE): Image{} {
         set(army, color);
     }
@@ -1269,9 +1190,6 @@ class Image {
         for (uint i=0; i<ARMY; ++i) set(army[i], c);
     }
     inline void  set(Army const& army, Color c) {
-        for (auto const& pos: army) set(pos, c);
-    }
-    inline void  set(ArmyE const& army, Color c) {
         for (auto const& pos: army) set(pos, c);
     }
     inline bool jumpable(Coord const& jumpee, Coord const& target) const PURE {
@@ -1401,51 +1319,53 @@ class Tables {
   public:
     Tables() {}
     void init();
-    uint min_nr_moves() const PURE { return min_nr_moves_; }
+    // The folowing methods in Tables are really only PURE. However they should
+    // only ever be applied to the constant "tables" so they access
+    // global memory that never changes making them effectively FUNCTIONAL
+    uint min_nr_moves() const FUNCTIONAL { return min_nr_moves_; }
     // Use the less often changing coordinate as "slow"
     // This will keep more of the data in the L1 cache
-    inline Norm distance(Coord const& slow, Coord const& fast) const PURE {
+    inline Norm distance(Coord const& slow, Coord const& fast) const FUNCTIONAL {
         return distance_[slow][fast];
     }
-    inline Nbits Ndistance(Coord const& slow, Coord const& fast) const PURE {
+    inline Nbits Ndistance(Coord const& slow, Coord const& fast) const FUNCTIONAL {
         return NLEFT >> distance(slow, fast);
     }
-    inline Norm distance_base_red(Coord const& pos) const PURE {
+    inline Norm distance_base_red(Coord const& pos) const FUNCTIONAL {
         return distance_base_red_[pos];
     }
-    inline Nbits Ndistance_base_red(Coord const& pos) const PURE {
+    inline Nbits Ndistance_base_red(Coord const& pos) const FUNCTIONAL {
         return NLEFT >> distance_base_red(pos);
     }
-    inline uint8_t base_blue(Coord const& pos) const PURE {
+    inline uint8_t base_blue(Coord const& pos) const FUNCTIONAL {
         return base_blue_[pos];
     }
-    inline uint8_t base_red(Coord const& pos) const PURE {
+    inline uint8_t base_red(Coord const& pos) const FUNCTIONAL {
         return base_red_[pos];
     }
-    inline uint8_t edge_red(Coord const& pos) const PURE {
+    inline uint8_t edge_red(Coord const& pos) const FUNCTIONAL {
         return edge_red_[pos];
     }
-    inline ParityPair const& parity_pair(Coord const& pos) const PURE {
-        return parity_pair_[pos];
-    }
+#if __BMI2__
     inline Parity parity(Coord const& pos) const PURE {
-        return parity_pair(pos).normal();
+        // The intrinsics version seems to have the exact same speed as a
+        // table fetch. But it should lower the pressure one the L1 cache a bit
+        return _pext_u32(pos._pos(), 0x11);
     }
-    inline Parity parity_symmetric(Coord const& pos) const PURE {
-        return parity_pair(pos).symmetric();
+#else // __BMI2__
+    inline Parity parity(Coord const& pos) const FUNCTIONAL {
+        return parity_[pos];
     }
-    inline Coords slide_targets(Coord const& pos) const PURE {
+#endif // !__BMI2__
+    inline Coords slide_targets(Coord const& pos) const FUNCTIONAL {
         return slide_targets_[pos];
     }
-    inline Coords jumpees(Coord const& pos) const PURE {
+    inline Coords jumpees(Coord const& pos) const FUNCTIONAL {
         return jumpees_[pos];
     }
-    inline Coords jump_targets(Coord const& pos) const PURE {
+    inline Coords jump_targets(Coord const& pos) const FUNCTIONAL {
         return jump_targets_[pos];
     }
-    // The folowing methods in Tables really only PURE. However they are only
-    // ever applied to the constant tables so the access global memory that
-    // never changes making them effectively FUNCTIONAL
     inline ParityCount const& parity_count() const FUNCTIONAL {
         return parity_count_;
     }
@@ -1477,10 +1397,6 @@ class Tables {
     void print_parity() const {
         print_parity(cout);
     }
-    void print_parity_symmetric(ostream& os) const;
-    void print_parity_symmetric() const {
-        print_parity_symmetric(cout);
-    }
     void print_blue_parity_count(ostream& os) const;
     void print_blue_parity_count() const {
         print_blue_parity_count(cout);
@@ -1490,10 +1406,6 @@ class Tables {
         print_red_parity_count(cout);
     }
   private:
-    ParityCount parity_count_;
-    uint min_nr_moves_;
-    Norm infinity_;
-    Board start_;
     BoardTable<Coords> slide_targets_;
     BoardTable<Coords> jumpees_;
     BoardTable<Coords> jump_targets_;
@@ -1501,8 +1413,14 @@ class Tables {
     BoardTable<uint8_t> base_blue_;
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
-    BoardTable<ParityPair> parity_pair_;
+#if !__BMI2__
+    BoardTable<Parity> parity_;
+#endif // !__BMI2__
     BoardTable<BoardTable<Norm>> distance_;
+    ParityCount parity_count_;
+    Norm infinity_;
+    uint min_nr_moves_;
+    Board start_;
 };
 
 extern Tables tables;
@@ -1544,39 +1462,6 @@ Coords Coord::jump_targets() const {
 }
 
 ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
-    // cout << "Insert:\n" << Image{value};
-    // Leave hash calculation out of the mutex
-    ArmyId hash = value.hash();
-    lock_guard<mutex> lock{exclude_};
-    // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
-    if (used_ >= limit_) resize();
-    ArmyId const mask = mask_;
-    ArmyId pos = hash & mask;
-    ArmyId offset = 0;
-    auto values = values_;
-    while (true) {
-        // logger << "Try " << pos << " of " << allocated() << "\n" << flush;
-        ArmyId i = values[pos];
-        if (i == 0) {
-            stats.armyset_probe(offset);
-            ArmyId id = ++used_;
-            // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
-            values[pos] = id;
-            std::copy(value.begin(), value.end(), &at(id));
-            return id;
-        }
-        if (std::equal(value.begin(), value.end(), &at(i))) {
-            stats.armyset_probe(offset);
-            stats.armyset_try();
-            // logger << "Found duplicate " << hash << "\n" << flush;
-            return i;
-        }
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
-}
-
-ArmyId ArmySet::insert(ArmyE const& value, Statistics& stats) {
     // cout << "Insert:\n" << Image{value};
     // Leave hash calculation out of the mutex
     ArmyId hash = value.hash();
