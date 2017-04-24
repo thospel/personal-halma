@@ -169,7 +169,6 @@ class Coord {
     inline uint8_t base_blue() const PURE;
     inline uint8_t base_red() const PURE;
     inline uint8_t edge_red() const PURE;
-    inline Norm distance_base_red() const PURE;
     inline Nbits Ndistance_base_red() const PURE;
     inline Coords slide_targets() const PURE;
     inline Coords jumpees() const PURE;
@@ -1331,11 +1330,8 @@ class Tables {
     inline Nbits Ndistance(Coord const& slow, Coord const& fast) const FUNCTIONAL {
         return NLEFT >> distance(slow, fast);
     }
-    inline Norm distance_base_red(Coord const& pos) const FUNCTIONAL {
-        return distance_base_red_[pos];
-    }
     inline Nbits Ndistance_base_red(Coord const& pos) const FUNCTIONAL {
-        return NLEFT >> distance_base_red(pos);
+        return Ndistance_base_red_[pos];
     }
     inline uint8_t base_blue(Coord const& pos) const FUNCTIONAL {
         return base_blue_[pos];
@@ -1370,16 +1366,17 @@ class Tables {
         return parity_count_;
     }
     inline Army const& army_red()  const FUNCTIONAL { return start().red(); }
-    Norm infinity() const FUNCTIONAL { return infinity_; }
+    Norm   infinity() const FUNCTIONAL { return  infinity_; }
+    Nbits Ninfinity() const FUNCTIONAL { return Ninfinity_; }
     Board const& start() const FUNCTIONAL { return start_; }
 
     void print_directions(ostream& os) const;
     void print_directions() const {
         print_directions(cout);
     }
-    void print_distance_base_red(ostream& os) const;
-    inline void print_distance_base_red() const {
-        print_distance_base_red(cout);
+    void print_Ndistance_base_red(ostream& os) const;
+    inline void print_Ndistance_base_red() const {
+        print_Ndistance_base_red(cout);
     }
     void print_base_blue(ostream& os) const;
     void print_base_blue() const {
@@ -1406,10 +1403,10 @@ class Tables {
         print_red_parity_count(cout);
     }
   private:
-    BoardTable<Coords> slide_targets_;
-    BoardTable<Coords> jumpees_;
-    BoardTable<Coords> jump_targets_;
-    BoardTable<Norm> distance_base_red_;
+    BoardTable<Coords>  slide_targets_;
+    BoardTable<Coords>  jumpees_;
+    BoardTable<Coords>  jump_targets_;
+    BoardTable<Nbits>   Ndistance_base_red_;
     BoardTable<uint8_t> base_blue_;
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
@@ -1418,7 +1415,8 @@ class Tables {
 #endif // !__BMI2__
     BoardTable<BoardTable<Norm>> distance_;
     ParityCount parity_count_;
-    Norm infinity_;
+    Norm   infinity_;
+    Nbits Ninfinity_;
     uint min_nr_moves_;
     Board start_;
 };
@@ -1439,10 +1437,6 @@ uint8_t Coord::base_red() const {
 
 uint8_t Coord::edge_red() const {
     return tables.edge_red(*this);
-}
-
-Norm Coord::distance_base_red() const {
-    return tables.distance_base_red(*this);
 }
 
 Nbits Coord::Ndistance_base_red() const {

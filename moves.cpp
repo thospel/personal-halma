@@ -99,15 +99,16 @@ Statistics NAME(uint thid,
             bZ == bZ_symmetric ? 0 : 1;
 #endif  // BLUE_TO_MOVE
 
-        Nbits Ndistance_red = NLEFT >> tables.infinity();
-        int off_base_from   = 0;
+        Nbits Ndistance_red = tables.Ninfinity();
+        int off_base_from   = ARMY;
         int edge_count_from = 0;
         ParityCount parity_blue = tables.parity_count();
         for (auto const& b: bZ) {
             --parity_blue[b.parity()];
-            if (b.base_red()) continue;
-            ++off_base_from;
+            off_base_from -= b.base_red();
             edge_count_from += b.edge_red();
+            // No need to check for !b.base_red() since Ndistance_base_red()
+            // has ignoring soldiers on the red base builtin
             Ndistance_red |= b.Ndistance_base_red();
         }
         int const distance_red = __builtin_clz(Ndistance_red);
@@ -153,7 +154,7 @@ Statistics NAME(uint thid,
             if (VERBOSE)
                 logger << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image << flush;
 
-            Nbits Ndistance_army = NLEFT >> tables.infinity();
+            Nbits Ndistance_army = tables.Ninfinity();
             for (auto const& b: blue) {
                 if (b.base_red()) continue;
                 for (auto const& r: red)

@@ -748,9 +748,10 @@ void Tables::init() {
         cout << "Rules:\n";
         for (uint r=0; r<RULES; ++r) cout << "  " << directions[r] << "\n";
     }
+    ++infinity_;
     if (infinity_ >= NBITS)
         throw(logic_error("Max distance does not fit in Nbits"));
-    ++infinity_;
+    Ninfinity_ = NLEFT >> infinity_;
 
     // Set up distance tables
     for (uint y_slow = 0; y_slow < Y; ++y_slow) {
@@ -849,7 +850,10 @@ void Tables::init() {
                 Norm d1 = norm[dy][dx];
                 if (d1 < d) d = d1;
             }
-            distance_base_red_[pos] = d > 2 ? d-2 : 0;
+            Ndistance_base_red_[pos] =
+                d == 0 ? Ninfinity_ :
+                d > 2  ? NLEFT >> (d-2) :
+                NLEFT;
             edge_red_[pos] = d == 1;
 #if !__BMI2__
             Parity x_parity = x % 2;
@@ -865,14 +869,16 @@ void Tables::init() {
     min_nr_moves_ = start_.min_nr_moves();
 }
 
-void Tables::print_distance_base_red(ostream& os) const {
+void Tables::print_Ndistance_base_red(ostream& os) const {
+    os << hex;
     for (uint y=0; y < Y; ++y) {
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
-            os << setw(3) << static_cast<uint>(distance_base_red(pos));
+            os << setw(11) << Ndistance_base_red(pos);
         }
         os << "\n";
     }
+    os << dec;
 }
 
 void Tables::print_base_red(ostream& os) const {
@@ -1129,7 +1135,7 @@ int Board::min_nr_moves(bool blue_to_move) const {
     blue_to_move = blue_to_move ? true : false;
 
     Nbits Ndistance_army, Ndistance_red;
-    Ndistance_army = Ndistance_red = NLEFT >> tables.infinity();
+    Ndistance_army = Ndistance_red = tables.Ninfinity();
     int off_base_from = 0;
     ParityCount parity_count_from = tables.parity_count();
     int edge_count_from = 0;
@@ -2022,8 +2028,8 @@ void my_main(int argc, char const* const* argv) {
         cout << start_board.red();
         cout << "Blue:\n";
         cout << start_board.blue();
-        cout << "Base red distance:\n";
-        tables.print_distance_base_red();
+        cout << "Base red Ndistance:\n";
+        tables.print_Ndistance_base_red();
         cout << "Base red:\n";
         tables.print_base_red();
         cout << "Edge red:\n";
