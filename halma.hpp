@@ -43,6 +43,7 @@ inline void ASTORE(Align& pos, Align val);
 inline Align ULOAD(Align const& pos) PURE;
 inline void USTORE(Align& pos, Align val);
 inline bool IS_ZERO(Align val) FUNCTIONAL;
+inline Align SHIFT_RIGHT(Align val, int imm8) FUNCTIONAL;
 inline Align ZERO() FUNCTIONAL;
 Align ZERO() {
     Align tmp;
@@ -57,12 +58,15 @@ void ASTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
 Align ULOAD(Align const& pos) { return _mm256_lddqu_si256(&pos); }
 void USTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
 bool IS_ZERO(Align val) { return _mm256_testz_si256(val, val); }
+// Using a >> imm shifts in sign bits. We want zeros
+Align SHIFT_RIGHT(Align val, int imm8) { return _mm256_srli_epi64(val, imm8); }
 #elif M128
 Align ALOAD(Align const& pos) { return pos; }
 void ASTORE(Align& pos, Align val) { pos = val; }
 Align ULOAD(Align const& pos) { return _mm_lddqu_si128(&pos); }
 void USTORE(Align& pos, Align val) { _mm_storeu_si128(&pos, val); }
 bool IS_ZERO(Align val) { return _mm_testz_si128(val, val); }
+Align SHIFT_RIGHT(Align val, int imm8) { return _mm_srli_epi64(val, imm8); }
 #else
 Align ALOAD(Align const& pos) { return pos; }
 void ASTORE(Align& pos, Align val) { pos = val; }
@@ -70,10 +74,13 @@ void ASTORE(Align& pos, Align val) { pos = val; }
 Align ULOAD(Align const& pos) { return pos; }
 void USTORE(Align& pos, Align val) { pos = val; }
 bool IS_ZERO(Align val) { return !val; }
+Align SHIFT_RIGHT(Align val, int imm8) { return val >> imm8; }
 #endif
 
 extern Align ARMY_MASK;
 extern Align ARMY_MASK_NOT;
+extern Align NIBBLE_LEFT;
+extern Align NIBBLE_RIGHT;
 
 extern bool statistics;
 extern bool hash_statistics;
@@ -310,22 +317,10 @@ class alignas(Align) Army {
   public:
     Army() {}
     explicit inline Army(Coord const* army, ArmyId symmetry = 0) {
-        if (symmetry) {
-            transform(army, army+ARMY, begin(),
-                      [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
-            terminator();
-            sort();
-        } else
-            _import(army, begin(), true);
+        _import(army, begin(), symmetry, true);
     }
     explicit inline Army(Army const& army, ArmyId symmetry = 0) {
-        if (symmetry) {
-            transform(army.begin(), army.end(), begin(),
-                      [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
-            terminator();
-            sort();
-        } else
-            _import(army.begin(), begin());
+        _import(army.begin(), begin(), symmetry);
     }
     inline uint64_t hash() const PURE {
         return army_hash(begin());
@@ -395,22 +390,51 @@ class alignas(Align) Army {
     // Really only PURE but the value never changes
     static inline int ALIGNEDS() FUNCTIONAL {
         return SINGLE_ALIGN ? MAX_ARMY_ALIGNED : ARMY_ALIGNED; }
-    static inline void _import(Coord const* RESTRICT from, Coord* RESTRICT to, bool terminate=false) {
+    static NOINLINE void sort(Coord* RESTRICT base);
+    static inline void _import(Coord const* RESTRICT from, Coord* RESTRICT to, ArmyId symmetry = 0, bool terminate=false) {
         if (DO_ALIGN) {
             Align const* RESTRICT afrom = reinterpret_cast<Align const*>(from);
             Align      * RESTRICT ato   = reinterpret_cast<Align      *>(to);
             uint n = ALIGNEDS();
             if (terminate) {
                 --n;
-                for (uint i=0; i<n; ++i)
-                    ato[i] = ULOAD(afrom[i]);
-                ato[n] = ARMY_MASK | ULOAD(afrom[n]);
+                if (symmetry) {
+                    for (uint i=0; i<n; ++i) {
+                        Align tmp = ULOAD(afrom[i]);
+                        Align left  = tmp & NIBBLE_LEFT;
+                        Align right = tmp & NIBBLE_RIGHT;
+                        ato[i] = SHIFT_RIGHT(left, 4) | right << 4;
+                    }
+                    Align tmp = ARMY_MASK | ULOAD(afrom[n]);
+                    Align left  = tmp & NIBBLE_LEFT;
+                    Align right = tmp & NIBBLE_RIGHT;
+                    ato[n] = SHIFT_RIGHT(left, 4) | right << 4;
+                    sort(to);
+                } else {
+                    for (uint i=0; i<n; ++i)
+                        ato[i] = ULOAD(afrom[i]);
+                    ato[n] = ARMY_MASK | ULOAD(afrom[n]);
+                }
             } else {
-                for (uint i=0; i<n; ++i)
-                    ASTORE(ato[i], ALOAD(afrom[i]));
+                if (symmetry) {
+                    for (uint i=0; i<n; ++i) {
+                        Align tmp = ALOAD(afrom[i]);
+                        Align left  = tmp & NIBBLE_LEFT;
+                        Align right = tmp & NIBBLE_RIGHT;
+                        ato[i] = SHIFT_RIGHT(left, 4) | right << 4;
+                    }
+                    sort(to);
+                } else 
+                    for (uint i=0; i<n; ++i)
+                        ASTORE(ato[i], ALOAD(afrom[i]));
             }
         } else {
-            std::copy(from, from+ARMY, to);
+            if (symmetry) {
+                transform(from, from+ARMY, to,
+                          [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
+                sort(to);
+            } else
+                std::copy(from, from+ARMY, to);
             if (terminate) to[ARMY] = Coord::MAX();
         }
     }
@@ -425,16 +449,12 @@ class alignas(Align) Army {
             std::copy(from, from+ARMY, to);
         }
     }
-    inline void terminator() {
-        if (DO_ALIGN)
-            reinterpret_cast<Align *>(begin())[ALIGNEDS()-1] |= ARMY_MASK;
-    }
 
     inline Coord& operator[](ssize_t i) PURE { return army_[i];}
     inline Coord      * begin()       FUNCTIONAL { return &army_[0]; }
     inline Coord      * end  ()       FUNCTIONAL { return &army_[ARMY]; }
 
-    NOINLINE void sort();
+    inline void sort() { sort(begin()); }
 
     array<Coord, MAX_ARMY> army_;
 };

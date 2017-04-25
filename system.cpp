@@ -25,6 +25,14 @@ std::string const VCS_COMMIT{STRINGIFY(COMMIT)};
 std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 size_t PAGE_SIZE;
+size_t PAGE_SIZE1;
+size_t PAGE_MASK;
+
+inline size_t PAGE_ROUND(size_t size) FUNCTIONAL;
+size_t PAGE_ROUND(size_t size) {
+    return (size + PAGE_SIZE1) & PAGE_MASK;
+}
+
 // Linux specific
 size_t get_memory(bool set_base_mem) {
     static size_t base_mem = 0;
@@ -192,7 +200,7 @@ void set_signals() {
 
 void* _mmap(size_t length) {
     void* ptr = mmap(nullptr, 
-                     length, 
+                     PAGE_ROUND(length), 
                      PROT_READ | PROT_WRITE, 
                      MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) 
@@ -201,12 +209,15 @@ void* _mmap(size_t length) {
 }
 
 void _munmap(void* ptr, size_t length) {
-    if (munmap(ptr, length))
+    if (munmap(ptr, PAGE_ROUND(length)))
         throw_errno("Could not set munmap " + std::to_string(length) + " bytes");
 }
 
 void* _mremap(void* old_ptr, size_t old_length, size_t new_length) {
-    void* new_ptr = mremap(old_ptr, old_length, new_length, MREMAP_MAYMOVE);
+    void* new_ptr = mremap(old_ptr,
+                           PAGE_ROUND(old_length),
+                           PAGE_ROUND(new_length),
+                           MREMAP_MAYMOVE);
     if (new_ptr == MAP_FAILED) 
         throw_errno("Could not mremap to " + std::to_string(new_length) + " bytes");
     return new_ptr;
@@ -225,5 +236,7 @@ void init_system() {
     long tmp = sysconf(_SC_PAGE_SIZE);
     if (tmp == -1)
         throw_errno("Could not determine PAGE SIZE");
-    PAGE_SIZE = tmp;
+    PAGE_SIZE  = tmp;
+    PAGE_SIZE1 = PAGE_SIZE-1;
+    PAGE_MASK  = ~PAGE_SIZE1;
 }

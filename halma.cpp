@@ -12,6 +12,8 @@ uint ARMY = 10;
 
 Align ARMY_MASK;
 Align ARMY_MASK_NOT;
+Align NIBBLE_LEFT;
+Align NIBBLE_RIGHT;
 uint ARMY_ALIGNED;
 uint ARMY_PADDING;
 uint ARMY64_DOWN;
@@ -109,6 +111,14 @@ inline ostream& operator<<(ostream& os, Diff const& diff) {
     return os;
 }
 
+Align AlignFill(uint8_t byte) PURE;
+Align AlignFill(uint8_t byte) {
+    Align val;
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(&val);
+    std::fill(ptr, ptr + sizeof(val), byte);
+    return val;
+}
+
 inline bool heuristics() {
     return balance >= 0 || prune_slide || prune_jump;
 }
@@ -185,8 +195,8 @@ void Army::check(const char* file, int line) const {
                 throw_logic("Badly terminated army", file, line);
 }
 
-void Army::sort() {
-    std::sort(begin(), end());
+void Army::sort(Coord* RESTRICT base) {
+    std::sort(base, base+ARMY);
 }
 
 void ArmyPos::check(char const* file, int line) const {
@@ -2067,6 +2077,8 @@ void my_main(int argc, char const* const* argv) {
     ARMY_MASK_NOT= ~ARMY_MASK;
     ARMY_PADDING = DO_ALIGN ? ALIGNSIZE - ARMY % ALIGNSIZE : 0;
     ARMY64_DOWN  = ARMY / sizeof(uint64_t);
+    NIBBLE_LEFT  = AlignFill(0xf0);
+    NIBBLE_RIGHT = AlignFill(0x0f);
 
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;
@@ -2079,12 +2091,18 @@ void my_main(int argc, char const* const* argv) {
     cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
     if (show_tables) {
-        cout << "Sizeof(Coord)   =" << sizeof(Coord)   << "\n";
-        cout << "Sizeof(Army)    =" << sizeof(Army)    << "\n";
-        cout << "Sizeof(ArmyPos) =" << sizeof(ArmyPos) << "\n";
-        cout << "Sizeof(Board)   =" << sizeof(Board)   << "\n";
-        cout << "Sizeof(Image)   =" << sizeof(Image)   << "\n";
-        cout << "Sizeof(Align)   =" << sizeof(Align)   << "\n";
+        cout << "Sizeof(Coord)   =" << setw(3) << sizeof(Coord) <<
+            " algnment " << setw(2) << alignof(Coord) << "\n";
+        cout << "Sizeof(Align)   =" << setw(3) << sizeof(Align) <<
+            " algnment " << setw(2) << alignof(Align) << "\n";
+        cout << "Sizeof(Army)    =" << setw(3) << sizeof(Army) <<
+            " algnment " << setw(2) << alignof(Army) << "\n";
+        cout << "Sizeof(ArmyPos) =" << setw(3) << sizeof(ArmyPos) <<
+            " algnment " << setw(2) << alignof(ArmyPos) << "\n";
+        cout << "Sizeof(Board)   =" << setw(3) << sizeof(Board) <<
+            " algnment " << setw(2) << alignof(Board) << "\n";
+        cout << "Sizeof(Image)   =" << setw(3) << sizeof(Image) <<
+            " algnment " << setw(2) << alignof(Image) << "\n";
         cout << "DO_ALIGN:     " << (DO_ALIGN ? "true" : "false") << "\n";
         cout << "SINGLE_ALIGN: " << (SINGLE_ALIGN ? "true" : "false") << "\n";
         cout << "ALIGNSIZE:    " << ALIGNSIZE << "\n";

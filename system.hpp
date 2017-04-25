@@ -71,6 +71,8 @@
      #include <spe.h>
 #endif
 
+size_t const MMAP_THRESHOLD = 128 * 1024;
+
 extern bool FATAL;
 
 extern uint nr_threads;
