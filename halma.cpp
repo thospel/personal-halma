@@ -9,15 +9,18 @@ uint X = 0;
 uint Y = 0;
 uint RULES = 6;
 uint ARMY = 10;
-uint ARMY_ALIGNED = 0;
+
+Align ARMY_MASK;
+uint ARMY_ALIGNED;
+uint ARMY_PADDING;
 
 int balance = -1;
 int balance_delay = 0;
 int balance_min, balance_max;
 
+int example = 0;
 bool prune_slide = false;
 bool prune_jump  = false;
-int example = 0;
 
 bool statistics = false;
 bool hash_statistics = false;
@@ -27,8 +30,6 @@ char const* sample_subset_red = nullptr;
 
 // 0 means let C++ decide
 uint nr_threads = 0;
-string VCS_COMMIT{STRINGIFY(COMMIT)};
-string VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
@@ -111,7 +112,7 @@ inline bool heuristics() {
 }
 
 ssize_t total_allocated() {
-    if (tid) throw(logic_error("Use of total_allocated inside a thread"));
+    if (tid) throw_logic("Use of total_allocated inside a thread");
     total_allocated_ += allocated_;
     allocated_ = 0;
     return total_allocated_;
@@ -142,6 +143,23 @@ ArmyId random_coprime(ArmyId range) {
     }
 }
 
+Align Coord::ArmyMask() {
+    Align result;
+    Coord* ptr = reinterpret_cast<Coord *>(&result);
+    uint i = 0;
+    uint n = ARMY % ALIGNSIZE;
+    while (i < n)         ptr[i++] = Coord{0};
+    while (i < ALIGNSIZE) ptr[i++] = Coord::MAX();
+    return result;
+}
+
+void Coord::print(ostream& os, Align align) {
+    Coord* ptr = reinterpret_cast<Coord *>(&align);
+    os << hex << "[ ";
+    for (uint i=0; i<ALIGNSIZE; ++i) os << setw(2) << static_cast<uint>(ptr[i]._pos()) << " ";
+    os << "]" << dec;
+}
+
 void Coord::svg(ostream& os, Color color, uint scale) const {
     os << "      <circle cx='" << (x()+1) * scale << "' cy='" << (y()+1) * scale<< "' r='" << static_cast<uint>(scale * 0.35) << "' fill='" << svg_color(color) << "' />\n";
 }
@@ -152,36 +170,48 @@ ostream& operator<<(ostream& os, Army const& army) {
     return os;
 }
 
-void Army::check(int line) const {
-    // for (int i=0; i<ARMY; ++i) (*this)[i].check(line);
+void Army::check(const char* file, int line) const {
+    // for (int i=0; i<ARMY; ++i) (*this)[i].check(file, line);
     for (uint i=0; i<ARMY-1; ++i)
         if ((*this)[i] >= (*this)[i+1]) {
             cerr << *this;
-            throw(logic_error("Army out of order at line " + to_string(line)));
+            throw_logic("Army out of order", file, line);
         }
+    if (DO_ALIGN)
+        for (uint i=ARMY; i < ARMY+ARMY_PADDING; ++i)
+            if ((*this)[i] != Coord::MAX())
+                throw_logic("Badly terminated army", file, line);
 }
 
 void Army::sort() {
     std::sort(begin(), end());
 }
 
-void ArmyPos::check(int line) const {
-    for (uint i=0; i<ARMY; ++i) army_[i].check(line);
+void ArmyPos::check(char const* file, int line) const {
+    for (uint i=0; i<ARMY; ++i) at(i).check(file, line);
     for (uint i=0; i<ARMY-1; ++i)
-        if (army_[i] >= army_[i+1]) {
+        if (at(i) >= at(i+1)) {
             cerr << *this;
-            throw(logic_error("ArmyPos out of order at line " + to_string(line)));
+            throw_logic("ArmyPos out of order", file, line);
         }
-    if (army_[-1] != Coord::MIN())
-        throw(logic_error("ArmyPos wrong bottom at line " + to_string(line)));
-    if (army_[ARMY] != Coord::MAX())
-        throw(logic_error("ArmyPos wrong top at line " + to_string(line)));
+    if (at(-1) != Coord::MIN())
+        throw_logic("ArmyPos wrong bottom", file, line);
+    if (DO_ALIGN)
+        for (uint i=ARMY; i < ARMY+ARMY_PADDING; ++i) {
+            if (at(i) != Coord::MAX())
+                throw_logic("Badly terminated army", file, line);
+        }
+    else if (at(ARMY) != Coord::MAX())
+        throw_logic("ArmyPos wrong top", file, line);
+    if (pos_ < 0 || pos_ >= static_cast<int>(ARMY)) 
+        throw_logic("ArmyPos position " + to_string(pos_) +
+                          " out of range", file, line);
 }
 
 ostream& operator<<(ostream& os, ArmyPos const& army) {
     os << "pos=" << army.pos_ << "\n";
-    for (ssize_t i=-1; i<=static_cast<ssize_t>(ARMY); ++i)
-        os << "  " << army[i] << "\n";
+    for (int i=-1; i<=static_cast<int>(ARMY); ++i)
+        os << "  " << setw(3) << i << ": " << army[i] << "\n";
     return os;
 }
 
@@ -269,9 +299,9 @@ Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} 
         }
     }
     if (diffs > 2)
-        throw(logic_error("Multimove"));
+        throw_logic("Multimove");
     if (diffs == 1)
-        throw(logic_error("Move going nowhere"));
+        throw_logic("Move going nowhere");
 }
 
 Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1}, to{-1, -1} {
@@ -386,7 +416,7 @@ void BoardSubSet::convert_red() {
 }
 
 ArmyId BoardSubSet::example(ArmyId& symmetry) const {
-    if (empty()) throw(logic_error("No red value in BoardSubSet"));
+    if (empty()) throw_logic("No red value in BoardSubSet");
 
     auto armies = armies_;
     for (auto end = &armies[allocated()]; armies < end; ++armies)
@@ -395,11 +425,11 @@ ArmyId BoardSubSet::example(ArmyId& symmetry) const {
             symmetry = split(*armies, red_id);
             return red_id;
         }
-    throw(logic_error("No red value even though the BoardSubSet is not empty"));
+    throw_logic("No red value even though the BoardSubSet is not empty");
 }
 
 ArmyId BoardSubSet::random_example(ArmyId& symmetry) const {
-    if (empty()) throw(logic_error("No red value in BoardSubSet"));
+    if (empty()) throw_logic("No red value in BoardSubSet");
 
     auto armies = armies_;
     ArmyId n = allocated();
@@ -426,7 +456,7 @@ void BoardSubSet::print(ostream& os) const {
 }
 
 ArmyId BoardSubSetRed::example(ArmyId& symmetry) const {
-    if (empty()) throw(logic_error("No red value in BoardSubSetRed"));
+    if (empty()) throw_logic("No red value in BoardSubSetRed");
 
     ArmyId red_id;
     symmetry = split(armies_[0], red_id);
@@ -434,7 +464,7 @@ ArmyId BoardSubSetRed::example(ArmyId& symmetry) const {
 }
 
 ArmyId BoardSubSetRed::random_example(ArmyId& symmetry) const {
-    if (empty()) throw(logic_error("No red value in BoardSubSetRed"));
+    if (empty()) throw_logic("No red value in BoardSubSetRed");
 
     ArmyId red_id;
     symmetry = split(armies_[random(size())], red_id);
@@ -623,21 +653,21 @@ FullMove::FullMove(char const* str): FullMove{} {
         if (!ch) return;
         if (ch != '-') break;
     }
-    throw(logic_error("Could not parse full move '" + string(str) + "'"));
+    throw_logic("Could not parse full move '" + string(str) + "'");
 }
 
 Coord FullMove::from() const {
-    if (size() == 0) throw(logic_error("Empty full_move"));
+    if (size() == 0) throw_logic("Empty full_move");
     return (*this)[0];
 }
 
 Coord FullMove::to()   const {
-    if (size() == 0) throw(logic_error("Empty full_move"));
+    if (size() == 0) throw_logic("Empty full_move");
     return (*this)[size()-1];
 }
 
 Move FullMove::move() const {
-    if (size() == 0) throw(logic_error("Empty full_move"));
+    if (size() == 0) throw_logic("Empty full_move");
     return Move{(*this)[0], (*this)[size()-1]};
 }
 
@@ -649,7 +679,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
         auto slide_targets = move.from.slide_targets();
         for (uint r = 0; r < RULES; ++r, slide_targets.next())
             if (slide_targets.current() == move.to) return;
-        throw(logic_error("Move is not a slide but has different parity"));
+        throw_logic("Move is not a slide but has different parity");
     }
 
     // Must be a jump
@@ -682,13 +712,13 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
             ++nr_reachable;
         }
     }
-    throw(logic_error("Move is a not a jump but has the same parity"));
+    throw_logic("Move is a not a jump but has the same parity");
 }
 
 FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) : FullMove{} {
     bool blue_diff = board_from.blue() !=  board_to.blue();
     bool red_diff  = board_from.red()  !=  board_to.red();
-    if (blue_diff && red_diff) throw(logic_error("Both players move"));
+    if (blue_diff && red_diff) throw_logic("Both players move");
 
     if (blue_diff) {
         Move move{board_from.blue(), board_to.blue()};
@@ -701,9 +731,9 @@ FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) 
         return;
     }
     if (PASS) return;
-    if (!CLOSED_LOOP) throw(logic_error("Invalid null move"));
+    if (!CLOSED_LOOP) throw_logic("Invalid null move");
     // CLOSED LOOP also needs a color hint
-    throw(logic_error("closed loop analysis not implemented yet"));
+    throw_logic("closed loop analysis not implemented yet");
 }
 
 string FullMove::str() const {
@@ -732,17 +762,17 @@ void Tables::init() {
                 RULES == 8 ? max(ax, ay) :
                 RULES == 6 ? (ax+ay+abs(dx+dy))/2 :
                 RULES == 4 ? ax+ay :
-                throw(logic_error("Unknown rule " + to_string(RULES)));
+                (throw_logic("Unknown rule " + to_string(RULES)), 1);
             norm[y][x] = n;
             distance[y][x] = n <= 2 ? 0 : n-2;
             infinity_ = max(infinity_, n);
             if (n == 1) {
-                if (rule >= RULES) throw(logic_error("too many moves"));
+                if (rule >= RULES) throw_logic("too many moves");
                 directions[rule++] = Diff{dx, dy};
             }
         }
     }
-    if (rule < RULES) throw(logic_error("too few directions"));
+    if (rule < RULES) throw_logic("too few directions");
     sort(&directions[0], &directions[RULES]);
     if (false) {
         cout << "Rules:\n";
@@ -750,7 +780,7 @@ void Tables::init() {
     }
     ++infinity_;
     if (infinity_ >= NBITS)
-        throw(logic_error("Max distance does not fit in Nbits"));
+        throw_logic("Max distance does not fit in Nbits");
     Ninfinity_ = NLEFT >> infinity_;
 
     // Set up distance tables
@@ -835,7 +865,7 @@ void Tables::init() {
     sort(blue.begin(), blue.end());
     sort(red.begin(),  red.end());
     for (auto const& pos: blue)
-        if (base_red_[pos]) throw(logic_error("Red and blue overlap"));
+        if (base_red_[pos]) throw_logic("Red and blue overlap");
 
     for (uint y=0; y < Y; ++y) {
         Norm d = infinity_;
@@ -947,7 +977,7 @@ void ArmySet::_clear0() {
 }
 
 void ArmySet::_clear1(size_t size) {
-    if (size > ARMY_HIGHBIT)
+    if (size > ARMYID_HIGHBIT)
         throw(overflow_error("ArmySet size too large"));
 
     armies_size_ = size;
@@ -955,7 +985,7 @@ void ArmySet::_clear1(size_t size) {
     used_ = 0;
     limit_ = FACTOR(size);
     if (used_ >= limit_)
-        throw(logic_error("ArmySet clear size too small"));
+        throw_logic("ArmySet clear size too small");
 
     armies_ = new Coord[size * ARMY];
     allocated_ += armies_bytes();
@@ -996,6 +1026,21 @@ ArmyId ArmySet::find(Army const& army) const {
     }
 }
 
+ArmyId ArmySet::find(ArmyPos const& army) const {
+    ArmyId const mask = mask_;
+    ArmyId pos = army.hash() & mask;
+    auto values = values_;
+    uint offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        ArmyId i = values[pos];
+        if (i == 0) return 0;
+        if (std::equal(army.begin(), army.end(), &at(i))) return i;
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
+}
+
 void ArmySet::resize() {
     ArmyId values_limit = FACTOR(allocated());
     ArmyId armies_limit = armies_size_ - 1;
@@ -1019,7 +1064,7 @@ void ArmySet::resize() {
     if (used_ >= values_limit) {
         size_t size = allocated() * 2;
         // logger << "Resize ArmySet values: new size=" << size << "\n" << flush;
-        if (size > ARMY_HIGHBIT)
+        if (size > ARMYID_HIGHBIT)
             throw(overflow_error("Army size grew too large"));
 
         delete [] values_;
@@ -1085,7 +1130,7 @@ bool BoardSet::find(Board const& board, ArmySet const& armies_blue, ArmySet cons
 }
 
 Board BoardSet::example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
-    if (empty()) throw(logic_error("No board in BoardSet"));
+    if (empty()) throw_logic("No board in BoardSet");
     for (ArmyId blue_id = from(); blue_id <= back_id(); ++blue_id) {
         auto const& subset = at(blue_id);
         auto const& subset_red = subset.red();
@@ -1103,11 +1148,11 @@ Board BoardSet::example(ArmySet const& opponent_armies, ArmySet const& moved_arm
         Army const red {&red_armies .at(red_id), symmetry};
         return Board{blue, red};
     }
-    throw(logic_error("No board even though BoardSet is not empty"));
+    throw_logic("No board even though BoardSet is not empty");
 }
 
 Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
-    if (empty()) throw(logic_error("No board in BoardSet"));
+    if (empty()) throw_logic("No board in BoardSet");
 
     ArmyId n = subsets();
     ArmyId step = n == 1 ? 0 : random_coprime(n);
@@ -1170,7 +1215,7 @@ int Board::min_nr_moves(bool blue_to_move) const {
 void Army::do_move(Move const& move) {
     auto pos = equal_range(begin(), end(), move.from);
     if (pos.first == pos.second)
-        throw(logic_error("Move not found"));
+        throw_logic("Move not found");
     *pos.first = move.to;
     sort();
 }
@@ -1178,7 +1223,7 @@ void Army::do_move(Move const& move) {
 bool Army::_try_move(Move const& move) {
     auto pos = equal_range(begin(), end(), move.from);
     if (pos.first == pos.second) return false;
-        throw(logic_error("Move not found"));
+        throw_logic("Move not found");
     *pos.first = move.to;
     sort();
     return true;
@@ -1187,7 +1232,7 @@ bool Army::_try_move(Move const& move) {
 void Board::do_move(Move const& move) {
     if (blue()._try_move(move)) return;
     if (red ()._try_move(move)) return;
-    throw(logic_error("Move not found"));
+    throw_logic("Move not found");
 }
 
 string const Svg::file(string const& prefix, uint nr_moves) {
@@ -1547,7 +1592,7 @@ void play(bool print_moves=false) {
             "b1-b3-d3-d5-d7-f7-h5-h7",
         };
     } else {
-        throw(logic_error("No hardcoded replay game"));
+        throw_logic("No hardcoded replay game");
     }
 
     int nr_moves = game.size();
@@ -1698,7 +1743,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
 
     if (largest_red.size()) save_largest_red(largest_red);
 
-    if (red_id == 0) throw(logic_error("Solved without solution"));
+    if (red_id == 0) throw_logic("Solved without solution");
     return i;
 }
 
@@ -1765,7 +1810,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         }
 
         if (boards_to.size() == 0)
-            throw(logic_error("No solution while backtracking"));
+            throw_logic("No solution while backtracking");
         auto& stats = stats_list.back();
         if (example) {
             stats.example_board
@@ -1788,23 +1833,23 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     if (nr_moves == solution_moves) {
         // There should be only 1 blue army completely on the red base
         if (final_army_set.size() != 1)
-            throw(logic_error("More than 1 final blue army"));
+            throw_logic("More than 1 final blue army");
         blue_id = final_board_set.back_id();
         if (blue_id != 1)
-            throw(logic_error("Unexpected blue army id " + to_string(blue_id)));
+            throw_logic("Unexpected blue army id " + to_string(blue_id));
         // There should be only 1 final board
         if (final_board_set.size() != 1)
-            throw(logic_error("More than 1 solution while backtracking"));
+            throw_logic("More than 1 solution while backtracking");
     } else {
         Army const& blue_army = tables.start().red();
         blue_id = final_army_set.find(blue_army);
         if (blue_id == 0)
-            throw(logic_error("Could not find final blue army"));
+            throw_logic("Could not find final blue army");
     }
 
     BoardSubSet const& final_subset = final_board_set.cat(blue_id);
     if (final_subset.size() != 1)
-        throw(logic_error("More than 1 final red army"));
+        throw_logic("More than 1 final red army");
     ArmyId red_value = 0;
     for (ArmyId value: final_subset)
         if (value != 0) {
@@ -1812,16 +1857,16 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
             break;
         }
     if (red_value == 0)
-        throw(logic_error("Could not find final red army"));
+        throw_logic("Could not find final red army");
     ArmyId red_id;
     bool skewed = BoardSubSet::split(red_value, red_id) != 0;
     // Backtracking forced the final red army to be last_red_army
     // So there can only be 1 final red army and it therefore has army id 1
     if (red_id != 1)
-        throw(logic_error("Unexpected red army id " +to_string(red_id)));
+        throw_logic("Unexpected red army id " +to_string(red_id));
     // And it was stored without flip
     if (skewed)
-        throw(logic_error("Unexpected red army skewed"));
+        throw_logic("Unexpected red army skewed");
 
     Army blue{&final_army_set.at(blue_id)};
     Army red{last_red_army};
@@ -1929,7 +1974,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         cerr << "Blue:\n" << blue;
         cerr << "Red:\n" << red;
         cerr << "Failure board:\n" << image;
-        throw(logic_error("Could not identify backtracking move"));
+        throw_logic("Could not identify backtracking move");
       MOVE_DONE:
         boards[--board_pos] = Board{blue, red};
     }
@@ -1937,7 +1982,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpeErvR:Ax:y:r:a:T", argv);
+    GetOpt options("b:B:t:sHSjpeEFvR:Ax:y:r:a:T", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
@@ -1954,6 +1999,7 @@ void my_main(int argc, char const* const* argv) {
             case 'A': attempt     = false; break;
             case 'e': example     =  1; break;
             case 'E': example     = -1; break;
+            case 'F': FATAL       = true; break;
             case 'T': show_tables = true; break;
             case 'R': sample_subset_red = options.arg(); break;
             case 't':
@@ -1969,7 +2015,7 @@ void my_main(int argc, char const* const* argv) {
               if (val == 4 || val == 6 || val == 8)
                   RULES = val;
               else
-                  throw(range_error("Invalid ruleset"));
+                  throw(range_error("Invalid ruleset" + to_string(val)));
               break;
             case 'x':
               val = atoll(options.arg());
@@ -1991,8 +2037,8 @@ void my_main(int argc, char const* const* argv) {
               val = atoll(options.arg());
               if (val < 1)
                   throw(range_error("ARMY must be positive"));
-              if (val > MAX_ARMY)
-                  throw(range_error("ARMY must be <= " + to_string(MAX_ARMY)));
+              if (val > MAX_ARMY-DO_ALIGN)
+                  throw(range_error("ARMY must be <= " + to_string(MAX_ARMY-DO_ALIGN)));
               ARMY = val;
               break;
             default:
@@ -2005,7 +2051,10 @@ void my_main(int argc, char const* const* argv) {
         else X = Y;
     else
         if (Y == 0) Y = X;
-    ARMY_ALIGNED = (ARMY*sizeof(Coord)+sizeof(Align)-1) / sizeof(Align);
+    // +DO_ALIGN to allow for a terminating Coord
+    ARMY_ALIGNED = ((ARMY+DO_ALIGN)+ALIGNSIZE-1) / ALIGNSIZE;
+    ARMY_MASK    = Coord::ArmyMask();
+    ARMY_PADDING = DO_ALIGN ? ALIGNSIZE - ARMY % ALIGNSIZE : 0;
 
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;
@@ -2023,6 +2072,14 @@ void my_main(int argc, char const* const* argv) {
         cout << "Sizeof(ArmyPos) =" << sizeof(ArmyPos) << "\n";
         cout << "Sizeof(Board)   =" << sizeof(Board)   << "\n";
         cout << "Sizeof(Image)   =" << sizeof(Image)   << "\n";
+        cout << "Sizeof(Align)   =" << sizeof(Align)   << "\n";
+        cout << "DO_ALIGN: " << (DO_ALIGN ? "true" : "false") << "\n";
+        cout << "ALIGNSIZE: " << ALIGNSIZE << "\n";
+        cout << "ARMY_MASK: "; Coord::print(ARMY_MASK); cout << "\n";
+        cout << "ARMY_PADDING: " << ARMY_PADDING << "\n";
+        cout << "MAX_ARMY_ALIGNED: " << MAX_ARMY_ALIGNED << "\n";
+        cout << "ARMY_ALIGNED: " << ARMY_ALIGNED << "\n";
+        cout << "MAX_ARMY: " << MAX_ARMY << "\n";
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
         cout << "Red:\n";
         cout << start_board.red();

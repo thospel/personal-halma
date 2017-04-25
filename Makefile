@@ -4,7 +4,7 @@
 # CC_MALLOC=-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 # LIBS_MALLOC=-l:libtcmalloc_minimal.so.4
 
-CXXFLAGS = -Wall -Winline --param inline-unit-growth=200 --param large-function-growth=1000 --param max-inline-insns-single=800 -fno-math-errno -funsafe-math-optimizations -ffinite-math-only -ffast-math -fno-signed-zeros -fno-trapping-math -Ofast -march=native -fstrict-aliasing $(CC_MALLOC) -std=c++11 -g -pthread $(SANITIZE)
+CXXFLAGS = -Wall -Winline --param inline-unit-growth=200 --param large-function-growth=1000 --param max-inline-insns-single=800 -fno-math-errno -funsafe-math-optimizations -ffinite-math-only -ffast-math -fno-signed-zeros -fno-trapping-math -Ofast -march=native -fstrict-aliasing $(CC_MALLOC) -std=c++14 -g -pthread $(SANITIZE)
 LDFLAGS = -g -pthread $(SANITIZE)
 CXX := ccache $(CXX)
 
@@ -17,10 +17,10 @@ all: halma
 halma.o fast_moves.o slow_moves.o: halma.hpp system.hpp Makefile
 system.o: system.hpp Makefile
 
-halma.o: halma.cpp git_time
+halma.o: halma.cpp
 fast_moves.o: fast_moves.cpp all_moves.cpp moves.cpp
 slow_moves.o: slow_moves.cpp all_moves.cpp moves.cpp
-system.o: system.cpp
+system.o: system.cpp git_time
 
 halma: halma.o fast_moves.o slow_moves.o system.o
 	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@

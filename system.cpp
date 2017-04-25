@@ -1,13 +1,17 @@
 #include "system.hpp"
 
+#include <cstdlib>
 #include <csignal>
 
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/mman.h>
 
 #include <fstream>
 #include <mutex>
 #include <system_error>
+
+bool FATAL = false;
 
 int signal_counter = 1;
 std::atomic<uint> signal_generation;
@@ -17,6 +21,8 @@ std::atomic<ssize_t> total_allocated_;
 
 uint64_t PID;
 std::string HOSTNAME;
+std::string const VCS_COMMIT{STRINGIFY(COMMIT)};
+std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 size_t PAGE_SIZE;
 // Linux specific
@@ -35,10 +41,6 @@ size_t get_memory(bool set_base_mem) {
     return mem;
 }
 
-void throw_errno(std::string text) {
-    throw(std::system_error(errno, std::system_category(), text));
-}
-
 void rm_file(std::string const& file) {
     unlink(file.c_str());
 }
@@ -50,7 +52,7 @@ inline std::string _time_string(time_t time) {
         throw_errno("Could not convert time to localtime");
     char buffer[80];
     if (!strftime(buffer, sizeof(buffer), "%F %T %z", &tm))
-        throw(std::logic_error("strtime buffer too short"));
+        throw_logic("strtime buffer too short");
     return std::string{buffer};
 }
 
@@ -117,6 +119,30 @@ int LogBuffer::sync() {
 
 thread_local LogStream logger;
 
+void throw_errno(std::string text) {
+    throw(std::system_error(errno, std::system_category(), text));
+}
+
+void throw_logic(char const* text, const char* file, int line) {
+    throw_logic(std::string{text} + " at " + file + ":" + std::to_string(line));
+}
+
+void throw_logic(std::string text, const char* file, int line) {
+    throw_logic(text + " at " + file + ":" + std::to_string(line));
+}
+
+void throw_logic(char const* text) {
+    throw_logic(std::string{text});
+}
+
+void throw_logic(std::string text) {
+    if (FATAL) {
+        logger << text << std::flush;
+        abort();
+    }
+    throw(std::logic_error(text));
+}
+
 bool is_terminated() {
     return UNLIKELY(signal_counter % 2 == 0);
 }
@@ -162,6 +188,28 @@ void set_signals() {
         throw_errno("Could not set SIGUNT handler");
     if (sigaction(SIGTERM, &new_action, nullptr))
         throw_errno("Could not set SIGTERM handler");
+}
+
+void* _mmap(size_t length) {
+    void* ptr = mmap(nullptr, 
+                     length, 
+                     PROT_READ | PROT_WRITE, 
+                     MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) 
+        throw_errno("Could not set mmap " + std::to_string(length) + " bytes");
+    return ptr;
+}
+
+void _munmap(void* ptr, size_t length) {
+    if (munmap(ptr, length))
+        throw_errno("Could not set munmap " + std::to_string(length) + " bytes");
+}
+
+void* _mremap(void* old_ptr, size_t old_length, size_t new_length) {
+    void* new_ptr = mremap(old_ptr, old_length, new_length, MREMAP_MAYMOVE);
+    if (new_ptr == MAP_FAILED) 
+        throw_errno("Could not mremap to " + std::to_string(new_length) + " bytes");
+    return new_ptr;
 }
 
 void init_system() {

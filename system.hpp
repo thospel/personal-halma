@@ -12,17 +12,22 @@
 #define STATIC
 
 #ifdef __GNUC__
-# define RESTRICT __restrict__
-# define NOINLINE	__attribute__((__noinline__))
-# define ALWAYS_INLINE  __attribute__((always_inline))
-# define LIKELY(x)	__builtin_expect(!!(x),true)
-# define UNLIKELY(x)	__builtin_expect(!!(x),false)
-# define HOT		__attribute__((__hot__))
-# define COLD		__attribute__((__cold__))
+# define RESTRICT	 __restrict__
+# define NOINLINE	 __attribute__((__noinline__))
+# define ALWAYS_INLINE	 __attribute__((always_inline))
+# define LIKELY(x)	 __builtin_expect(!!(x),true)
+# define UNLIKELY(x)	 __builtin_expect(!!(x),false)
+# define HOT		 __attribute__((__hot__))
+# define COLD		 __attribute__((__cold__))
 // pure means does not modify any (non const) global memory.
-# define PURE		__attribute__((__pure__))
+# define PURE		 __attribute__((__pure__))
 // const means does not read/modify any (non const) global memory.
-# define FUNCTIONAL	__attribute__((__const__))
+# define FUNCTIONAL	 __attribute__((__const__))
+# define ALLOC_SIZE(x)	 __attribute__((alloc_size(x)))
+# define MALLOC		 __attribute__((malloc))
+# define NONNULL         __attribute__((nonnull))
+# define RETURNS_NONNULL __attribute__((returns_nonnull))
+# define WARN_UNUSED     __attribute__((warn_unused_result))
 #else // __GNUC__
 # define RESTRICT
 # define NOINLINE
@@ -33,6 +38,11 @@
 # define COLD
 # define PURE
 # define FUNCTIONAL
+# define ALLOC_SIZE(x)
+# define MALLOC
+# define NONNULL
+# define RETURNS_NONNULL
+# define WARN_UNUSED
 #endif // __GNUC__
 
 #define CAT(x, y) _CAT(x,y)
@@ -61,6 +71,8 @@
      #include <spe.h>
 #endif
 
+extern bool FATAL;
+
 extern uint nr_threads;
 extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
@@ -70,8 +82,15 @@ extern std::atomic<ssize_t> total_allocated_;
 
 extern uint64_t PID;
 extern std::string HOSTNAME;
+extern std::string const VCS_COMMIT;
+extern std::string const VCS_COMMIT_TIME;
 
 [[noreturn]] extern void throw_errno(std::string text);
+[[noreturn]] extern void throw_logic(char const* text);
+[[noreturn]] extern void throw_logic(char const*, const char* file, int line);
+[[noreturn]] extern void throw_logic(std::string text);
+[[noreturn]] extern void throw_logic(std::string text, const char* file, int line);
+
 extern void rm_file(std::string const& file);
 extern std::string time_string(time_t time);
 extern std::string time_string();
@@ -79,8 +98,26 @@ extern time_t now();
 extern size_t get_memory(bool set_base_mem = false);
 extern void set_signals();
 extern bool is_terminated();
+extern void* _mmap(size_t length) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+extern void _munmap(void* ptr, size_t length) NONNULL;
+// Strictly speaking _mremap shouldn't get the MALLOC property, but we will never
+// store pointers in the mmapped regions
+extern void* _mremap(void* old_ptr, size_t old_length, size_t new_length) MALLOC ALLOC_SIZE(2) RETURNS_NONNULL WARN_UNUSED;
 
 extern void init_system();
+
+template<class T>
+inline T* mmap(size_t size) {
+    return static_cast<T *>(_mmap(size * sizeof(T)));
+}
+template<class T>
+inline void munmap(T* ptr, size_t size) {
+    _munmap(static_cast<void *>(ptr), size * sizeof(T));
+}
+template<class T>
+inline void mremap(T* old_ptr, size_t old_size, size_t new_size) {
+    return static_cast<T *>(_mremap(static_cast<void *>(old_ptr), old_size * sizeof(T), new_size * sizeof(T)));
+}
 
 class LogBuffer: public std::streambuf {
   public:

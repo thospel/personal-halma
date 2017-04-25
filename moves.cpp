@@ -90,7 +90,9 @@ Statistics NAME(uint thid,
         Army const bZ{BLUE_TO_MOVE ?
                 &moving_armies.at(blue_id) :
                 &opponent_armies.at(blue_id)};
+        if (CHECK) bZ.check(__FILE__, __LINE__);
         Army const bZ_symmetric{bZ, SYMMETRIC};
+        if (CHECK) bZ_symmetric.check(__FILE__, __LINE__);
 #if BLUE_TO_MOVE
         ArmyMapperPair const b_mapper{bZ, bZ_symmetric};
 #else  // BLUE_TO_MOVE
@@ -148,7 +150,7 @@ Statistics NAME(uint thid,
             Army const red{BLUE_TO_MOVE ?
                     &opponent_armies.at(red_id) :
                     &moving_armies.at(red_id)};
-            if (CHECK) red.check(__LINE__);
+            if (CHECK) red.check(__FILE__, __LINE__);
 
             Image image{blue, red};
             if (VERBOSE)
@@ -189,6 +191,7 @@ Statistics NAME(uint thid,
 #else  // BLUE_TO_MOVE
             Army const& army           = red;
             Army const  army_symmetric{red, SYMMETRIC};
+            if (CHECK) army_symmetric.check(__FILE__, __LINE__);
             ArmyMapper const mapper{army_symmetric};
 
 #if BACKTRACK
@@ -212,7 +215,7 @@ Statistics NAME(uint thid,
 #if BLUE_TO_MOVE
             array<Coord, MAX_X*MAX_Y/4+1> reachable;
 #else  // BLUE_TO_MOVE
-            array<Coord, MAX_X*MAX_Y/4+1+ARMY_MAX+1> reachable;
+            array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
             if (jump_only) {
                 red_top_from = reachable.size()-1;
@@ -226,9 +229,11 @@ Statistics NAME(uint thid,
             // Finally, finally we are going to do the actual moves
             for (uint a=0; a<ARMY; ++a) {
                 armyE.copy(army, a);
+                if (CHECK) armyE.check(__FILE__, __LINE__);
                 // The piece that is going to move
                 auto const soldier = army[a];
                 armyESymmetric.copy(army_symmetric, mapper.map(soldier));
+                if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
 #if BLUE_TO_MOVE
                 auto off_base = off_base_from;
                 off_base += soldier.base_red();
@@ -471,13 +476,13 @@ Statistics NAME(uint thid,
                     // logger << "   Final Set pos " << pos << armyE[pos] << "\n";
                     // logger << armyE << "----------------\n";
                     // logger.flush();
-                    if (CHECK) armyE.check(__LINE__);
+                    if (CHECK) armyE.check(__FILE__, __LINE__);
                     armyESymmetric.store(val.symmetric());
-                    if (CHECK) armyESymmetric.check(__LINE__);
+                    if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
                     int result_symmetry = cmp(armyE, armyESymmetric);
                     auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric, stats);
                     if (CHECK && moved_id == 0)
-                        throw(logic_error("Army Insert returns 0"));
+                        throw_logic("Army Insert returns 0", __FILE__, __LINE__);
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
                     result_symmetry *= red_symmetry;
