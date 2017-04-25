@@ -20,15 +20,48 @@
 #include "system.hpp"
 using namespace std;
 
-#if __AVX2__ || __AVX__
-// using Align = __m256i;
-using Align = __m128i;
-// using Align = uint64_t;
+#if __AVX__
+# define M256 1
 #elif __SSE2__
+# define M128 1
+#endif
+
+#if   M256
+using Align = __m256i;
+#elif M128
 using Align = __m128i;
 #else
 using Align = uint64_t;
 #endif
+// Each section here must define:
+// ALOAD:  Aligned load (alignment which the compiler gives to the type)
+// ULOAD:  Unaligned load
+// ASTORE: Aligned store (alignment which the compiler gives to the type)
+// USTORE: Unaligned store
+inline Align ALOAD(Align const& pos) PURE;
+inline void ASTORE(Align& pos, Align val);
+inline Align ULOAD(Align const& pos) PURE;
+inline void USTORE(Align& pos, Align val);
+#if M256
+// Current gcc gives only 16-byte alignment in std containers
+// (But is ok on the stack),
+// but we need __m256i
+Align ALOAD(Align const& pos) { return _mm256_lddqu_si256(&pos); }
+void ASTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
+Align ULOAD(Align const& pos) { return _mm256_lddqu_si256(&pos); }
+void USTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
+#elif M128
+Align ALOAD(Align const& pos) { return pos; }
+void ASTORE(Align& pos, Align val) { pos = val; }
+Align ULOAD(Align const& pos) { return _mm_lddqu_si128(&pos); }
+void USTORE(Align& pos, Align val) { _mm_storeu_si128(&pos, val); }
+#else
+Align ALOAD(Align const& pos) { return pos; }
+void ASTORE(Align& pos, Align val) { pos = val; }
+Align ULOAD(Align const& pos) { return pos; }
+void USTORE(Align& pos, Align val) { pos = val; }
+#endif
+
 extern Align ARMY_MASK;
 
 extern bool statistics;
@@ -242,6 +275,7 @@ class Coords {
 uint const ALIGNSIZE = sizeof(Align) / sizeof(Coord);
 bool const DO_ALIGN  = ALIGNSIZE != 1;
 uint const MAX_ARMY_ALIGNED = ((MIN_MAX_ARMY+DO_ALIGN)+ALIGNSIZE-1)/ALIGNSIZE;
+bool const SINGLE_ALIGN = MAX_ARMY_ALIGNED == 1;
 uint const MAX_ARMY = MAX_ARMY_ALIGNED * ALIGNSIZE;
 
 inline uint64_t army_hash(Coord const* base) {
@@ -267,10 +301,10 @@ class alignas(Align) Army {
         if (symmetry) {
             transform(army, army+ARMY, begin(),
                       [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
+            terminator();
             sort();
         } else
-            std::copy(army, army+ARMY, begin());
-        terminator();
+            _import(army, begin(), true);
     }
     explicit inline Army(Army const& army, ArmyId symmetry = 0) {
         if (symmetry) {
@@ -279,7 +313,7 @@ class alignas(Align) Army {
             terminator();
             sort();
         } else
-            copy(army.begin(), begin());
+            _import(army.begin(), begin());
     }
     inline uint64_t hash() const PURE {
         return army_hash(begin());
@@ -287,10 +321,13 @@ class alignas(Align) Army {
     NOINLINE void check(const char* file, int line) const;
     inline int symmetry() const;
     inline Army& operator=(Army const& army) {
-        copy(army.begin(), begin());
+        _import(army.begin(), begin());
         return *this;
     }
     inline Army& operator=(ArmyPos const& army);
+    inline void append(Coord* to) const {
+        _export(begin(), to);
+    }
 
     void do_move(Move const& move);
     inline bool _try_move(Move const& move);
@@ -315,13 +352,33 @@ class alignas(Align) Army {
   private:
     // Really only PURE but the value never changes
     static inline int ALIGNEDS() FUNCTIONAL {
-        return MAX_ARMY_ALIGNED <= 1 ? MAX_ARMY_ALIGNED : ARMY_ALIGNED; }
-    static inline void copy(Coord const* RESTRICT from, Coord* RESTRICT to) {
+        return SINGLE_ALIGN ? MAX_ARMY_ALIGNED : ARMY_ALIGNED; }
+    static inline void _import(Coord const* RESTRICT from, Coord* RESTRICT to, bool terminate=false) {
         if (DO_ALIGN) {
             Align const* RESTRICT afrom = reinterpret_cast<Align const*>(from);
             Align      * RESTRICT ato   = reinterpret_cast<Align      *>(to);
-            int n = ALIGNEDS();
-            for (int i=0; i<n; ++i) ato[i] = afrom[i];
+            uint n = ALIGNEDS();
+            if (terminate) {
+                --n;
+                for (uint i=0; i<n; ++i)
+                    ato[i] = ULOAD(afrom[i]);
+                ato[n] = ARMY_MASK | ULOAD(afrom[n]);
+            } else {
+                for (uint i=0; i<n; ++i)
+                    ASTORE(ato[i], ALOAD(afrom[i]));
+            }
+        } else {
+            std::copy(from, from+ARMY, to);
+            if (terminate) to[ARMY] = Coord::MAX();
+        }
+    }
+    static inline void _export(Coord const* RESTRICT from, Coord* RESTRICT to) {
+        if (DO_ALIGN) {
+            Align const* RESTRICT afrom = reinterpret_cast<Align const*>(from);
+            Align      * RESTRICT ato   = reinterpret_cast<Align      *>(to);
+            uint n = ALIGNEDS();
+            for (uint i=0; i<n; ++i)
+                USTORE(ato[i], afrom[i]);
         } else {
             std::copy(from, from+ARMY, to);
         }
@@ -408,11 +465,14 @@ class alignas(Align) ArmyPos {
             throw_logic("Excessive pos_");
         at(pos_) = val;
     }
+    inline void append(Coord* to) const {
+        Army::_export(begin(), to);
+    }
     void check(const char* file, int line) const;
 
   private:
     inline void _copy(Army const& army) {
-        Army::copy(army.begin(), begin());
+        Army::_import(army.begin(), begin());
     }
 
     inline Coord& at(int i) FUNCTIONAL {
@@ -444,7 +504,7 @@ inline int cmp(ArmyPos const& left, ArmyPos const& right) {
 }
 
 Army& Army::operator=(ArmyPos const& army) {
-    copy(army.begin(), begin());
+    _import(army.begin(), begin());
     return *this;
 }
 
@@ -685,6 +745,8 @@ class ArmySet {
 
   private:
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
+    static size_t constexpr MIN_SIZE_GENERATOR(size_t v) { return FACTOR(2*v) >= 1 ? v : MIN_SIZE_GENERATOR(2*v); }
+    static size_t constexpr MIN_SIZE() { return MIN_SIZE_GENERATOR(1); }
 
     inline void _clear0() RESTRICT;
     inline void _clear1(size_t size) RESTRICT;
@@ -699,7 +761,7 @@ class ArmySet {
     Coord& at(ArmyId i) PURE { return armies_[i * static_cast<size_t>(ARMY)]; }
 #endif // CHECK
 
-    size_t armies_bytes() const PURE { return armies_size_ * ARMY * sizeof(Coord); }
+    size_t armies_bytes() const PURE { return armies_size_ * sizeof(Coord); }
     size_t values_bytes() const PURE { return allocated()  * sizeof(ArmyId); }
 
     Coord* armies_;
@@ -1520,7 +1582,7 @@ ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
             ArmyId id = ++used_;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
-            std::copy(value.begin(), value.end(), &at(id));
+            value.append(&at(id));
             return id;
         }
         if (std::equal(value.begin(), value.end(), &at(i))) {
@@ -1553,7 +1615,7 @@ ArmyId ArmySet::insert(ArmyPos const& value, Statistics& stats) {
             ArmyId id = ++used_;
             // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
             values[pos] = id;
-            std::copy(value.begin(), value.end(), &at(id));
+            value.append(&at(id));
             return id;
         }
         if (std::equal(value.begin(), value.end(), &at(i))) {

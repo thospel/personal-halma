@@ -203,7 +203,7 @@ void ArmyPos::check(char const* file, int line) const {
         }
     else if (at(ARMY) != Coord::MAX())
         throw_logic("ArmyPos wrong top", file, line);
-    if (pos_ < 0 || pos_ >= static_cast<int>(ARMY)) 
+    if (pos_ < 0 || pos_ >= static_cast<int>(ARMY))
         throw_logic("ArmyPos position " + to_string(pos_) +
                           " out of range", file, line);
 }
@@ -977,17 +977,20 @@ void ArmySet::_clear0() {
 }
 
 void ArmySet::_clear1(size_t size) {
-    if (size > ARMYID_HIGHBIT)
-        throw(overflow_error("ArmySet size too large"));
-
-    armies_size_ = size;
-    mask_ = size-1;
-    used_ = 0;
-    limit_ = FACTOR(size);
-    if (used_ >= limit_)
+    if (size < MIN_SIZE())
         throw_logic("ArmySet clear size too small");
 
-    armies_ = new Coord[size * ARMY];
+    mask_ = size-1;
+    used_ = 0;
+
+    armies_size_ = size * ARMY;
+    while (armies_size_ < ARMY+ARMY_PADDING) armies_size_ *= 2;
+    size_t alimit = (armies_size_-ARMY_PADDING)/ARMY - 1;
+    if (alimit >= ARMYID_HIGHBIT)
+        throw(overflow_error("ArmySet size too large"));
+    limit_ = min(FACTOR(size), static_cast<ArmyId>(alimit));
+
+    armies_ = new Coord[armies_size_];
     allocated_ += armies_bytes();
     values_ = new ArmyId[size];
     allocated_ += values_bytes();
@@ -1043,21 +1046,26 @@ ArmyId ArmySet::find(ArmyPos const& army) const {
 
 void ArmySet::resize() {
     ArmyId values_limit = FACTOR(allocated());
-    ArmyId armies_limit = armies_size_ - 1;
+    ArmyId armies_limit = (armies_size_-ARMY_PADDING)/ARMY - 1;
 
     if (used_ >= armies_limit) {
         size_t size = armies_size_ * 2;
-        // logger << "Resize ArmySet armies: new size=" << size << endl;
-        auto new_armies = new Coord[size * ARMY];
+        // logger << "Resize ArmySet armies: new size=" << size/ARMY << endl;
+        size_t alimit = (size-ARMY_PADDING)/ARMY - 1;
+        // Only applies to the red armyset really. But the blue armyset is
+        // always so much smaller than red that it doesn't matter
+        if (alimit >= ARMYID_HIGHBIT)
+            throw(overflow_error("ArmySet grew too large"));
+        auto new_armies = new Coord[size];
         // [0..ARMY-1] is a dummy element we don't need to copy
         // But it's probably nicely aligned so the compiler can generate
         // some very fast copy code
-        std::copy(&armies_[0], &armies_[armies_size_*ARMY], &new_armies[0]);
+        std::copy(&armies_[0], &armies_[armies_size_], &new_armies[0]);
         delete [] armies_;
         allocated_ -= armies_bytes();
         armies_ = new_armies;
         armies_size_ = size;
-        armies_limit = size - 1;
+        armies_limit = alimit;
         allocated_ += armies_bytes();
     }
 
@@ -2073,13 +2081,14 @@ void my_main(int argc, char const* const* argv) {
         cout << "Sizeof(Board)   =" << sizeof(Board)   << "\n";
         cout << "Sizeof(Image)   =" << sizeof(Image)   << "\n";
         cout << "Sizeof(Align)   =" << sizeof(Align)   << "\n";
-        cout << "DO_ALIGN: " << (DO_ALIGN ? "true" : "false") << "\n";
-        cout << "ALIGNSIZE: " << ALIGNSIZE << "\n";
-        cout << "ARMY_MASK: "; Coord::print(ARMY_MASK); cout << "\n";
+        cout << "DO_ALIGN:     " << (DO_ALIGN ? "true" : "false") << "\n";
+        cout << "SINGLE_ALIGN: " << (SINGLE_ALIGN ? "true" : "false") << "\n";
+        cout << "ALIGNSIZE:    " << ALIGNSIZE << "\n";
+        cout << "ARMY_MASK:    "; Coord::print(ARMY_MASK); cout << "\n";
         cout << "ARMY_PADDING: " << ARMY_PADDING << "\n";
         cout << "MAX_ARMY_ALIGNED: " << MAX_ARMY_ALIGNED << "\n";
         cout << "ARMY_ALIGNED: " << ARMY_ALIGNED << "\n";
-        cout << "MAX_ARMY: " << MAX_ARMY << "\n";
+        cout << "MAX_ARMY:     " << MAX_ARMY << "\n";
         cout << "Infinity: " << static_cast<uint>(tables.infinity()) << "\n";
         cout << "Red:\n";
         cout << start_board.red();
