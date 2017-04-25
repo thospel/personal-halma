@@ -26,6 +26,8 @@ using namespace std;
 # define M128 1
 #endif
 
+// Is unaligned 64-bit access allowed on this architecture ?
+bool const UNALIGNED64 = true;
 #if   M256
 using Align = __m256i;
 #elif M128
@@ -87,6 +89,8 @@ extern uint RULES;
 extern uint ARMY;
 extern uint ARMY_ALIGNED;
 extern uint ARMY_PADDING;
+extern uint ARMY64_DOWN;
+extern uint ARMY64_UP;
 
 uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
@@ -340,14 +344,46 @@ class alignas(Align) Army {
     inline Coord const* end  () const FUNCTIONAL { return &army_[ARMY]; }
 
     friend bool operator==(Army const& l, Army const& r) {
-        for (uint i=0; i<ARMY; ++i)
-            if (l[i] != r[i]) return false;
+        Coord const* lb = l.begin();
+        Coord const* rb = r.begin();
+        uint64_t const* RESTRICT left  = reinterpret_cast<uint64_t const*>(lb);
+        uint64_t const* RESTRICT right = reinterpret_cast<uint64_t const*>(rb);
+        if (DO_ALIGN) {
+            uint n = ARMY64_UP;
+            uint64_t accu = 0;
+            for (uint i=0; i<n; ++i)
+                accu |= left[i] - right[i];
+            return accu == 0;
+        } else {
+            uint n = ARMY64_DOWN;
+            uint i;
+            for (i=0; i<n; ++i)
+                if (left[i] != right[i]) return false;
+            for (i *= sizeof(*left); i<ARMY; ++i)
+                if (lb[i] != rb[i]) return false;
+        }
         return true;
     }
     friend bool operator!=(Army const& l, Army const& r) {
-        for (uint i=0; i<ARMY; ++i)
-            if (l[i] != r[i]) return true;
-        return false;
+        return !operator==(l, r);
+    }
+    // For compare with the ArmySet array. Does not assume padding
+    static inline bool _equal(Coord const* RESTRICT l, Coord const* RESTRICT r) {
+        if (UNALIGNED64) {
+            uint64_t const* RESTRICT left  = reinterpret_cast<uint64_t const*>(l);
+            uint64_t const* RESTRICT right = reinterpret_cast<uint64_t const*>(r);
+            uint n = ARMY64_DOWN;
+            uint i;
+            for (i = 0; i < n; ++i)
+                if (right[i] != left[i]) return false;
+            for (i*=sizeof(*left); i<ARMY; ++i)
+                if (l[i] != r[i]) return false;
+            return true;
+        }
+        return std::equal(l, l+ARMY, r);
+    }
+    friend inline bool operator==(Army const& RESTRICT l, Coord const* RESTRICT r) {
+        return _equal(l.begin(), r);
     }
   private:
     // Really only PURE but the value never changes
@@ -445,6 +481,9 @@ class alignas(Align) ArmyPos {
     inline void copy(Army const& army, int pos) {
         pos_  = pos;
         _copy(army);
+    }
+    friend inline bool operator==(ArmyPos const& RESTRICT l, Coord const* RESTRICT r) {
+        return Army::_equal(l.begin(), r);
     }
     void store(Coord const& val) {
         if (val > at(pos_+1)) {
@@ -1585,7 +1624,7 @@ ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
             value.append(&at(id));
             return id;
         }
-        if (std::equal(value.begin(), value.end(), &at(i))) {
+        if (value == &at(i)) {
             stats.armyset_probe(offset);
             stats.armyset_try();
             // logger << "Found duplicate " << hash << "\n" << flush;
@@ -1618,7 +1657,7 @@ ArmyId ArmySet::insert(ArmyPos const& value, Statistics& stats) {
             value.append(&at(id));
             return id;
         }
-        if (std::equal(value.begin(), value.end(), &at(i))) {
+        if (value == &at(i)) {
             stats.armyset_probe(offset);
             stats.armyset_try();
             // logger << "Found duplicate " << hash << "\n" << flush;
