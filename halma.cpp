@@ -11,10 +11,10 @@ uint RULES = 6;
 uint ARMY = 10;
 
 Align ARMY_MASK;
+Align ARMY_MASK_NOT;
 uint ARMY_ALIGNED;
 uint ARMY_PADDING;
 uint ARMY64_DOWN;
-uint ARMY64_UP;
 
 int balance = -1;
 int balance_delay = 0;
@@ -2064,9 +2064,9 @@ void my_main(int argc, char const* const* argv) {
     // +DO_ALIGN to allow for a terminating Coord
     ARMY_ALIGNED = ((ARMY+DO_ALIGN)+ALIGNSIZE-1) / ALIGNSIZE;
     ARMY_MASK    = Coord::ArmyMask();
+    ARMY_MASK_NOT= ~ARMY_MASK;
     ARMY_PADDING = DO_ALIGN ? ALIGNSIZE - ARMY % ALIGNSIZE : 0;
     ARMY64_DOWN  = ARMY / sizeof(uint64_t);
-    ARMY64_UP    = (ARMY + sizeof(uint64_t) + 1) / sizeof(uint64_t);
 
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;

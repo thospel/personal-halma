@@ -4,7 +4,7 @@
 # CC_MALLOC=-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 # LIBS_MALLOC=-l:libtcmalloc_minimal.so.4
 
-CXXFLAGS = -Wall -Winline --param inline-unit-growth=200 --param large-function-growth=1000 --param max-inline-insns-single=800 -fno-math-errno -funsafe-math-optimizations -ffinite-math-only -ffast-math -fno-signed-zeros -fno-trapping-math -Ofast -march=native -fstrict-aliasing $(CC_MALLOC) -std=c++14 -g -pthread $(SANITIZE)
+CXXFLAGS = -Wall -Winline --param inline-unit-growth=200 --param large-function-growth=1000 --param max-inline-insns-single=800 -mno-vzeroupper -fno-math-errno -funsafe-math-optimizations -ffinite-math-only -ffast-math -fno-signed-zeros -fno-trapping-math -Ofast -march=native -fstrict-aliasing $(CC_MALLOC) -std=c++14 -g -pthread $(SANITIZE)
 LDFLAGS = -g -pthread $(SANITIZE)
 CXX := ccache $(CXX)
 

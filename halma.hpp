@@ -26,8 +26,6 @@ using namespace std;
 # define M128 1
 #endif
 
-// Is unaligned 64-bit access allowed on this architecture ?
-bool const UNALIGNED64 = true;
 #if   M256
 using Align = __m256i;
 #elif M128
@@ -44,6 +42,12 @@ inline Align ALOAD(Align const& pos) PURE;
 inline void ASTORE(Align& pos, Align val);
 inline Align ULOAD(Align const& pos) PURE;
 inline void USTORE(Align& pos, Align val);
+inline bool IS_ZERO(Align val) FUNCTIONAL;
+inline Align ZERO() FUNCTIONAL;
+Align ZERO() {
+    Align tmp;
+    return tmp ^ tmp;
+}
 #if M256
 // Current gcc gives only 16-byte alignment in std containers
 // (But is ok on the stack),
@@ -52,19 +56,24 @@ Align ALOAD(Align const& pos) { return _mm256_lddqu_si256(&pos); }
 void ASTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
 Align ULOAD(Align const& pos) { return _mm256_lddqu_si256(&pos); }
 void USTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
+bool IS_ZERO(Align val) { return _mm256_testz_si256(val, val); }
 #elif M128
 Align ALOAD(Align const& pos) { return pos; }
 void ASTORE(Align& pos, Align val) { pos = val; }
 Align ULOAD(Align const& pos) { return _mm_lddqu_si128(&pos); }
 void USTORE(Align& pos, Align val) { _mm_storeu_si128(&pos, val); }
+bool IS_ZERO(Align val) { return _mm_testz_si128(val, val); }
 #else
 Align ALOAD(Align const& pos) { return pos; }
 void ASTORE(Align& pos, Align val) { pos = val; }
+// Assumes unaligned 64-bit access is allowed on this architecture
 Align ULOAD(Align const& pos) { return pos; }
 void USTORE(Align& pos, Align val) { pos = val; }
+bool IS_ZERO(Align val) { return !val; }
 #endif
 
 extern Align ARMY_MASK;
+extern Align ARMY_MASK_NOT;
 
 extern bool statistics;
 extern bool hash_statistics;
@@ -90,7 +99,6 @@ extern uint ARMY;
 extern uint ARMY_ALIGNED;
 extern uint ARMY_PADDING;
 extern uint ARMY64_DOWN;
-extern uint ARMY64_UP;
 
 uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
@@ -346,41 +354,39 @@ class alignas(Align) Army {
     friend bool operator==(Army const& l, Army const& r) {
         Coord const* lb = l.begin();
         Coord const* rb = r.begin();
+        if (DO_ALIGN) {
+            Align const* RESTRICT left  = reinterpret_cast<Align const*>(lb);
+            Align const* RESTRICT right = reinterpret_cast<Align const*>(rb);
+            uint n = ALIGNEDS();
+            Align accu = ZERO();
+            for (uint i=0; i<n; ++i)
+                accu |= left[i] ^ right[i];
+            return IS_ZERO(accu);
+        }
         uint64_t const* RESTRICT left  = reinterpret_cast<uint64_t const*>(lb);
         uint64_t const* RESTRICT right = reinterpret_cast<uint64_t const*>(rb);
-        if (DO_ALIGN) {
-            uint n = ARMY64_UP;
-            uint64_t accu = 0;
-            for (uint i=0; i<n; ++i)
-                accu |= left[i] - right[i];
-            return accu == 0;
-        } else {
-            uint n = ARMY64_DOWN;
-            uint i;
-            for (i=0; i<n; ++i)
-                if (left[i] != right[i]) return false;
-            for (i *= sizeof(*left); i<ARMY; ++i)
-                if (lb[i] != rb[i]) return false;
-        }
+        uint n = ARMY64_DOWN;
+        uint i;
+        for (i=0; i<n; ++i)
+            if (left[i] != right[i]) return false;
+        for (i *= sizeof(*left); i<ARMY; ++i)
+            if (lb[i] != rb[i]) return false;
         return true;
     }
     friend bool operator!=(Army const& l, Army const& r) {
         return !operator==(l, r);
     }
-    // For compare with the ArmySet array. Does not assume padding
+    // For compare with the ArmySet array as right argument.
+    // Assumes aligned/padding for left, unaligned/no padding for right
     static inline bool _equal(Coord const* RESTRICT l, Coord const* RESTRICT r) {
-        if (UNALIGNED64) {
-            uint64_t const* RESTRICT left  = reinterpret_cast<uint64_t const*>(l);
-            uint64_t const* RESTRICT right = reinterpret_cast<uint64_t const*>(r);
-            uint n = ARMY64_DOWN;
-            uint i;
-            for (i = 0; i < n; ++i)
-                if (right[i] != left[i]) return false;
-            for (i*=sizeof(*left); i<ARMY; ++i)
-                if (l[i] != r[i]) return false;
-            return true;
-        }
-        return std::equal(l, l+ARMY, r);
+        if (!DO_ALIGN) return std::equal(l, l+ARMY, r);
+        Align const* RESTRICT left  = reinterpret_cast<Align const*>(l);
+        Align const* RESTRICT right = reinterpret_cast<Align const*>(r);
+        uint n = ALIGNEDS()-1;
+        Align accu = (left[n] ^ ULOAD(right[n])) & ARMY_MASK_NOT;
+        for (uint i = 0; i < n; ++i)
+            accu |= left[i] ^ right[i];
+        return IS_ZERO(accu);
     }
     friend inline bool operator==(Army const& RESTRICT l, Coord const* RESTRICT r) {
         return _equal(l.begin(), r);
@@ -421,7 +427,7 @@ class alignas(Align) Army {
     }
     inline void terminator() {
         if (DO_ALIGN)
-            reinterpret_cast<Align *>(begin())[ARMY_ALIGNED-1] |= ARMY_MASK;
+            reinterpret_cast<Align *>(begin())[ALIGNEDS()-1] |= ARMY_MASK;
     }
 
     inline Coord& operator[](ssize_t i) PURE { return army_[i];}
