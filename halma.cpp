@@ -640,7 +640,7 @@ void ArmySet::print(ostream& os) const {
         } else os << " deleted";
     os << " ] (" << static_cast<void const *>(this) << ")\n";
     for (size_t i=1; i <= used_; ++i) {
-        os << "Army " << i << "\n" << Image{&at(i)};
+        os << "Army " << i << "\n" << Image{cat(i)};
     }
 }
 
@@ -1035,7 +1035,7 @@ ArmyId ArmySet::find(Army const& army) const {
         // cout << "Try " << pos << " of " << size_ << "\n";
         ArmyId i = values[pos];
         if (i == 0) return 0;
-        if (std::equal(army.begin(), army.end(), &at(i))) return i;
+        if (army == cat(i)) return i;
         ++offset;
         pos = (pos + offset) & mask;
     }
@@ -1050,7 +1050,7 @@ ArmyId ArmySet::find(ArmyPos const& army) const {
         // cout << "Try " << pos << " of " << size_ << "\n";
         ArmyId i = values[pos];
         if (i == 0) return 0;
-        if (std::equal(army.begin(), army.end(), &at(i))) return i;
+        if (army == cat(i)) return i;
         ++offset;
         pos = (pos + offset) & mask;
     }
@@ -1164,8 +1164,8 @@ Board BoardSet::example(ArmySet const& opponent_armies, ArmySet const& moved_arm
         }
         ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
         ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
-        Army const blue{&blue_armies.at(blue_id)};
-        Army const red {&red_armies .at(red_id), symmetry};
+        Army const blue{blue_armies, blue_id};
+        Army const red {red_armies,  red_id, symmetry};
         return Board{blue, red};
     }
     throw_logic("No board even though BoardSet is not empty");
@@ -1190,8 +1190,8 @@ Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& mo
         }
         ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
         ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
-        Army const blue{&blue_armies.at(blue_id)};
-        Army const red {&red_armies .at(red_id), symmetry};
+        Army const blue{blue_armies, blue_id};
+        Army const red {red_armies,  red_id, symmetry};
         return Board{blue, red};
     }
 }
@@ -1888,7 +1888,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     if (skewed)
         throw_logic("Unexpected red army skewed");
 
-    Army blue{&final_army_set.at(blue_id)};
+    Army blue{final_army_set, blue_id};
     Army red{last_red_army};
 
     // It's probably more useful to generate a FullMove sequence

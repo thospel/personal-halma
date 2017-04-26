@@ -305,9 +305,12 @@ inline uint64_t army_hash(Coord const* base) {
 
 using ArmyId = uint32_t;
 ArmyId const SYMMETRIC = 1;
+
 class Tables;
 struct Move;
 class ArmyPos;
+class ArmySet;
+class ArmyZconst;
 // Army as a set of Coord
 class alignas(Align) Army {
     // Allow tables to build red and blue armies
@@ -316,12 +319,12 @@ class alignas(Align) Army {
     friend ArmyPos;
   public:
     Army() {}
-    explicit inline Army(Coord const* army, ArmyId symmetry = 0) {
-        _import(army, begin(), symmetry, true);
-    }
+    inline Army(ArmySet const& armies, ArmyId id, ArmyId symmetry = 0);
+    explicit inline Army(ArmyZconst army, ArmyId symmetry = 0);
     explicit inline Army(Army const& army, ArmyId symmetry = 0) {
         _import(army.begin(), begin(), symmetry);
     }
+
     inline uint64_t hash() const PURE {
         return army_hash(begin());
     }
@@ -332,9 +335,6 @@ class alignas(Align) Army {
         return *this;
     }
     inline Army& operator=(ArmyPos const& army);
-    inline void append(Coord* to) const {
-        _export(begin(), to);
-    }
 
     void do_move(Move const& move);
     inline bool _try_move(Move const& move);
@@ -371,25 +371,11 @@ class alignas(Align) Army {
     friend bool operator!=(Army const& l, Army const& r) {
         return !operator==(l, r);
     }
-    // For compare with the ArmySet array as right argument.
-    // Assumes aligned/padding for left, unaligned/no padding for right
-    static inline bool _equal(Coord const* RESTRICT l, Coord const* RESTRICT r) {
-        if (!DO_ALIGN) return std::equal(l, l+ARMY, r);
-        Align const* RESTRICT left  = reinterpret_cast<Align const*>(l);
-        Align const* RESTRICT right = reinterpret_cast<Align const*>(r);
-        uint n = ALIGNEDS()-1;
-        Align accu = (left[n] ^ ULOAD(right[n])) & ARMY_MASK_NOT;
-        for (uint i = 0; i < n; ++i)
-            accu |= left[i] ^ right[i];
-        return IS_ZERO(accu);
-    }
-    friend inline bool operator==(Army const& RESTRICT l, Coord const* RESTRICT r) {
-        return _equal(l.begin(), r);
+    static inline int ALIGNEDS() FUNCTIONAL {
+        return SINGLE_ALIGN ? MAX_ARMY_ALIGNED : ARMY_ALIGNED;
     }
   private:
     // Really only PURE but the value never changes
-    static inline int ALIGNEDS() FUNCTIONAL {
-        return SINGLE_ALIGN ? MAX_ARMY_ALIGNED : ARMY_ALIGNED; }
     static NOINLINE void sort(Coord* RESTRICT base);
     static inline void _import(Coord const* RESTRICT from, Coord* RESTRICT to, ArmyId symmetry = 0, bool terminate=false) {
         if (DO_ALIGN) {
@@ -436,17 +422,6 @@ class alignas(Align) Army {
             } else
                 std::copy(from, from+ARMY, to);
             if (terminate) to[ARMY] = Coord::MAX();
-        }
-    }
-    static inline void _export(Coord const* RESTRICT from, Coord* RESTRICT to) {
-        if (DO_ALIGN) {
-            Align const* RESTRICT afrom = reinterpret_cast<Align const*>(from);
-            Align      * RESTRICT ato   = reinterpret_cast<Align      *>(to);
-            uint n = ALIGNEDS();
-            for (uint i=0; i<n; ++i)
-                USTORE(ato[i], afrom[i]);
-        } else {
-            std::copy(from, from+ARMY, to);
         }
     }
 
@@ -508,9 +483,6 @@ class alignas(Align) ArmyPos {
         pos_  = pos;
         _copy(army);
     }
-    friend inline bool operator==(ArmyPos const& RESTRICT l, Coord const* RESTRICT r) {
-        return Army::_equal(l.begin(), r);
-    }
     void store(Coord const& val) {
         if (val > at(pos_+1)) {
             do {
@@ -529,9 +501,6 @@ class alignas(Align) ArmyPos {
         if (pos_ >= static_cast<int>(ARMY))
             throw_logic("Excessive pos_");
         at(pos_) = val;
-    }
-    inline void append(Coord* to) const {
-        Army::_export(begin(), to);
     }
     void check(const char* file, int line) const;
 
@@ -572,6 +541,53 @@ Army& Army::operator=(ArmyPos const& army) {
     _import(army.begin(), begin());
     return *this;
 }
+
+class ArmyZ {
+  public:
+    explicit inline ArmyZ(Coord& base): base_{base} {}
+    inline void append(Army    const& army) { append(army.begin()); }
+    inline void append(ArmyPos const& army) { append(army.begin()); }
+  private:
+    inline void append(Coord const* RESTRICT army) {
+        if (DO_ALIGN) {
+            Align const* RESTRICT from = reinterpret_cast<Align const*>(army);
+            Align      * RESTRICT to   = reinterpret_cast<Align      *>(&base_);
+            uint n = Army::ALIGNEDS();
+            for (uint i=0; i<n; ++i)
+                USTORE(to[i], from[i]);
+        } else {
+            std::copy(army, army+ARMY, &base_);
+        }
+    }
+
+    Coord& RESTRICT base_;
+};
+
+class ArmyZconst {
+  public:
+    explicit inline ArmyZconst(Coord const& base): base_{base} {}
+    Coord const* begin() const PURE { return &base_; };
+    Coord const* end()   const PURE { return &base_ + ARMY; };
+  private:
+    inline bool equal(Coord const* RESTRICT army) {
+        if (!DO_ALIGN) return std::equal(army, army+ARMY, &base_);
+        Align const* RESTRICT left  = reinterpret_cast<Align const*>(army);
+        Align const* RESTRICT right = reinterpret_cast<Align const*>(&base_);
+        uint n = Army::ALIGNEDS()-1;
+        Align accu = (left[n] ^ ULOAD(right[n])) & ARMY_MASK_NOT;
+        for (uint i = 0; i < n; ++i)
+            accu |= left[i] ^ right[i];
+        return IS_ZERO(accu);
+    }
+    friend inline bool operator==(Army const& l, ArmyZconst r) {
+        return r.equal(l.begin());
+    }
+    friend inline bool operator==(ArmyPos const& l, ArmyZconst r) {
+        return r.equal(l.begin());
+    }
+
+    Coord const& RESTRICT base_;
+};
 
 template<class T>
 class BoardTable {
@@ -789,17 +805,21 @@ class ArmySet {
         return limit_;
     }
 #if CHECK
-    Coord const& at(ArmyId i) const {
-        if (i > used_) throw_logic("Army id " + to_string(i) + " out of range of set");
-        return armies_[i * static_cast<size_t>(ARMY)];
+    ArmyZconst at(ArmyId i) const {
+        if (i > used_)
+            throw_logic("Army id " + to_string(i) + " out of range of set");
+        return ArmyZconst{armies_[i * static_cast<size_t>(ARMY)]};
     }
 #else  // CHECK
-    Coord const& at(ArmyId i) const PURE { return armies_[i * static_cast<size_t>(ARMY)]; }
+    inline ArmyZconst at(ArmyId i) const PURE {
+        return ArmyZconst{armies_[i * static_cast<size_t>(ARMY)]};
+    }
 #endif // CHECK
+    inline ArmyZconst cat(ArmyId i) const { return at(i); }
     inline ArmyId insert(Army const& army, Statistics& stats) RESTRICT;
     inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT;
-    ArmyId find(Army    const& value) const PURE;
-    inline ArmyId find(ArmyPos const& army) const PURE;
+    ArmyId find(Army    const& army) const PURE;
+    ArmyId find(ArmyPos const& army) const PURE;
     inline Coord const* begin() const PURE { return &armies_[ARMY]; }
     inline Coord const* end()   const PURE { return &armies_[used_*static_cast<size_t>(ARMY)+ARMY]; }
 
@@ -818,12 +838,15 @@ class ArmySet {
     NOINLINE void resize() RESTRICT;
 
 #if CHECK
-    Coord& at(ArmyId i) {
-        if (i > used_) throw_logic("Army id " + to_string(i) + " out of range of set");
-        return armies_[i * static_cast<size_t>(ARMY)];
+    ArmyZ at(ArmyId i) {
+        if (i > used_)
+            throw_logic("Army id " + to_string(i) + " out of range of set");
+        return ArmyZ{armies_[i * static_cast<size_t>(ARMY)]};
     }
 #else  // CHECK
-    Coord& at(ArmyId i) PURE { return armies_[i * static_cast<size_t>(ARMY)]; }
+    inline ArmyZ at(ArmyId i) PURE {
+        return ArmyZ{armies_[i * static_cast<size_t>(ARMY)]};
+    }
 #endif // CHECK
 
     size_t armies_bytes() const PURE { return armies_size_ * sizeof(Coord); }
@@ -842,6 +865,14 @@ inline ostream& operator<<(ostream& os, ArmySet const& set) {
     set.print(os);
     return os;
 }
+
+Army::Army(ArmyZconst army, ArmyId symmetry) {
+    _import(army.begin(), begin(), symmetry, true);
+}
+
+Army::Army(ArmySet const& armies, ArmyId id, ArmyId symmetry): 
+    Army{armies.cat(id), symmetry}
+ {}
 
 struct Move {
     Move() {}
@@ -1350,7 +1381,7 @@ class Image {
     inline explicit Image(Army const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
-    inline explicit Image(Coord const* army, Color color = BLUE): Image{} {
+    inline explicit Image(ArmyZconst army, Color color = BLUE): Image{} {
         set(army, color);
     }
     inline void clear() { image_.fill(EMPTY); }
@@ -1358,8 +1389,8 @@ class Image {
     inline Color get(int x, int y) const PURE { return get(Coord{x,y}); }
     inline void  set(Coord const& pos, Color c) { image_[pos] = c; }
     inline void  set(int x, int y, Color c) { set(Coord{x,y}, c); }
-    inline void  set(Coord const* army, Color c) {
-        for (uint i=0; i<ARMY; ++i) set(army[i], c);
+    inline void  set(ArmyZconst army, Color c) {
+        for (auto const& pos: army) set(pos, c);
     }
     inline void  set(Army const& army, Color c) {
         for (auto const& pos: army) set(pos, c);
@@ -1628,10 +1659,10 @@ Coords Coord::jump_targets() const {
     return tables.jump_targets(*this);
 }
 
-ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
-    // cout << "Insert:\n" << Image{value};
+ArmyId ArmySet::insert(Army const& army, Statistics& stats) RESTRICT {
+    // cout << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
-    ArmyId hash = value.hash();
+    ArmyId hash = army.hash();
     lock_guard<mutex> lock{exclude_};
     // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
     if (used_ >= limit_) resize();
@@ -1645,12 +1676,12 @@ ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
         if (i == 0) {
             stats.armyset_probe(offset);
             ArmyId id = ++used_;
-            // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
+            // logger << "Found empty, assign id " << id << "\n" + Image{army}.str() << flush;
             values[pos] = id;
-            value.append(&at(id));
+            at(id).append(army);
             return id;
         }
-        if (value == &at(i)) {
+        if (army == cat(i)) {
             stats.armyset_probe(offset);
             stats.armyset_try();
             // logger << "Found duplicate " << hash << "\n" << flush;
@@ -1661,10 +1692,10 @@ ArmyId ArmySet::insert(Army const& value, Statistics& stats) {
     }
 }
 
-ArmyId ArmySet::insert(ArmyPos const& value, Statistics& stats) {
-    // cout << "Insert:\n" << Image{value};
+ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
+    // cout << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
-    ArmyId hash = value.hash();
+    ArmyId hash = army.hash();
     lock_guard<mutex> lock{exclude_};
     // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
     if (used_ >= limit_) resize();
@@ -1678,12 +1709,12 @@ ArmyId ArmySet::insert(ArmyPos const& value, Statistics& stats) {
         if (i == 0) {
             stats.armyset_probe(offset);
             ArmyId id = ++used_;
-            // logger << "Found empty, assign id " << id << "\n" + Image{value}.str() << flush;
+            // logger << "Found empty, assign id " << id << "\n" + Image{army}.str() << flush;
             values[pos] = id;
-            value.append(&at(id));
+            at(id).append(army);
             return id;
         }
-        if (value == &at(i)) {
+        if (army == cat(i)) {
             stats.armyset_probe(offset);
             stats.armyset_try();
             // logger << "Found duplicate " << hash << "\n" << flush;

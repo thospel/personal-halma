@@ -16,7 +16,7 @@ while(<>) {
     $sym = $sym eq "+" ? 0 : 1;
     for my $h (1..@history) {
         my $diff = $val - $history[-$h][0];
-        if (abs($diff) <= 5) {
+        if (abs($diff) <= 7) {
             my $asym = $sym eq $history[-$h][1] ? "+" : "-";
             ++$count{"$h:$diff$asym"};
             splice(@history, -$h, 1);

@@ -88,8 +88,8 @@ Statistics NAME(uint thid,
         }
 
         Army const bZ{BLUE_TO_MOVE ?
-                &moving_armies.at(blue_id) :
-                &opponent_armies.at(blue_id)};
+                moving_armies.cat(blue_id) :
+                opponent_armies.cat(blue_id)};
         if (CHECK) bZ.check(__FILE__, __LINE__);
         Army const bZ_symmetric{bZ, SYMMETRIC};
         if (CHECK) bZ_symmetric.check(__FILE__, __LINE__);
@@ -148,8 +148,8 @@ Statistics NAME(uint thid,
 #endif // BLUE_TO_MOVE
 
             Army const red{BLUE_TO_MOVE ?
-                    &opponent_armies.at(red_id) :
-                    &moving_armies.at(red_id)};
+                    opponent_armies.cat(red_id) :
+                    moving_armies.cat(red_id)};
             if (CHECK) red.check(__FILE__, __LINE__);
 
             Image image{blue, red};
