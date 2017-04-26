@@ -1,4 +1,5 @@
 #define SLOW 0
+#define ONCE 1
 #include "halma.hpp"
 
 #include <fstream>
@@ -978,13 +979,15 @@ void Tables::print_red_parity_count(ostream& os) const {
 Tables tables;
 
 void ArmySet::_clear0() {
-    delete [] armies_;
-    allocated_ -= armies_bytes();
-    // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
-    // if (values_) cout << "Destroy values " << static_cast<void const *>(values_) << "\n";
+    if (armies_) {
+        allocated_ -= armies_bytes();
+        maybe_munmap(armies_, armies_size_);
+        // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
+    }
     if (values_) {
-        delete [] values_;
+        // cout << "Destroy values " << static_cast<void const *>(values_) << "\n";
         allocated_ -= values_bytes();
+        maybe_munmap(values_, allocated());
     }
 }
 
@@ -1002,12 +1005,11 @@ void ArmySet::_clear1(size_t size) {
         throw(overflow_error("ArmySet size too large"));
     limit_ = min(FACTOR(size), static_cast<ArmyId>(alimit));
 
-    armies_ = new Coord[armies_size_];
+    armies_ = maybe_mmap<Coord>(armies_size_);
     allocated_ += armies_bytes();
-    values_ = new ArmyId[size];
-    allocated_ += values_bytes();
 
-    std::fill(&values_[0], &values_[size], 0);
+    values_ = maybe_mmap<ArmyId>(size, CLEAR);
+    allocated_ += values_bytes();
     // logger << "New value  " << static_cast<void const *>(values_) << "\n";
     // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
 }
@@ -1061,42 +1063,34 @@ void ArmySet::resize() {
     ArmyId armies_limit = (armies_size_-ARMY_PADDING)/ARMY - 1;
 
     if (used_ >= armies_limit) {
-        size_t size = armies_size_ * 2;
-        // logger << "Resize ArmySet armies: new size=" << size/ARMY << endl;
-        size_t alimit = (size-ARMY_PADDING)/ARMY - 1;
+        size_t new_size = armies_size_ * 2;
+        // logger << "Resize ArmySet armies: new size=" << new_size/ARMY << endl;
+        size_t alimit = (new_size-ARMY_PADDING)/ARMY - 1;
         // Only applies to the red armyset really. But the blue armyset is
         // always so much smaller than red that it doesn't matter
         if (alimit >= ARMYID_HIGHBIT)
-            throw(overflow_error("ArmySet grew too large"));
-        auto new_armies = new Coord[size];
-        // [0..ARMY-1] is a dummy element we don't need to copy
-        // But it's probably nicely aligned so the compiler can generate
-        // some very fast copy code
-        std::copy(&armies_[0], &armies_[armies_size_], &new_armies[0]);
-        delete [] armies_;
+            throw(overflow_error("ArmyId grew too large"));
+        maybe_mremap(armies_, armies_size_, new_size);
         allocated_ -= armies_bytes();
-        armies_ = new_armies;
-        armies_size_ = size;
-        armies_limit = alimit;
+        armies_size_ = new_size;
         allocated_ += armies_bytes();
+        armies_limit = alimit;
     }
 
     if (used_ >= values_limit) {
-        size_t size = allocated() * 2;
-        // logger << "Resize ArmySet values: new size=" << size << "\n" << flush;
-        if (size > ARMYID_HIGHBIT)
-            throw(overflow_error("Army size grew too large"));
+        size_t old_size = allocated();
+        size_t new_size = old_size * 2;
+        // logger << "Resize ArmySet values: new size=" << new_size << "\n" << flush;
+        if (new_size-1 > ARMYID_MAX)
+            throw(overflow_error("Army hash grew too large"));
 
-        delete [] values_;
-        values_ = nullptr;
+        maybe_mremap(values_, old_size, new_size, CLEAR);
         allocated_ -= values_bytes();
-        auto mask = size-1;
-        mask_ = mask;
-        auto values = new ArmyId[size];
-        values_ = values;
+        mask_ = new_size-1;
         allocated_ += values_bytes();
-        std::fill(&values[0], &values[size], 0);
-        auto used = used_;
+        auto values = values_;
+        auto mask   = mask_;
+        auto used   = used_;
         auto armies = armies_;
         for (ArmyId i = 1; i <= used; ++i) {
             armies += ARMY;

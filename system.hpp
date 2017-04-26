@@ -1,6 +1,8 @@
 #include <ctime>
 #include <cstdint>
+#include <cstring>
 
+#include <algorithm>
 #include <atomic>
 #include <iostream>
 #include <stdexcept>
@@ -72,6 +74,7 @@
 #endif
 
 size_t const MMAP_THRESHOLD = 128 * 1024;
+bool const CLEAR = true;
 
 extern bool FATAL;
 
@@ -104,21 +107,71 @@ extern void* _mmap(size_t length) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUS
 extern void _munmap(void* ptr, size_t length) NONNULL;
 // Strictly speaking _mremap shouldn't get the MALLOC property, but we will never
 // store pointers in the mmapped regions
-extern void* _mremap(void* old_ptr, size_t old_length, size_t new_length) MALLOC ALLOC_SIZE(2) RETURNS_NONNULL WARN_UNUSED;
+extern void* _mremap(void* old_ptr, size_t old_length, size_t new_length, bool clear = false) MALLOC ALLOC_SIZE(2) RETURNS_NONNULL NONNULL WARN_UNUSED;
 
 extern void init_system();
+
+template<class T>
+inline bool use_mmap(size_t size) {
+    return size*sizeof(T) >= MMAP_THRESHOLD;
+    // return false;
+}
 
 template<class T>
 inline T* mmap(size_t size) {
     return static_cast<T *>(_mmap(size * sizeof(T)));
 }
 template<class T>
+inline T* maybe_mmap(size_t size, bool clear = false) {
+    if (use_mmap<T>(size)) return mmap<T>(size);
+    T* ptr = new T[size];
+    if (clear) std::memset(ptr, 0, size*sizeof(T));
+    return ptr;
+}
+template<class T>
 inline void munmap(T* ptr, size_t size) {
     _munmap(static_cast<void *>(ptr), size * sizeof(T));
 }
 template<class T>
-inline void mremap(T* old_ptr, size_t old_size, size_t new_size) {
-    return static_cast<T *>(_mremap(static_cast<void *>(old_ptr), old_size * sizeof(T), new_size * sizeof(T)));
+inline void maybe_munmap(T* ptr, size_t size) {
+    return use_mmap<T>(size) ? munmap<T>(ptr, size) : delete [] ptr;
+}
+template<class T>
+inline T* mremap(T* old_ptr, size_t old_size, size_t new_size, bool clear = false) {
+    return static_cast<T *>(_mremap(static_cast<void *>(old_ptr), old_size * sizeof(T), new_size * sizeof(T), clear));
+}
+template<class T>
+void maybe_mremap(T*& ptr, size_t old_size, size_t new_size, bool clear = false) {
+    if (use_mmap<T>(old_size)) {
+        if (use_mmap<T>(new_size)) {
+            ptr = mremap(ptr, old_size, new_size, clear);
+        } else if (clear) {
+            munmap(ptr, old_size);
+            ptr = nullptr;
+            ptr = new T[new_size];
+            std::memset(ptr, 0, new_size*sizeof(T));
+        } else {
+            T* new_ptr = new T[new_size];
+            memcpy(new_ptr, ptr, std::min(old_size, new_size) * sizeof(T));
+            munmap(ptr, old_size);
+            ptr = new_ptr;
+        }
+    } else if (clear) {
+        delete [] ptr;
+        ptr = nullptr;
+        ptr = maybe_mmap<T>(new_size, clear);
+    } else {
+        T* new_ptr = maybe_mmap<T>(new_size);
+        memcpy(new_ptr, ptr, std::min(old_size, new_size) * sizeof(T));
+        delete [] ptr;
+        ptr = new_ptr;
+    }
+    if (false && clear) {
+        auto p = static_cast<char const *>(static_cast<void const*>(ptr));
+        size_t len = new_size * sizeof(T);
+        for (size_t i=0; i<len; ++i)
+            if (p[i]) throw_logic("Non zero at offset " + std::to_string(i/sizeof(T)) + " (" + std::to_string(i) + ")");
+    }
 }
 
 class LogBuffer: public std::streambuf {

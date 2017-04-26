@@ -1,23 +1,18 @@
 #include <cstdio>
-#include <cstdint>
-#include <cstring>
 #include <cstdlib>
 
-#include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <iomanip>
 #include <limits>
 #include <mutex>
 #include <sstream>
-#include <string>
 #include <thread>
-#include <vector>
 
 #include "xxhash64.h"
 
 #include "system.hpp"
+
 using namespace std;
 
 #if __AVX__
@@ -792,10 +787,10 @@ class ArmySet {
     NOINLINE ~ArmySet();
     NOINLINE void clear(size_t size = INITIAL_SIZE);
     void drop_hash() {
-        delete [] values_;
+        allocated_ -= values_bytes();
+        maybe_munmap(values_, allocated());
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
         values_ = nullptr;
-        allocated_ -= values_bytes();
     }
     ArmyId size() const PURE { return used_; }
     size_t allocated() const PURE {

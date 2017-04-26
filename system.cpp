@@ -202,24 +202,29 @@ void* _mmap(size_t length) {
     void* ptr = mmap(nullptr, 
                      PAGE_ROUND(length), 
                      PROT_READ | PROT_WRITE, 
-                     MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    // logger << "mmap(" << length << "[" << PAGE_ROUND(length) << "]) -> " << ptr << "\n" << std::flush;
     if (ptr == MAP_FAILED) 
         throw_errno("Could not set mmap " + std::to_string(length) + " bytes");
     return ptr;
 }
 
 void _munmap(void* ptr, size_t length) {
+    // logger << "munmap(" << ptr << ", " << length << "[" << PAGE_ROUND(length) << "])\n" << std::flush;
     if (munmap(ptr, PAGE_ROUND(length)))
         throw_errno("Could not set munmap " + std::to_string(length) + " bytes");
 }
 
-void* _mremap(void* old_ptr, size_t old_length, size_t new_length) {
+void* _mremap(void* old_ptr, size_t old_length, size_t new_length, bool clear) {
+    size_t old_length_rounded = PAGE_ROUND(old_length);
     void* new_ptr = mremap(old_ptr,
-                           PAGE_ROUND(old_length),
+                           old_length_rounded,
                            PAGE_ROUND(new_length),
                            MREMAP_MAYMOVE);
+    // logger << "mremap(" << old_ptr << ", " << old_length << "[" << old_length_rounded << "], " << new_length << "[" << PAGE_ROUND(new_length) << "]) -> " << new_ptr << "\n" << std::flush;
     if (new_ptr == MAP_FAILED) 
         throw_errno("Could not mremap to " + std::to_string(new_length) + " bytes");
+    if (clear) std::memset(new_ptr, 0, std::min(new_length, old_length_rounded));
     return new_ptr;
 }
 
