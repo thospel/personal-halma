@@ -198,38 +198,119 @@ void set_signals() {
         throw_errno("Could not set SIGTERM handler");
 }
 
-void* _mmap(size_t length) {
-    void* ptr = mmap(nullptr, 
-                     PAGE_ROUND(length), 
-                     PROT_READ | PROT_WRITE, 
+inline void* _mmap(size_t length) {
+    void* ptr = mmap(nullptr,
+                     PAGE_ROUND(length),
+                     PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     // logger << "mmap(" << length << "[" << PAGE_ROUND(length) << "]) -> " << ptr << "\n" << std::flush;
-    if (ptr == MAP_FAILED) 
+    if (ptr == MAP_FAILED)
         throw_errno("Could not set mmap " + std::to_string(length) + " bytes");
+    allocated_ += length;
     return ptr;
 }
 
-void _munmap(void* ptr, size_t length) {
+inline void _munmap(void* ptr, size_t length) {
     // logger << "munmap(" << ptr << ", " << length << "[" << PAGE_ROUND(length) << "])\n" << std::flush;
     if (munmap(ptr, PAGE_ROUND(length)))
         throw_errno("Could not set munmap " + std::to_string(length) + " bytes");
+    allocated_ -= length;
 }
 
-void* _mremap(void* old_ptr, size_t old_length, size_t new_length, bool clear) {
+inline void* _mremap(void* old_ptr, size_t old_length, size_t new_length) {
     size_t old_length_rounded = PAGE_ROUND(old_length);
+    size_t new_length_rounded = PAGE_ROUND(new_length);
     void* new_ptr = mremap(old_ptr,
                            old_length_rounded,
-                           PAGE_ROUND(new_length),
+                           new_length_rounded,
                            MREMAP_MAYMOVE);
     // logger << "mremap(" << old_ptr << ", " << old_length << "[" << old_length_rounded << "], " << new_length << "[" << PAGE_ROUND(new_length) << "]) -> " << new_ptr << "\n" << std::flush;
-    if (new_ptr == MAP_FAILED) 
+    if (new_ptr == MAP_FAILED)
         throw_errno("Could not mremap to " + std::to_string(new_length) + " bytes");
-    if (clear) std::memset(new_ptr, 0, std::min(new_length, old_length_rounded));
+    allocated_ += new_length;
+    allocated_ -= old_length;
     return new_ptr;
+}
+
+void* _allocate(size_t new_size) {
+    if (use_mmap(new_size)) return _mmap(new_size);
+    void* ptr = new char[new_size];
+    allocated_ += new_size;
+    return ptr;
+}
+
+void* _callocate(size_t new_size) {
+    if (use_mmap(new_size)) return _mmap(new_size);
+    void* ptr = new char[new_size];
+    allocated_ += new_size;
+    std::memset(ptr, 0, new_size);
+    return ptr;
+}
+
+void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) {
+    void* new_ptr;
+    if (use_mmap(old_size)) {
+        if (use_mmap(new_size))
+            new_ptr = _mremap(old_ptr, old_size, new_size);
+        else {
+            new_ptr = new char[new_size];
+            std::memcpy(new_ptr, old_ptr, std::min(old_size, new_size));
+            allocated_ += new_size;
+            _munmap(old_ptr, old_size);
+        }
+    } else {
+        if (use_mmap(new_size))
+            new_ptr = _mmap(new_size);
+        else {
+            new_ptr = new char[new_size];
+            allocated_ += new_size;
+        }
+        std::memcpy(new_ptr, old_ptr, std::min(old_size, new_size));
+        delete [] static_cast<char *>(old_ptr);
+        allocated_ -= old_size;
+    }
+    return new_ptr;
+}
+
+void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, size_t keep) {
+    void* new_ptr;
+    if (use_mmap(old_size)) {
+        if (use_mmap(new_size))
+            new_ptr = _mremap(old_ptr, old_size, new_size);
+        else {
+            new_ptr = new char[new_size];
+            allocated_ += new_size;
+            std::memcpy(new_ptr, old_ptr, keep);
+            _munmap(old_ptr, old_size);
+        }
+    } else {
+        if (use_mmap(new_size))
+            new_ptr = _mmap(new_size);
+        else {
+            new_ptr = new char[new_size];
+            allocated_ += new_size;
+        }
+        std::memcpy(new_ptr, old_ptr, keep);
+        delete [] static_cast<char *>(old_ptr);
+        allocated_ -= old_size;
+    }
+    return new_ptr;
+}
+
+void _deallocate(void *old_ptr, size_t old_size) {
+    if (use_mmap(old_size)) _munmap(old_ptr, old_size);
+    else {
+        delete [] static_cast<char *>(old_ptr);
+        allocated_ -= old_size;
+    }
 }
 
 void init_system() {
     tzset();
+
+    tid = 0;
+    allocated_ = 0;
+    total_allocated_ = 0;
 
     char hostname[100];
     hostname[sizeof(hostname)-1] = 0;

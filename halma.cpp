@@ -357,15 +357,6 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
         pos.svg(os, RED,  scale);
 }
 
-void BoardSubSet::create(ArmyId size) {
-    mask_ = size-1;
-    left_ = FACTOR(size);
-    armies_ = new ArmyId[size];
-    allocated_ += size * sizeof(ArmyId);
-    // logger << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
-    fill(begin(), end(), 0);
-}
-
 bool BoardSubSet::find(ArmyId red_id) const {
     auto mask = mask_;
     ArmyId pos = hash64(red_id) & mask;
@@ -385,18 +376,15 @@ bool BoardSubSet::find(ArmyId red_id) const {
 }
 
 void BoardSubSet::resize() {
-    auto old_armies = armies_;
     auto old_size = allocated();
-    ArmyId size = old_size*2;
-    auto new_armies = new ArmyId[size];
-    allocated_ += size * sizeof(ArmyId);
+    ArmyId new_size = old_size*2;
+    auto new_armies = callocate<ArmyId>(new_size);
+    auto old_armies = armies_;
     armies_ = new_armies;
-    // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(armies_) << ": " << size << "\n" << flush;
-
-    ArmyId mask = size-1;
+    // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(new_armies) << ": " << new_size << "\n" << flush;
+    ArmyId mask = new_size-1;
     mask_ = mask;
-    left_ += FACTOR(size) - FACTOR(old_size);
-    fill(begin(), end(), 0);
+    left_ += FACTOR(new_size) - FACTOR(old_size);
     for (ArmyId i = 0; i < old_size; ++i) {
         auto const& value = old_armies[i];
         if (value == 0) continue;
@@ -411,20 +399,19 @@ void BoardSubSet::resize() {
         new_armies[pos] = value;
         // cout << "Found empty\n";
     }
-    delete [] old_armies;
-    allocated_ -= old_size * sizeof(ArmyId);
+    unallocate(old_armies, old_size);
 }
 
 void BoardSubSet::convert_red() {
-    ArmyId sz = size();
-    auto new_armies = new ArmyId[sz];
-    allocated_ += sz * sizeof(ArmyId);
+    auto new_size = size();
+    auto old_size = allocated();
+    auto new_armies = allocate<ArmyId>(new_size);
     for (ArmyId const& red_value: *this)
         if (red_value) *new_armies++ = red_value;
-    delete [] armies_;
-    allocated_ -= allocated() * sizeof(ArmyId);
-    // logger << "Convert BoardSubSet " << static_cast<void const*>(armies_) << " (size " << allocated() << ") to red -> " << static_cast<void const*>(new_armies-sz) << " (size " << sz << ")\n" << flush;
-    auto subset_red = BoardSubSetRed{new_armies - sz, sz};
+    deallocate(armies_, old_size);
+
+    // logger << "Convert BoardSubSet " << static_cast<void const*>(armies_) << " (size " << allocated() << ") to red -> " << static_cast<void const*>(new_armies-new_size) << " (size " << new_size << ")\n" << flush;
+    auto subset_red = BoardSubSetRed{new_armies - new_size, new_size};
     static_cast<BoardSubSetBase&>(*this) = static_cast<BoardSubSetBase&>(subset_red);
 }
 
@@ -484,49 +471,40 @@ ArmyId BoardSubSetRed::random_example(ArmyId& symmetry) const {
     return red_id;
 }
 
-BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId allocate) {
-    real_allocated_ = allocate;
-    mask_ = allocate-1;
+BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId size): army_list_{nullptr} {
+    real_allocated_ = size;
+    mask_ = size-1;
     left_ = capacity();
-    armies_ = new ArmyId[allocate];
-    allocated_ += allocate * sizeof(ArmyId);
-    fill(begin(), end(), 0);
-    army_list_ = new ArmyId[left_];
-    allocated_ += left_ * sizeof(ArmyId);
-    // logger << "Create BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << allocate << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ")\n" << flush;
+    callocate(armies_, size);
+    allocate(army_list_, left_);
+    // logger << "Create BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << size << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ")\n" << flush;
 }
 
 void BoardSubSetRedBuilder::resize() {
     auto old_allocated = allocated();
     ArmyId new_allocated = old_allocated*2;
+    ArmyId mask = new_allocated-1;
     ArmyId *armies, *army_list;
     ArmyId nr_elems = size();
     if (new_allocated > real_allocated_) {
-        armies = new ArmyId[new_allocated];
-        allocated_ += new_allocated * sizeof(ArmyId);
-        delete [] armies_;
-        allocated_ -= real_allocated_ * sizeof(ArmyId);
+        creallocate(armies_, real_allocated_, new_allocated);
         // logger << "Resize BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies) << " (size " << new_allocated << ")\n" << flush;
-        armies_ = armies;
+        armies = armies_;
 
         ArmyId new_left = FACTOR(new_allocated);
-        army_list = new ArmyId[new_left];
-        allocated_ += new_left * sizeof(ArmyId);
         army_list_ -= nr_elems;
-        std::copy(&army_list_[0], &army_list_[size()], army_list);
-        delete [] army_list_;
-        allocated_ -= FACTOR(real_allocated_) * sizeof(ArmyId);
+        army_list = reallocate(army_list_, FACTOR(real_allocated_), new_left, nr_elems);
         // logger << "Resize BoardSubSetRedBuilder list " << static_cast<void const *>(army_list_) << " (size " << FACTOR(real_allocated_) << ") -> " << static_cast<void const *>(army_list) << " (size " << new_left << ")\n" << flush;
         army_list_ = army_list + nr_elems;
         real_allocated_ = new_allocated;
+        mask_ = mask;
     } else {
         armies = armies_;
         army_list = army_list_ - nr_elems;
+        mask_ = mask;
+        fill(begin(), end(), 0);
     }
-    ArmyId mask = new_allocated-1;
-    mask_ = mask;
     left_ += FACTOR(new_allocated) - FACTOR(old_allocated);
-    fill(begin(), end(), 0);
 
     for (ArmyId i = 0; i < nr_elems; ++i) {
         auto value = army_list[i];
@@ -544,8 +522,8 @@ void BoardSubSetRedBuilder::resize() {
 }
 
 BoardSet::BoardSet(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
-    subsets_ = (new BoardSubSet[capacity_])-1;
-    allocated_ += subsets_bytes();
+    allocate(subsets_, capacity());
+    --subsets_;
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
 
@@ -555,27 +533,24 @@ void BoardSet::clear(ArmyId size) {
     from_ = top_ = 1;
     size_ = 0;
     solution_id_ = keep_;
-    auto old_subsets = subsets_+1;
-    subsets_ = (new BoardSubSet[size])-1;
-    delete [] old_subsets;
-    allocated_ -= subsets_bytes();
+    ++subsets_;
+    reallocate(subsets_, capacity(), size);
+    --subsets_;
     capacity_ = size;
-    allocated_ += subsets_bytes();
 }
 
 void BoardSet::resize() {
     auto old_subsets = subsets_;
-    subsets_ = (new BoardSubSet[capacity_*2])-1;
-    // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity_ << "\n" << flush;
-    copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
+    subsets_ = allocate<BoardSubSet>(capacity()*2) - 1;
+    // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity() << "\n" << flush;
+    std::copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
     if (!keep_) {
         top_ -= from_ - 1;
         from_ = 1;
     }
-    delete [] (old_subsets+1);
-    allocated_ -= subsets_bytes();
+    ++old_subsets;
+    deallocate(old_subsets, capacity());
     capacity_ *= 2;
-    allocated_ += subsets_bytes();
 }
 
 void BoardSet::convert_red() {
@@ -978,20 +953,7 @@ void Tables::print_red_parity_count(ostream& os) const {
 
 Tables tables;
 
-void ArmySet::_clear0() {
-    if (armies_) {
-        allocated_ -= armies_bytes();
-        maybe_munmap(armies_, armies_size_);
-        // cout << "Destroy armies " << static_cast<void const *>(armies_) << "\n";
-    }
-    if (values_) {
-        // cout << "Destroy values " << static_cast<void const *>(values_) << "\n";
-        allocated_ -= values_bytes();
-        maybe_munmap(values_, allocated());
-    }
-}
-
-void ArmySet::_clear1(size_t size) {
+void ArmySet::_init(size_t size) {
     if (size < MIN_SIZE())
         throw_logic("ArmySet clear size too small");
 
@@ -1005,27 +967,10 @@ void ArmySet::_clear1(size_t size) {
         throw(overflow_error("ArmySet size too large"));
     limit_ = min(FACTOR(size), static_cast<ArmyId>(alimit));
 
-    armies_ = maybe_mmap<Coord>(armies_size_);
-    allocated_ += armies_bytes();
-
-    values_ = maybe_mmap<ArmyId>(size, CLEAR);
-    allocated_ += values_bytes();
+    allocate(armies_, armies_size_);
+    callocate(values_, size);
     // logger << "New value  " << static_cast<void const *>(values_) << "\n";
     // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
-}
-
-ArmySet::ArmySet(size_t size) : armies_{nullptr}, values_{nullptr} {
-    _clear1(size);
-}
-
-ArmySet::~ArmySet() {
-    _clear0();
-}
-
-void ArmySet::clear(size_t size) {
-    // cout << "Clear\n";
-    _clear0();
-    _clear1(size);
 }
 
 ArmyId ArmySet::find(Army const& army) const {
@@ -1070,10 +1015,8 @@ void ArmySet::resize() {
         // always so much smaller than red that it doesn't matter
         if (alimit >= ARMYID_HIGHBIT)
             throw(overflow_error("ArmyId grew too large"));
-        maybe_mremap(armies_, armies_size_, new_size);
-        allocated_ -= armies_bytes();
+        reallocate(armies_, armies_size_, new_size);
         armies_size_ = new_size;
-        allocated_ += armies_bytes();
         armies_limit = alimit;
     }
 
@@ -1084,10 +1027,8 @@ void ArmySet::resize() {
         if (new_size-1 > ARMYID_MAX)
             throw(overflow_error("Army hash grew too large"));
 
-        maybe_mremap(values_, old_size, new_size, CLEAR);
-        allocated_ -= values_bytes();
+        creallocate(values_, old_size, new_size);
         mask_ = new_size-1;
-        allocated_ += values_bytes();
         auto values = values_;
         auto mask   = mask_;
         auto used   = used_;
@@ -2175,10 +2116,6 @@ void my_main(int argc, char const* const* argv) {
 int main(int argc, char const* const* argv) {
     try {
         init_system();
-
-        tid = 0;
-        allocated_ = 0;
-        total_allocated_ = 0;
 
         my_main(argc, argv);
         cout << "Final memory " << total_allocated() << "\n";

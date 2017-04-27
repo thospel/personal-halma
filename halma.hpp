@@ -783,14 +783,21 @@ class ArmySet {
   public:
     static size_t const INITIAL_SIZE = 32;
 
-    NOINLINE ArmySet(size_t size = INITIAL_SIZE);
-    NOINLINE ~ArmySet();
-    NOINLINE void clear(size_t size = INITIAL_SIZE);
-    void drop_hash() {
-        allocated_ -= values_bytes();
-        maybe_munmap(values_, allocated());
+    inline ArmySet(size_t size = INITIAL_SIZE) : armies_{nullptr}, values_{nullptr} {
+        _init(size);
+    }
+    inline ~ArmySet() {
+        deallocate(armies_, armies_size_);
+        deallocate(values_, allocated());
+    }
+    inline void clear(size_t size = INITIAL_SIZE) {
+        deallocate(armies_, armies_size_);
+        deallocate(values_, allocated());
+        _init(size);
+    }
+    inline void drop_hash() {
+        deallocate(values_, allocated());
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
-        values_ = nullptr;
     }
     ArmyId size() const PURE { return used_; }
     size_t allocated() const PURE {
@@ -824,12 +831,10 @@ class ArmySet {
     ArmySet& operator=(ArmySet const&) = delete;
 
   private:
+    NOINLINE void _init(size_t size);
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
     static size_t constexpr MIN_SIZE_GENERATOR(size_t v) { return FACTOR(2*v) >= 1 ? v : MIN_SIZE_GENERATOR(2*v); }
     static size_t constexpr MIN_SIZE() { return MIN_SIZE_GENERATOR(1); }
-
-    inline void _clear0() RESTRICT;
-    inline void _clear1(size_t size) RESTRICT;
     NOINLINE void resize() RESTRICT;
 
 #if CHECK
@@ -1008,7 +1013,12 @@ class BoardSubSet: public BoardSubSetBase {
         mask_ = 0;
         left_ = 0;
     }
-    void create(ArmyId size = INITIAL_SIZE);
+    inline void create(ArmyId size = INITIAL_SIZE) {
+        mask_ = size-1;
+        left_ = FACTOR(size);
+        callocate(armies_, size);
+        // logger << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
+    }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
     inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
@@ -1082,11 +1092,10 @@ BoardSubSetRed const* BoardSubSet::red() const {
 
 void BoardSubSetBase::destroy() {
     if (armies_) {
-        delete [] armies_;
         BoardSubSet const* subset = static_cast<BoardSubSet const*>(this);
         BoardSubSetRed const* subset_red = subset->red();
         ArmyId size = subset_red ? subset_red->size() : subset->allocated();
-        allocated_ -= size * sizeof(ArmyId);
+        deallocate(armies_, size);
         // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << "\n" << flush;
     }
 }
@@ -1097,11 +1106,9 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
 
     BoardSubSetRedBuilder(ArmyId allocate = INITIAL_SIZE);
     ~BoardSubSetRedBuilder() {
-        delete [] armies_;
-        allocated_ -= real_allocated_ * sizeof(ArmyId);
-        auto army_list = army_list_ - size();
-        delete [] army_list;
-        allocated_ -= FACTOR(real_allocated_) * sizeof(ArmyId);
+        deallocate(armies_, real_allocated_);
+        army_list_ -= size();
+        deallocate(army_list_, FACTOR(real_allocated_));
         // logger << "Destroy BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
     }
     ArmyId allocated() const PURE { return mask_+1; }
@@ -1119,13 +1126,12 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
     }
     inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {
         ArmyId sz = size();
-        ArmyId* new_list = new ArmyId[sz];
-        allocated_ += sz * sizeof(ArmyId);
+        ArmyId* new_list = allocate<ArmyId>(sz);
         // logger << "Extract BoardSubSetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
         ArmyId* old_list = army_list_ - sz;
-        army_list_ = old_list;
         std::copy(&old_list[0], &old_list[sz], new_list);
 
+        army_list_ = old_list;
         mask_ = allocated-1;
         left_ = capacity();
         std::fill(begin(), end(), 0);
@@ -1183,8 +1189,8 @@ class BoardSet {
         for (auto& subset: *this)
             subset.destroy();
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
-        delete [] (subsets_+1);
-        allocated_ -= subsets_bytes();
+        ++subsets_;
+        deallocate(subsets_, capacity());
     }
     ArmyId subsets() const PURE { return top_ - from(); }
     size_t size() const PURE { return size_; }

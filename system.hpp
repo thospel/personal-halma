@@ -103,75 +103,72 @@ extern time_t now();
 extern size_t get_memory(bool set_base_mem = false);
 extern void set_signals();
 extern bool is_terminated();
-extern void* _mmap(size_t length) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-extern void _munmap(void* ptr, size_t length) NONNULL;
-// Strictly speaking _mremap shouldn't get the MALLOC property, but we will never
-// store pointers in the mmapped regions
-extern void* _mremap(void* old_ptr, size_t old_length, size_t new_length, bool clear = false) MALLOC ALLOC_SIZE(2) RETURNS_NONNULL NONNULL WARN_UNUSED;
-
 extern void init_system();
 
-template<class T>
 inline bool use_mmap(size_t size) {
-    return size*sizeof(T) >= MMAP_THRESHOLD;
+    return size >= MMAP_THRESHOLD;
     // return false;
 }
 
+extern void* _allocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+extern void* _callocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+extern void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+extern void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+// extern void* _creallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+extern void _deallocate(void *ptr, size_t old_size) NONNULL;
+
 template<class T>
-inline T* mmap(size_t size) {
-    return static_cast<T *>(_mmap(size * sizeof(T)));
+inline void allocate(T*& ptr, size_t new_size) {
+    ptr = static_cast<T*>(_allocate(new_size * sizeof(T)));
 }
+
 template<class T>
-inline T* maybe_mmap(size_t size, bool clear = false) {
-    if (use_mmap<T>(size)) return mmap<T>(size);
-    T* ptr = new T[size];
-    if (clear) std::memset(ptr, 0, size*sizeof(T));
-    return ptr;
+inline T* allocate(size_t new_size) {
+    return static_cast<T*>(_allocate(new_size * sizeof(T)));
 }
+
 template<class T>
-inline void munmap(T* ptr, size_t size) {
-    _munmap(static_cast<void *>(ptr), size * sizeof(T));
+inline void callocate(T*& ptr, size_t new_size) {
+    ptr = static_cast<T*>(_callocate(new_size * sizeof(T)));
 }
+
 template<class T>
-inline void maybe_munmap(T* ptr, size_t size) {
-    return use_mmap<T>(size) ? munmap<T>(ptr, size) : delete [] ptr;
+inline T* callocate(size_t new_size) {
+    return static_cast<T*>(_callocate(new_size * sizeof(T)));
 }
+
 template<class T>
-inline T* mremap(T* old_ptr, size_t old_size, size_t new_size, bool clear = false) {
-    return static_cast<T *>(_mremap(static_cast<void *>(old_ptr), old_size * sizeof(T), new_size * sizeof(T), clear));
+inline void reallocate(T*& old_ptr, size_t old_size, size_t new_size) {
+    old_ptr = static_cast<T*>(old_ptr ? _reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)) : _allocate(new_size * sizeof(T)));
 }
+
 template<class T>
-void maybe_mremap(T*& ptr, size_t old_size, size_t new_size, bool clear = false) {
-    if (use_mmap<T>(old_size)) {
-        if (use_mmap<T>(new_size)) {
-            ptr = mremap(ptr, old_size, new_size, clear);
-        } else if (clear) {
-            munmap(ptr, old_size);
-            ptr = nullptr;
-            ptr = new T[new_size];
-            std::memset(ptr, 0, new_size*sizeof(T));
-        } else {
-            T* new_ptr = new T[new_size];
-            memcpy(new_ptr, ptr, std::min(old_size, new_size) * sizeof(T));
-            munmap(ptr, old_size);
-            ptr = new_ptr;
-        }
-    } else if (clear) {
-        delete [] ptr;
-        ptr = nullptr;
-        ptr = maybe_mmap<T>(new_size, clear);
-    } else {
-        T* new_ptr = maybe_mmap<T>(new_size);
-        memcpy(new_ptr, ptr, std::min(old_size, new_size) * sizeof(T));
-        delete [] ptr;
-        ptr = new_ptr;
+inline T* reallocate(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
+    T* new_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
+    old_ptr = nullptr;
+    return new_ptr;
+}
+
+template<class T>
+inline void creallocate(T*& old_ptr, size_t old_size, size_t new_size) {
+    if (old_ptr) {
+        _deallocate(old_ptr, old_size * sizeof(T));
+        old_ptr = nullptr;
     }
-    if (false && clear) {
-        auto p = static_cast<char const *>(static_cast<void const*>(ptr));
-        size_t len = new_size * sizeof(T);
-        for (size_t i=0; i<len; ++i)
-            if (p[i]) throw_logic("Non zero at offset " + std::to_string(i/sizeof(T)) + " (" + std::to_string(i) + ")");
+    old_ptr = static_cast<T*>(_callocate(new_size * sizeof(T)));
+}
+
+template<class T>
+inline void deallocate(T*& old_ptr, size_t old_size) {
+    if (old_ptr) {
+        _deallocate(old_ptr, old_size * sizeof(T));
+        old_ptr = nullptr;
     }
+}
+
+template<class T>
+inline void unallocate(T* old_ptr, size_t old_size) {
+    _deallocate(old_ptr, old_size * sizeof(T));
 }
 
 class LogBuffer: public std::streambuf {
