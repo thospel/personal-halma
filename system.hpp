@@ -82,40 +82,42 @@ extern uint nr_threads;
 extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
 extern thread_local uint signal_generation_seen;
-extern thread_local ssize_t allocated_;
-extern std::atomic<ssize_t> total_allocated_;
 
 extern uint64_t PID;
 extern std::string HOSTNAME;
 extern std::string const VCS_COMMIT;
 extern std::string const VCS_COMMIT_TIME;
 
-[[noreturn]] extern void throw_errno(std::string text);
-[[noreturn]] extern void throw_logic(char const* text);
-[[noreturn]] extern void throw_logic(char const*, const char* file, int line);
-[[noreturn]] extern void throw_logic(std::string text);
-[[noreturn]] extern void throw_logic(std::string text, const char* file, int line);
+[[noreturn]] void throw_errno(std::string text);
+[[noreturn]] void throw_logic(char const* text);
+[[noreturn]] void throw_logic(char const*, const char* file, int line);
+[[noreturn]] void throw_logic(std::string text);
+[[noreturn]] void throw_logic(std::string text, const char* file, int line);
 
-extern void rm_file(std::string const& file);
-extern std::string time_string(time_t time);
-extern std::string time_string();
-extern time_t now();
-extern size_t get_memory(bool set_base_mem = false);
-extern void set_signals();
-extern bool is_terminated();
-extern void init_system();
+void rm_file(std::string const& file);
+std::string time_string(time_t time);
+std::string time_string();
+time_t now();
+size_t get_memory(bool set_base_mem = false);
+void set_signals();
+bool is_terminated();
+ssize_t total_allocated() PURE;
+ssize_t total_mmapped() PURE;
+ssize_t total_mmaps() PURE;
+void update_allocated();
+void init_system();
 
 inline bool use_mmap(size_t size) {
     return size >= MMAP_THRESHOLD;
     // return false;
 }
 
-extern void* _allocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-extern void* _callocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-extern void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-extern void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-// extern void* _creallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-extern void _deallocate(void *ptr, size_t old_size) NONNULL;
+void* _allocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _callocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+// void* _creallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void _deallocate(void *ptr, size_t old_size) NONNULL;
 
 template<class T>
 inline void allocate(T*& ptr, size_t new_size) {

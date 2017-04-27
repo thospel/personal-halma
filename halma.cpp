@@ -124,13 +124,6 @@ inline bool heuristics() {
     return balance >= 0 || prune_slide || prune_jump;
 }
 
-ssize_t total_allocated() {
-    if (tid) throw_logic("Use of total_allocated inside a thread");
-    total_allocated_ += allocated_;
-    allocated_ = 0;
-    return total_allocated_;
-}
-
 std::random_device rnd;
 template <class T>
 T random(T range) {
@@ -250,6 +243,8 @@ void StatisticsE::print(ostream& os) const {
         else
             os << "----";
         os << "\t" << edges() << " / " << boardset_size() << " " << "\n";
+
+        os << "\tMemory: " << allocated()/ 1000000  << " plain + " << mmapped()/1000000 << " mmapped (" << mmaps() << " mmaps) = " << (allocated() + mmapped()) / 1000000 << " MB\n";
     }
     if (hash_statistics) {
         os << "\tArmy immediate:";
@@ -287,7 +282,7 @@ void StatisticsE::print(ostream& os) const {
 
     os << setw(6) << duration() << " s, set " << setw(2) << available_moves()-1 << "," << setw(10) << boardset_size() << " boards/" << setw(9) << armyset_size() << " armies " << setw(7);
     os << boardset_size()/(blue_armies_size() ? blue_armies_size() : 1);
-    os << " (" << setw(6) << total_allocated() / 1000000 << "/" << setw(6) << memory() / 1000000 << " MB)\n";
+    os << " (" << setw(6) << (allocated()+mmapped()) / 1000000 << "/" << setw(6) << memory() / 1000000 << " MB)\n";
 }
 
 Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} {
@@ -1334,6 +1329,8 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Armies</th>\n"
         "        <th>Memory<br/>(MB)</th>\n"
         "        <th>Allocated<br/>(MB)</th>\n"
+        "        <th>Mmapped<br/>(MB)</th>\n"
+        "        <th>Mmaps</th>\n"
         "        <th>Boards per<br/>blue army</th>\n";
     if (statistics) {
         out_ <<
@@ -1366,7 +1363,9 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <td class='boards'>" << st.boardset_size() << "</td>\n"
             "        <td class='armies'>" << st.armyset_size() << "</td>\n"
             "        <td class='memory'>" << st.memory()    / 1000000 << "</td>\n"
-            "        <td class='allocate'>" << st.allocated() / 1000000 << "</td>\n"
+            "        <td class='allocated'>" << st.allocated() / 1000000 << "</td>\n"
+            "        <td class='mmapped'>" << st.mmapped() / 1000000 << "</td>\n"
+            "        <td class='mmaps'>" << st.mmaps() << "</td>\n"
             "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n";
         if (statistics) {
             out_ <<
@@ -2118,12 +2117,12 @@ int main(int argc, char const* const* argv) {
         init_system();
 
         my_main(argc, argv);
-        cout << "Final memory " << total_allocated() << "\n";
+        cout << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << ")\n";
         if (is_terminated())
             cout << "Terminated by signal" << endl;
     } catch(exception& e) {
         cerr << "Exception: " << e.what() << endl;
-        cerr << "Final memory " << total_allocated() << "\n";
+        cerr << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << ")\n";
         exit(EXIT_FAILURE);
     }
     exit(EXIT_SUCCESS);

@@ -849,9 +849,6 @@ class ArmySet {
     }
 #endif // CHECK
 
-    size_t armies_bytes() const PURE { return armies_size_ * sizeof(Coord); }
-    size_t values_bytes() const PURE { return allocated()  * sizeof(ArmyId); }
-
     Coord* armies_;
     ArmyId* values_;
     size_t armies_size_;
@@ -920,8 +917,6 @@ class Board {
 };
 using BoardList = vector<Board>;
 
-ssize_t total_allocated() PURE;
-
 class StatisticsE: public Statistics {
   public:
     StatisticsE(int available_moves, Counter opponent_armies_size):
@@ -932,9 +927,13 @@ class StatisticsE: public Statistics {
         stop_  = chrono::steady_clock::now();
         memory_ = get_memory();
         allocated_ = total_allocated();
+        mmapped_ = total_mmapped();
+        mmaps_ = total_mmaps();
     }
     size_t const memory()    const PURE { return memory_; }
     size_t const allocated() const PURE { return allocated_; }
+    size_t const mmapped() const PURE { return mmapped_; }
+    size_t const mmaps() const PURE { return mmaps_; }
     Sec::rep duration() const PURE {
         return chrono::duration_cast<Sec>(stop_-start_).count();
     }
@@ -954,6 +953,8 @@ class StatisticsE: public Statistics {
   private:
     size_t memory_;
     ssize_t allocated_;
+    ssize_t mmapped_;
+    ssize_t mmaps_;
     chrono::steady_clock::time_point start_, stop_;
     Counter opponent_armies_size_;
     int available_moves_;
@@ -1298,9 +1299,6 @@ class BoardSet {
     void print(ostream& os) const;
   private:
     ArmyId capacity() const PURE { return capacity_; }
-    size_t subsets_bytes() const PURE {
-        return capacity() * sizeof(BoardSubSetBase);
-    }
     ArmyId next() {
         lock_guard<mutex> lock{exclude_};
         return from_ < top_ ? from_++ : 0;
@@ -1734,7 +1732,7 @@ void Board::do_move(FullMove const& move_) {
     do_move(move_.move());
 }
 
-extern StatisticsE make_all_moves_fast
+StatisticsE make_all_moves_fast
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -1742,7 +1740,7 @@ extern StatisticsE make_all_moves_fast
  ArmySet& moved_armies,
  int nr_moves);
 
-extern StatisticsE make_all_moves_slow
+StatisticsE make_all_moves_slow
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -1766,7 +1764,7 @@ inline StatisticsE make_all_moves
                             nr_moves);
 }
 
-extern StatisticsE make_all_moves_backtrack_fast
+StatisticsE make_all_moves_backtrack_fast
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -1777,7 +1775,7 @@ extern StatisticsE make_all_moves_backtrack_fast
  BoardTable<uint8_t> const& red_backtrack_symmetric,
  int nr_moves);
 
-extern StatisticsE make_all_moves_backtrack_slow
+StatisticsE make_all_moves_backtrack_slow
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,

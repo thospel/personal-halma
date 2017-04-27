@@ -515,7 +515,7 @@ Statistics NAME(uint thid,
     }
     SCOPE_CLOSE;
 
-    if (tid) total_allocated_ += allocated_;
+    update_allocated();
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
     return stats;
 }

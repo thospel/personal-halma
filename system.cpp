@@ -17,7 +17,11 @@ uint signal_counter;
 std::atomic<uint> signal_generation;
 thread_local uint signal_generation_seen;
 thread_local ssize_t allocated_ = 0;
+thread_local ssize_t mmapped_   = 0;
+thread_local ssize_t mmaps_     = 0;
 std::atomic<ssize_t> total_allocated_;
+std::atomic<ssize_t> total_mmapped_;
+std::atomic<ssize_t> total_mmaps_;
 
 uint64_t PID;
 std::string HOSTNAME;
@@ -206,7 +210,8 @@ inline void* _mmap(size_t length) {
     // logger << "mmap(" << length << "[" << PAGE_ROUND(length) << "]) -> " << ptr << "\n" << std::flush;
     if (ptr == MAP_FAILED)
         throw_errno("Could not set mmap " + std::to_string(length) + " bytes");
-    allocated_ += length;
+    mmapped_ += length;
+    ++mmaps_;
     return ptr;
 }
 
@@ -214,7 +219,8 @@ inline void _munmap(void* ptr, size_t length) {
     // logger << "munmap(" << ptr << ", " << length << "[" << PAGE_ROUND(length) << "])\n" << std::flush;
     if (munmap(ptr, PAGE_ROUND(length)))
         throw_errno("Could not set munmap " + std::to_string(length) + " bytes");
-    allocated_ -= length;
+    mmapped_ -= length;
+    --mmaps_;
 }
 
 inline void* _mremap(void* old_ptr, size_t old_length, size_t new_length) {
@@ -227,8 +233,7 @@ inline void* _mremap(void* old_ptr, size_t old_length, size_t new_length) {
     // logger << "mremap(" << old_ptr << ", " << old_length << "[" << old_length_rounded << "], " << new_length << "[" << PAGE_ROUND(new_length) << "]) -> " << new_ptr << "\n" << std::flush;
     if (new_ptr == MAP_FAILED)
         throw_errno("Could not mremap to " + std::to_string(new_length) + " bytes");
-    allocated_ += new_length;
-    allocated_ -= old_length;
+    mmapped_ += new_length - old_length;
     return new_ptr;
 }
 
@@ -305,11 +310,42 @@ void _deallocate(void *old_ptr, size_t old_size) {
     }
 }
 
+ssize_t total_allocated() {
+    if (tid) throw_logic("Use of total_allocated inside a thread");
+    total_allocated_ += allocated_;
+    allocated_ = 0;
+    return total_allocated_;
+}
+
+ssize_t total_mmapped() {
+    if (tid) throw_logic("Use of total_mmapped inside a thread");
+    total_mmapped_ += mmapped_;
+    mmapped_ = 0;
+    return total_mmapped_;
+}
+
+ssize_t total_mmaps() {
+    if (tid) throw_logic("Use of total_mmaps inside a thread");
+    total_mmaps_ += mmaps_;
+    mmaps_ = 0;
+    return total_mmaps_;
+}
+
+void update_allocated() {
+    if (tid) {
+      total_allocated_ += allocated_;
+      total_mmapped_ += mmapped_;
+      total_mmaps_ += mmaps_;
+    }
+}
+
 void init_system() {
     tzset();
 
     tid = 0;
     total_allocated_ = 0;
+    total_mmapped_   = 0;
+    total_mmaps_     = 0;
 
     char hostname[100];
     hostname[sizeof(hostname)-1] = 0;
