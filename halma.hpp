@@ -571,7 +571,7 @@ class ArmyZconst {
         uint n = Army::ALIGNEDS()-1;
         Align accu = (left[n] ^ ULOAD(right[n])) & ARMY_MASK_NOT;
         for (uint i = 0; i < n; ++i)
-            accu |= left[i] ^ right[i];
+            accu |= left[i] ^ ULOAD(right[i]);
         return IS_ZERO(accu);
     }
     friend inline bool operator==(Army const& l, ArmyZconst r) {
