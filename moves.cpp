@@ -47,7 +47,6 @@ Statistics NAME(uint thid,
 #endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) {
     tid = thid;
-    if (tid) allocated_ = 0;
     signal_generation_seen = signal_generation.load(memory_order_relaxed);
     // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
@@ -80,8 +79,10 @@ Statistics NAME(uint thid,
         uint signal_gen = signal_generation.load(memory_order_relaxed);
         if (UNLIKELY(signal_generation_seen != signal_gen)) {
             signal_generation_seen = signal_gen;
-            logger << time_string() << ": Processing blue " << setw(6) << blue_id << "," << setw(9) << boards_from.size() + subset_from.armies().size() << " boards left\n" << flush;
-            if (signal_gen % 2 == 0) {
+            if (tid == 0) {
+                logger << time_string() << ": Processing blue " << setw(6) << blue_id << "\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n" << flush;
+            }
+            if (UNLIKELY(signal_gen & 1)) {
                 logger << "Forced exit" << endl;
                 break;
             }

@@ -13,10 +13,10 @@
 
 bool FATAL = false;
 
-int signal_counter = 1;
+uint signal_counter;
 std::atomic<uint> signal_generation;
 thread_local uint signal_generation_seen;
-thread_local ssize_t allocated_;
+thread_local ssize_t allocated_ = 0;
 std::atomic<ssize_t> total_allocated_;
 
 uint64_t PID;
@@ -152,7 +152,7 @@ void throw_logic(std::string text) {
 }
 
 bool is_terminated() {
-    return UNLIKELY(signal_counter % 2 == 0);
+    return signal_counter & 1;
 }
 
 void signal_handler(int signum) {
@@ -169,7 +169,7 @@ void signal_handler(int signum) {
           break;
         case SIGINT:
         case SIGTERM:
-          signal_counter = 0;
+          signal_counter = 1;
           signal_generation.store(signal_counter, std::memory_order_relaxed);
         default:
           // Impossible. Ignore
@@ -180,7 +180,7 @@ void signal_handler(int signum) {
 void set_signals() {
     struct sigaction new_action;
 
-    signal_generation = signal_counter;
+    signal_generation = signal_counter = 0;
 
     new_action.sa_handler = signal_handler;
     sigfillset(&new_action.sa_mask);
@@ -309,7 +309,6 @@ void init_system() {
     tzset();
 
     tid = 0;
-    allocated_ = 0;
     total_allocated_ = 0;
 
     char hostname[100];
