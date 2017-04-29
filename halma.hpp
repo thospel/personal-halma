@@ -787,17 +787,18 @@ class ArmySet {
         _init(size);
     }
     inline ~ArmySet() {
-        deallocate(armies_, armies_size_);
-        deallocate(values_, allocated());
+        if (armies_) deallocate(armies_, armies_size_);
+        if (values_) deallocate(values_, allocated());
     }
     inline void clear(size_t size = INITIAL_SIZE) {
         deallocate(armies_, armies_size_);
-        deallocate(values_, allocated());
+        if (values_) deallocate(values_, allocated());
         _init(size);
     }
     inline void drop_hash() {
         deallocate(values_, allocated());
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
+        values_ = nullptr;
     }
     ArmyId size() const PURE { return used_; }
     size_t allocated() const PURE {

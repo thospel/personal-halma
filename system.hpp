@@ -120,18 +120,13 @@ void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, size_t keep) 
 void _deallocate(void *ptr, size_t old_size) NONNULL;
 
 template<class T>
-inline void allocate(T*& ptr, size_t new_size) {
-    ptr = static_cast<T*>(_allocate(new_size * sizeof(T)));
-}
-
-template<class T>
 inline T* allocate(size_t new_size) {
     return static_cast<T*>(_allocate(new_size * sizeof(T)));
 }
 
 template<class T>
-inline void callocate(T*& ptr, size_t new_size) {
-    ptr = static_cast<T*>(_callocate(new_size * sizeof(T)));
+inline void allocate(T*& ptr, size_t new_size) {
+    ptr = allocate<T>(new_size);
 }
 
 template<class T>
@@ -140,8 +135,13 @@ inline T* callocate(size_t new_size) {
 }
 
 template<class T>
+inline void callocate(T*& ptr, size_t new_size) {
+    ptr = callocate<T>(new_size);
+}
+
+template<class T>
 inline void reallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    old_ptr = static_cast<T*>(old_ptr ? _reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)) : _allocate(new_size * sizeof(T)));
+    old_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
 }
 
 template<class T>
@@ -153,19 +153,14 @@ inline T* reallocate(T*& old_ptr, size_t old_size, size_t new_size, size_t keep)
 
 template<class T>
 inline void creallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    if (old_ptr) {
-        _deallocate(old_ptr, old_size * sizeof(T));
-        old_ptr = nullptr;
-    }
+    _deallocate(old_ptr, old_size * sizeof(T));
+    old_ptr = nullptr;
     old_ptr = static_cast<T*>(_callocate(new_size * sizeof(T)));
 }
 
 template<class T>
 inline void deallocate(T*& old_ptr, size_t old_size) {
-    if (old_ptr) {
-        _deallocate(old_ptr, old_size * sizeof(T));
-        old_ptr = nullptr;
-    }
+    _deallocate(old_ptr, old_size * sizeof(T));
 }
 
 template<class T>
