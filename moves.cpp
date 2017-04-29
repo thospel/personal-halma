@@ -47,7 +47,7 @@ Statistics NAME(uint thid,
 #endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) {
     tid = thid;
-    signal_generation_seen = signal_generation.load(memory_order_relaxed);
+    ThreadData thread_data;
     // logger << "Started (Set " << available_moves << ")\n" << flush;
 #if !BLUE_TO_MOVE
     BalanceMask balance_mask;
@@ -61,7 +61,6 @@ Statistics NAME(uint thid,
 #endif
 
     Statistics stats;
-    SCOPE_OPEN;
 #if RED_NORMAL
     BoardSubSetRedBuilder subset_to;
 #endif // RED_NORMAL
@@ -76,13 +75,11 @@ Statistics NAME(uint thid,
         if (blue_id == 0) break;
         if (VERBOSE) logger << "Processing blue " << blue_id << "\n" << flush;
 
-        uint signal_gen = signal_generation.load(memory_order_relaxed);
-        if (UNLIKELY(signal_generation_seen != signal_gen)) {
-            signal_generation_seen = signal_gen;
+        if (thread_data.signalled()) {
             if (tid == 0) {
                 logger << time_string() << ": Processing blue " << setw(6) << blue_id << "\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n" << flush;
             }
-            if (UNLIKELY(signal_gen & 1)) {
+            if (thread_data.is_terminated()) {
                 logger << "Forced exit" << endl;
                 break;
             }
@@ -513,9 +510,7 @@ Statistics NAME(uint thid,
 #endif // !BLUE_TO_MOVE
 
     }
-    SCOPE_CLOSE;
 
-    update_allocated();
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
     return stats;
 }

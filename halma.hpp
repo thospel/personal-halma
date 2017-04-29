@@ -1096,8 +1096,8 @@ void BoardSubSetBase::destroy() {
     if (armies_) {
         BoardSubSet const* subset = static_cast<BoardSubSet const*>(this);
         BoardSubSetRed const* subset_red = subset->red();
-        ArmyId size = subset_red ? subset_red->size() : subset->allocated();
-        deallocate(armies_, size);
+        if (subset_red) deallocate(armies_, subset_red->size());
+        else            deallocate(armies_, subset->allocated());
         // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << "\n" << flush;
     }
 }
@@ -1517,6 +1517,29 @@ inline ostream& operator<<(ostream& os, Svg const& svg) {
     os << svg.str();
     return os;
 }
+
+class ThreadData {
+  public:
+    inline ThreadData(): signal_generation_{signal_generation.load(memory_order_relaxed)} {
+    }
+    inline ~ThreadData() {
+        update_allocated();
+    }
+    inline bool signalled() {
+        uint signal_gen = signal_generation.load(memory_order_relaxed);
+        if (UNLIKELY(signal_generation_ != signal_gen)) {
+            signal_generation_ = signal_gen;
+            return true;
+        }
+        return false;
+    }
+    bool is_terminated() {
+        return UNLIKELY(signal_generation_ & 1);
+    }
+  private:
+    uint signal_generation_;
+
+};
 
 class Tables {
   public:

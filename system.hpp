@@ -81,7 +81,6 @@ extern bool FATAL;
 extern uint nr_threads;
 extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
-extern thread_local uint signal_generation_seen;
 
 extern uint64_t PID;
 extern std::string HOSTNAME;

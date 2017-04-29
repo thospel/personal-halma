@@ -15,7 +15,6 @@ bool FATAL = false;
 
 uint signal_counter;
 std::atomic<uint> signal_generation;
-thread_local uint signal_generation_seen;
 thread_local ssize_t allocated_ = 0;
 thread_local ssize_t mmapped_   = 0;
 thread_local ssize_t mmaps_     = 0;
