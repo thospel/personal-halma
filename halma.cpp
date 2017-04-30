@@ -397,19 +397,6 @@ void BoardSubSet::resize() {
     unallocate(old_armies, old_size);
 }
 
-void BoardSubSet::convert_red() {
-    auto new_size = size();
-    auto old_size = allocated();
-    auto new_armies = allocate<ArmyId>(new_size);
-    for (ArmyId const& red_value: *this)
-        if (red_value) *new_armies++ = red_value;
-    deallocate(armies_, old_size);
-
-    // logger << "Convert BoardSubSet " << static_cast<void const*>(armies_) << " (size " << allocated() << ") to red -> " << static_cast<void const*>(new_armies-new_size) << " (size " << new_size << ")\n" << flush;
-    auto subset_red = BoardSubSetRed{new_armies - new_size, new_size};
-    static_cast<BoardSubSetBase&>(*this) = static_cast<BoardSubSetBase&>(subset_red);
-}
-
 ArmyId BoardSubSet::example(ArmyId& symmetry) const {
     if (empty()) throw_logic("No red value in BoardSubSet");
 
@@ -466,6 +453,12 @@ ArmyId BoardSubSetRed::random_example(ArmyId& symmetry) const {
     return red_id;
 }
 
+bool BoardSubSetRed::_find(ArmyId red_value) const {
+    if (!armies_) return false;
+    return any_of(armies_, armies_+size(),
+               [red_value](ArmyId value) { return value == red_value; });
+}
+
 BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId size): army_list_{nullptr} {
     real_allocated_ = size;
     mask_ = size-1;
@@ -516,15 +509,13 @@ void BoardSubSetRedBuilder::resize() {
     }
 }
 
-BoardSet::BoardSet(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
+BoardSetBase::BoardSetBase(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
     allocate(subsets_, capacity());
     --subsets_;
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
 
-void BoardSet::clear(ArmyId size) {
-    for (auto& subset: *this)
-        subset.destroy();
+void BoardSetBase::clear(ArmyId size) {
     from_ = top_ = 1;
     size_ = 0;
     solution_id_ = keep_;
@@ -534,7 +525,7 @@ void BoardSet::clear(ArmyId size) {
     capacity_ = size;
 }
 
-void BoardSet::resize() {
+void BoardSetBase::resize() {
     auto old_subsets = subsets_;
     subsets_ = allocate<BoardSubSet>(capacity()*2) - 1;
     // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity() << "\n" << flush;
@@ -548,8 +539,10 @@ void BoardSet::resize() {
     capacity_ *= 2;
 }
 
-void BoardSet::convert_red() {
-    for (auto& subset: *this) subset.convert_red();
+void BoardSet::clear(ArmyId size) {
+    for (auto& subset: *this)
+        subset.destroy();
+    BoardSetBase::clear(size);
 }
 
 void BoardSet::print(ostream& os) const {
@@ -560,6 +553,12 @@ void BoardSet::print(ostream& os) const {
         os << "\n";
     }
     os << "-----\n";
+}
+
+void BoardSetRed::clear(ArmyId size) {
+    for (auto& subset: *this)
+        subset.destroy();
+    BoardSetBase::clear(size);
 }
 
 string Image::_str() const {
@@ -1083,15 +1082,9 @@ Board BoardSet::example(ArmySet const& opponent_armies, ArmySet const& moved_arm
     if (empty()) throw_logic("No board in BoardSet");
     for (ArmyId blue_id = from(); blue_id <= back_id(); ++blue_id) {
         auto const& subset = at(blue_id);
-        auto const& subset_red = subset.red();
+        if (subset.empty()) continue;
         ArmyId red_id, symmetry;
-        if (subset_red) {
-            if (subset_red->empty()) continue;
-            red_id = subset_red->example(symmetry);
-        } else {
-            if (subset.empty()) continue;
-            red_id = subset.example(symmetry);
-        }
+        red_id = subset.example(symmetry);
         ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
         ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
         Army const blue{blue_armies, blue_id};
@@ -1109,15 +1102,105 @@ Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& mo
     for (ArmyId i = random(n); true; i = (i + step) % n) {
         ArmyId blue_id = from() + i;
         auto const& subset = at(blue_id);
-        auto const& subset_red = subset.red();
+        if (subset.empty()) continue;
         ArmyId red_id, symmetry;
-        if (subset_red) {
-            if (subset_red->empty()) continue;
-            red_id = subset_red->random_example(symmetry);
-        } else {
-            if (subset.empty()) continue;
-            red_id = subset.random_example(symmetry);
-        }
+        red_id = subset.random_example(symmetry);
+        ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
+        ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
+        Army const blue{blue_armies, blue_id};
+        Army const red {red_armies,  red_id, symmetry};
+        return Board{blue, red};
+    }
+}
+
+bool BoardSubSetRed::_insert(ArmyId red_value, Statistics& stats) {
+    // cout << "Insert " << red_value << "\n";
+    if (armies_) throw_logic("Multiple single insert in BoardSubSetRed");
+    ArmyId* new_list = allocate<ArmyId>(1);
+    new_list[0] = red_value;
+    *this = BoardSubSetRed{new_list, 1};
+    return true;
+}
+
+bool BoardSetRed::_insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
+    if (CHECK) {
+        if (blue_id <= 0)
+            throw_logic("red_id <= 0");
+    }
+    lock_guard<mutex> lock{exclude_};
+
+    if (blue_id >= top_) {
+        // Only in the multithreaded case blue_id can be different from top_
+        // if (blue_id != top_) throw_logic("Cannot grow more than 1");
+        while (blue_id > capacity_) resize();
+        while (blue_id >= top_) at(top_++).zero();
+    }
+    bool result = at(blue_id)._insert(red_id, symmetry, stats);
+    size_ += result;
+    return result;
+}
+
+bool BoardSetRed::insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) {
+    Statistics dummy_stats;
+
+    Army const& blue = board.blue();
+    Army const blue_symmetric{blue, SYMMETRIC};
+    int blue_symmetry = cmp(blue, blue_symmetric);
+    auto blue_id = armies_blue.insert(blue_symmetry >= 0 ? blue : blue_symmetric, dummy_stats);
+
+    Army const& red = board.red();
+    Army const red_symmetric{red, SYMMETRIC};
+    int red_symmetry = cmp(red, red_symmetric);
+    auto red_id = armies_red.insert(red_symmetry >= 0 ? red : red_symmetric, dummy_stats);
+
+    int symmetry = blue_symmetry * red_symmetry;
+    return _insert(blue_id, red_id, symmetry, dummy_stats);
+}
+
+bool BoardSetRed::find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const {
+    Army const& blue = board.blue();
+    Army const blue_symmetric{blue, SYMMETRIC};
+    int blue_symmetry = cmp(blue, blue_symmetric);
+    auto blue_id = armies_blue.find(blue_symmetry >= 0 ? blue : blue_symmetric);
+    if (blue_id == 0) return false;
+
+    Army const& red = board.red();
+    Army const red_symmetric{red, SYMMETRIC};
+    int red_symmetry = cmp(red, red_symmetric);
+    auto red_id = armies_red.find(red_symmetry >= 0 ? red : red_symmetric);
+    if (red_id == 0) return false;
+
+    int symmetry = blue_symmetry * red_symmetry;
+    return _find(blue_id, red_id, symmetry);
+}
+
+Board BoardSetRed::example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
+    if (empty()) throw_logic("No board in BoardSet");
+    for (ArmyId blue_id = from(); blue_id <= back_id(); ++blue_id) {
+        auto const& subset_red = at(blue_id);
+        if (subset_red.empty()) continue;
+        ArmyId red_id, symmetry;
+        red_id = subset_red.example(symmetry);
+        ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
+        ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
+        Army const blue{blue_armies, blue_id};
+        Army const red {red_armies,  red_id, symmetry};
+        return Board{blue, red};
+    }
+    throw_logic("No board even though BoardSet is not empty");
+}
+
+Board BoardSetRed::random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
+    if (empty()) throw_logic("No board in BoardSet");
+
+    ArmyId n = subsets();
+    ArmyId step = n == 1 ? 0 : random_coprime(n);
+    for (ArmyId i = random(n); true; i = (i + step) % n) {
+        ArmyId blue_id = from() + i;
+        auto const& subset_red = at(blue_id);
+        if (subset_red.empty()) continue;
+        ArmyId red_id, symmetry;
+        red_id = subset_red.random_example(symmetry);
         ArmySet const& blue_armies = blue_moved ? moved_armies : opponent_armies;
         ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
         Army const blue{blue_armies, blue_id};
@@ -1173,7 +1256,6 @@ void Army::do_move(Move const& move) {
 bool Army::_try_move(Move const& move) {
     auto pos = equal_range(begin(), end(), move.from);
     if (pos.first == pos.second) return false;
-        throw_logic("Move not found");
     *pos.first = move.to;
     sort();
     return true;
@@ -1554,20 +1636,40 @@ void play(bool print_moves=false) {
         cout << board;
         // cout << board.symmetric();
 
-        BoardSet board_set[2];
         ArmySet  army_set[3];
-        board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
+        BoardSet    blue_boards;
+        BoardSetRed red_boards;
+        bool blue_to_move = nr_moves & 1;
+        if (blue_to_move) {
+            red_boards.insert(board, army_set[0], army_set[1]);
 
-        auto stats = make_all_moves(board_set[0], board_set[1],
-                                    army_set[0], army_set[1], army_set[2],
-                                    nr_moves);
-        cout << stats << "===============================\n";
-        --nr_moves;
-        board.do_move(move);
-        if (board_set[1].find(board, army_set[1], army_set[2], nr_moves)) {
-            cout << "Good\n";
+            auto stats = make_all_blue_moves
+                (red_boards, blue_boards,
+                 army_set[0], army_set[1], army_set[2],
+                 nr_moves);
+            cout << stats << "===============================\n";
+            --nr_moves;
+            board.do_move(move);
+            if (blue_boards.find(board, army_set[1], army_set[2], nr_moves)) {
+                cout << "Good\n";
+            } else {
+                cout << "Bad\n";
+            }
         } else {
-            cout << "Bad\n";
+            blue_boards.insert(board, army_set[0], army_set[1], nr_moves);
+
+            auto stats = make_all_red_moves
+                (blue_boards, red_boards,
+                 army_set[0], army_set[1], army_set[2],
+                 nr_moves);
+            cout << stats << "===============================\n";
+            --nr_moves;
+            board.do_move(move);
+            if (red_boards.find(board, army_set[1], army_set[2])) {
+                cout << "Good\n";
+            } else {
+                cout << "Bad\n";
+            }
         }
         // cout << board;
         if (print_moves) {
@@ -1612,9 +1714,6 @@ void save_largest_red(vector<ArmyId> const& largest_red) {
 int solve(Board const& board, int nr_moves, Army& red_army,
           StatisticsList& stats_list, Sec::rep& duration) {
     auto start_solve = chrono::steady_clock::now();
-    array<BoardSet, 2> board_set;
-    array<ArmySet, 3>  army_set;
-    board_set[0].insert(board, army_set[0], army_set[1], nr_moves);
     cout << setw(14) << "set " << setw(2) << nr_moves << " (" << HOSTNAME;
     bool heuristics = false;
     if (balance >= 0) {
@@ -1634,23 +1733,40 @@ int solve(Board const& board, int nr_moves, Army& red_army,
     cout << ")" << endl;
 
     vector<ArmyId> largest_red;
+    BoardSet    boards_blue;
+    BoardSetRed boards_red;
+    array<ArmySet, 3>  army_set;
+    bool blue_to_move = nr_moves & 1;
+    if (blue_to_move)
+        boards_red.insert(board, army_set[0], army_set[1]);
+    else
+        boards_blue.insert(board, army_set[0], army_set[1], nr_moves);
 
     ArmyId red_id = 0;
     int i;
     for (i=0; nr_moves>0; --nr_moves, ++i) {
-        auto& boards_from = board_set[ i    % 2];
-        auto& boards_to   = board_set[(i+1) % 2];
-        auto& moving_armies   = army_set[ i    % 3];
+        auto& moving_armies         = army_set[ i    % 3];
         auto const& opponent_armies = army_set[(i+1) % 3];
-        auto& moved_armies    = army_set[(i+2) % 3];
+        auto& moved_armies          = army_set[(i+2) % 3];
 
-        stats_list.emplace_back
-            (make_all_moves(boards_from, boards_to,
-                            moving_armies, opponent_armies, moved_armies,
-                            nr_moves));
+        bool blue_to_move = nr_moves & 1;
+        if (blue_to_move) {
+            stats_list.emplace_back
+                (make_all_blue_moves
+                 (boards_red, boards_blue,
+                  moving_armies, opponent_armies, moved_armies,
+                  nr_moves));
+            boards_red.clear();
+        } else {
+            stats_list.emplace_back
+                (make_all_red_moves
+                 (boards_blue, boards_red,
+                  moving_armies, opponent_armies, moved_armies,
+                  nr_moves));
+            boards_blue.clear();
+        }
         moved_armies.drop_hash();
         moving_armies.clear();
-        boards_from.clear();
 
         if (is_terminated()) {
             auto stop_solve = chrono::steady_clock::now();
@@ -1658,14 +1774,18 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             return -1;
         }
 
-        if (sample_subset_red && nr_moves % 2 == 0)
-            for (auto const& subset: static_cast<BoardSet const&>(boards_to)) {
-                BoardSubSetRed const& subset_red = static_cast<BoardSubSetRed const&>(static_cast<BoardSubSetBase const&>(subset));
+        if (sample_subset_red && !blue_to_move) {
+            auto const& boards = boards_red;
+            for (auto const& subset_red: boards) {
                 if (subset_red.size() > largest_red.size())
                     largest_red.assign(subset_red.begin(), subset_red.end());
             }
+        }
 
         // if (verbose) cout << moved_armies << boards_to;
+        auto const& boards_to = blue_to_move ?
+            static_cast<BoardSetBase const&>(boards_blue) :
+            static_cast<BoardSetBase const&>(boards_red);
         auto& stats = stats_list.back();
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
@@ -1675,10 +1795,16 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             return -1;
         }
         if (example) {
-            stats.example_board
-                (example > 0 ?
-                 boards_to.example(opponent_armies, moved_armies, nr_moves & 1) :
-                 boards_to.random_example(opponent_armies, moved_armies, nr_moves & 1));
+            if (blue_to_move)
+                stats.example_board
+                    (example > 0 ?
+                     boards_blue.example(opponent_armies, moved_armies, true) :
+                     boards_blue.random_example(opponent_armies, moved_armies, true));
+            else
+                stats.example_board
+                    (example > 0 ?
+                     boards_red.example(opponent_armies, moved_armies, false) :
+                     boards_red.random_example(opponent_armies, moved_armies, false));
             cout << stats.example_board();
         }
         cout << stats << flush;
@@ -1716,7 +1842,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     board_set.emplace_back(new BoardSet(true));
     army_set.emplace_back(new ArmySet);
     army_set.emplace_back(new ArmySet);
-    board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves, false);
+    board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves);
 
     BoardTable<uint8_t> red_backtrack{};
     red_backtrack.fill(0);
@@ -1748,10 +1874,16 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         army_set.emplace_back(new ArmySet);
         auto const& moving_armies   = *army_set[i];
         auto const& opponent_armies = *army_set[i+1];
-        auto& moved_armies        = *army_set[i+2];
+        auto& moved_armies          = *army_set[i+2];
 
+        bool blue_to_move = nr_moves & 1;
         stats_list.emplace_back
-            (make_all_moves_backtrack
+            (blue_to_move ?
+             make_all_blue_moves_backtrack
+             (boards_from, boards_to,
+              moving_armies, opponent_armies, moved_armies,
+              nr_moves) :
+             make_all_red_moves_backtrack
              (boards_from, boards_to,
               moving_armies, opponent_armies, moved_armies,
               solution_moves, red_backtrack, red_backtrack_symmetric,

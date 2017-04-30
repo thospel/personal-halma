@@ -35,8 +35,18 @@
 
 NOINLINE
 Statistics NAME(uint thid,
+#if BACKTRACK
                 BoardSet& boards_from,
                 BoardSet& boards_to,
+#else  // BACKTRACK
+# if BLUE_TO_MOVE
+                BoardSetRed& boards_from,
+                BoardSet& boards_to,
+# else // BLUE_TO_MOVE
+                BoardSet& boards_from,
+                BoardSetRed& boards_to,
+#endif // BLUE_TO_MOVE
+#endif // BACKTRACK
                 ArmySet const& moving_armies,
                 ArmySet const& opponent_armies,
                 ArmySet& moved_armies,
@@ -515,19 +525,25 @@ Statistics NAME(uint thid,
     return stats;
 }
 
-#if !BLUE_TO_MOVE
-# define ALL_NAME CAT(make_all_moves,CAT(_BACKTRACK,_SLOW))
-# define BLUE_MOVES_BACKTRACK CAT(thread_blue_moves_backtrack,_SLOW)
-# define BLUE_MOVES           CAT(thread_blue_moves,_SLOW)
-# define RED_MOVES_BACKTRACK  CAT(thread_red_moves_backtrack,_SLOW)
-# define RED_MOVES            CAT(thread_red_moves,_SLOW)
+# define ALL_NAME CAT(make_all_,CAT(COLOR_TO_MOVE,CAT(_moves,CAT(_BACKTRACK,_SLOW))))
 
-StatisticsE ALL_NAME(BoardSet& boards_from,
+StatisticsE ALL_NAME(
+#if BACKTRACK
+                     BoardSet& boards_from,
                      BoardSet& boards_to,
+#else // BACKTRACK
+# if BLUE_TO_MOVE
+                     BoardSetRed& boards_from,
+                     BoardSet& boards_to,
+# else // BLUE_TO_MOVE
+                     BoardSet& boards_from,
+                     BoardSetRed& boards_to,
+# endif // BLUE_TO_MOVE
+#endif // BACKTRACK
                      ArmySet const& moving_armies,
                      ArmySet const& opponent_armies,
                      ArmySet& moved_armies,
-#if BACKTRACK
+#if BACKTRACK && !BLUE_TO_MOVE
                      int solution_moves,
                      BoardTable<uint8_t> const& red_backtrack,
                      BoardTable<uint8_t> const& red_backtrack_symmetric,
@@ -539,68 +555,37 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
     stats.boardset_untry(boards_to.size());
 
     vector<future<Statistics>> results;
-    int blue_to_move = nr_moves & 1;
-    if (blue_to_move) {
 #if BACKTRACK
-        if (solution_moves > 0) {
-            for (uint i=1; i < nr_threads; ++i)
-                results.emplace_back
-                    (async
-                     (launch::async, BLUE_MOVES_BACKTRACK,
-                      i, ref(boards_from), ref(boards_to),
-                      ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-                      nr_moves));
-            static_cast<Statistics&>(stats) = BLUE_MOVES_BACKTRACK
-                (0, boards_from, boards_to,
-                 moving_armies, opponent_armies, moved_armies,
-                 nr_moves);
-        } else
+    for (uint i=1; i < nr_threads; ++i)
+        results.emplace_back
+            (async
+             (launch::async, NAME,
+              i, ref(boards_from), ref(boards_to),
+              ref(moving_armies), ref(opponent_armies), ref(moved_armies),
+#if !BLUE_TO_MOVE
+              ref(red_backtrack), ref(red_backtrack_symmetric), solution_moves,
+#endif // BLUE_TO_MOVE
+              nr_moves));
+    static_cast<Statistics&>(stats) = NAME
+    (0, boards_from, boards_to,
+     moving_armies, opponent_armies, moved_armies,
+#if !BLUE_TO_MOVE
+     red_backtrack, red_backtrack_symmetric, solution_moves,
+#endif // BLUE_TO_MOVE
+     nr_moves);
+#else // BACKTRACK
+    for (uint i=1; i < nr_threads; ++i)
+        results.emplace_back
+            (async
+             (launch::async, NAME,
+              i, ref(boards_from), ref(boards_to),
+              ref(moving_armies), ref(opponent_armies), ref(moved_armies),
+              nr_moves));
+    static_cast<Statistics&>(stats) = NAME
+    (0, boards_from, boards_to,
+     moving_armies, opponent_armies, moved_armies,
+     nr_moves);
 #endif // BACKTRACK
-            {
-                for (uint i=1; i < nr_threads; ++i)
-                    results.emplace_back
-                        (async
-                         (launch::async, BLUE_MOVES,
-                          i, ref(boards_from), ref(boards_to),
-                          ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-                          nr_moves));
-                static_cast<Statistics&>(stats) = BLUE_MOVES
-                    (0, boards_from, boards_to,
-                     moving_armies, opponent_armies, moved_armies,
-                     nr_moves);
-            }
-    } else {
-#if BACKTRACK
-        if (solution_moves > 0) {
-            for (uint i=1; i < nr_threads; ++i)
-                results.emplace_back
-                    (async
-                     (launch::async, RED_MOVES_BACKTRACK,
-                      i, ref(boards_from), ref(boards_to),
-                      ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-                      ref(red_backtrack), ref(red_backtrack_symmetric),
-                      solution_moves, nr_moves));
-            static_cast<Statistics&>(stats) = RED_MOVES_BACKTRACK
-                (0, boards_from, boards_to,
-                 moving_armies, opponent_armies, moved_armies,
-                 red_backtrack, red_backtrack_symmetric,
-                 solution_moves, nr_moves);
-        } else
-#endif // BACKTRACK
-            {
-                for (uint i=1; i < nr_threads; ++i)
-                    results.emplace_back
-                        (async
-                         (launch::async, RED_MOVES,
-                          i, ref(boards_from), ref(boards_to),
-                          ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-                          nr_moves));
-                static_cast<Statistics&>(stats) = RED_MOVES
-                    (0, boards_from, boards_to,
-                     moving_armies, opponent_armies, moved_armies,
-                     nr_moves);
-            }
-    }
     for (auto& result: results) stats += result.get();
     stats.armyset_size(moved_armies.size());
     stats.boardset_size(boards_to.size());
@@ -610,11 +595,6 @@ StatisticsE ALL_NAME(BoardSet& boards_from,
 }
 
 # undef ALL_NAME
-# undef BLUE_MOVES_BACKTRACK
-# undef BLUE_MOVES
-# undef RED_MOVES_BACKTRACK
-# undef RED_MOVES
-#endif // BLUE_TO_MOVE
 
 #undef COLOR_TO_MOVE
 #undef NAME

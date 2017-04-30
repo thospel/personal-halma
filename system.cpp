@@ -148,7 +148,7 @@ void throw_logic(char const* text) {
 
 void throw_logic(std::string text) {
     if (FATAL) {
-        logger << text << std::flush;
+        logger << text << std::endl;
         abort();
     }
     throw(std::logic_error(text));

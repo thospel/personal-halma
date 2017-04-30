@@ -405,7 +405,7 @@ class alignas(Align) Army {
                         ato[i] = SHIFT_RIGHT(left, 4) | right << 4;
                     }
                     sort(to);
-                } else 
+                } else
                     for (uint i=0; i<n; ++i)
                         ASTORE(ato[i], ALOAD(afrom[i]));
             }
@@ -868,7 +868,7 @@ Army::Army(ArmyZconst army, ArmyId symmetry) {
     _import(army.begin(), begin(), symmetry, true);
 }
 
-Army::Army(ArmySet const& armies, ArmyId id, ArmyId symmetry): 
+Army::Army(ArmySet const& armies, ArmyId id, ArmyId symmetry):
     Army{armies.cat(id), symmetry}
  {}
 
@@ -978,27 +978,12 @@ class BoardSubSetBase {
         return value & ARMYID_HIGHBIT;
     }
     ArmyId const* begin() const PURE { return &armies_[0]; }
-    inline void destroy();
   protected:
     ArmyId* begin() PURE { return &armies_[0]; }
 
     ArmyId* armies_;
     ArmyId mask_;
     ArmyId left_;
-};
-
-class BoardSubSetRed: public BoardSubSetBase {
-  public:
-    inline BoardSubSetRed(ArmyId* list, ArmyId size) {
-        armies_ = list;
-        left_   = size;
-        mask_   = ARMYID_MAX;
-    }
-    ArmyId size()       const PURE { return left_; }
-    bool empty() const PURE { return size() == 0; }
-    ArmyId const* end() const PURE { return &armies_[size()]; }
-    ArmyId example(ArmyId& symmetry) const;
-    ArmyId random_example(ArmyId& symmetry) const;
 };
 
 class BoardSubSet: public BoardSubSetBase {
@@ -1009,17 +994,22 @@ class BoardSubSet: public BoardSubSetBase {
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
     ArmyId size()      const PURE { return capacity() - left_; }
     bool empty() const PURE { return size() == 0; }
-    inline BoardSubSetRed const* red() const PURE;
-    void zero() {
-        armies_ = nullptr;
-        mask_ = 0;
-        left_ = 0;
-    }
     inline void create(ArmyId size = INITIAL_SIZE) {
         mask_ = size-1;
         left_ = FACTOR(size);
         callocate(armies_, size);
         // logger << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
+    }
+    inline void zero() {
+        armies_ = nullptr;
+        mask_ = 0;
+        left_ = 0;
+    }
+    inline void destroy() {
+        if (armies_) {
+            deallocate(armies_, allocated());
+            // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << allocated() << "\n" << flush;
+        }
     }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
 
@@ -1033,7 +1023,6 @@ class BoardSubSet: public BoardSubSetBase {
         ArmyId value = red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0);
         return insert(value, stats);
     }
-    void convert_red();
     bool find(ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
             if (red_id <= 0)
@@ -1055,7 +1044,6 @@ class BoardSubSet: public BoardSubSetBase {
     inline bool insert(ArmyId red_value, Statistics& stats);
     bool find(ArmyId id) const PURE;
 
-  private:
     ArmyId* end()   PURE { return &armies_[allocated()]; }
 };
 
@@ -1087,20 +1075,52 @@ bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
     }
 }
 
-BoardSubSetRed const* BoardSubSet::red() const {
-    if (mask_ != ARMYID_MAX) return nullptr;
-    return static_cast<BoardSubSetRed const*>(static_cast<BoardSubSetBase const*>(this));
-}
-
-void BoardSubSetBase::destroy() {
-    if (armies_) {
-        BoardSubSet const* subset = static_cast<BoardSubSet const*>(this);
-        BoardSubSetRed const* subset_red = subset->red();
-        if (subset_red) deallocate(armies_, subset_red->size());
-        else            deallocate(armies_, subset->allocated());
-        // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << "\n" << flush;
+class BoardSubSetRed: public BoardSubSetBase {
+  public:
+    inline BoardSubSetRed(ArmyId* list, ArmyId size) {
+        armies_ = list;
+        left_   = size;
+        mask_   = ARMYID_MAX;
     }
-}
+    inline void zero() {
+        armies_ = nullptr;
+        mask_ = 0;
+        left_ = 0;
+    }
+    inline void destroy() {
+        if (armies_) {
+            deallocate(armies_, size());
+            // logger << "Destroy BoardSubSetRed " << static_cast<void const*>(armies_) << ": size " << size() << "\n" << flush;
+        }
+    }
+    ArmyId size()       const PURE { return left_; }
+    bool empty() const PURE { return size() == 0; }
+    ArmyId const* end() const PURE { return &armies_[size()]; }
+    ArmyId example(ArmyId& symmetry) const;
+    ArmyId random_example(ArmyId& symmetry) const;
+    inline bool _insert(ArmyId red_id, int symmetry, Statistics& stats) {
+        if (CHECK) {
+            if (red_id <= 0)
+                throw_logic("red_id <= 0");
+            if (red_id >= ARMYID_HIGHBIT)
+                throw_logic("red_id is too large");
+        }
+        ArmyId value = red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0);
+        return _insert(value, stats);
+    }
+    bool _find(ArmyId red_id, int symmetry) const PURE {
+        if (CHECK) {
+            if (red_id <= 0)
+                throw_logic("red_id <= 0");
+            if (red_id >= ARMYID_HIGHBIT)
+                throw_logic("red_id is too large");
+        }
+        return _find(red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0));
+    }
+  private:
+    bool _insert(ArmyId red_value, Statistics& stats);
+    bool _find(ArmyId red_value) const PURE;
+};
 
 class BoardSubSetRedBuilder: public BoardSubSetBase {
   public:
@@ -1182,21 +1202,63 @@ bool BoardSubSetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
     }
 }
 
-class BoardSet {
+class BoardSetBase {
     friend class BoardSubSetRefBase;
   public:
     static ArmyId const INITIAL_SIZE = 32;
-    BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE);
-    ~BoardSet() {
-        for (auto& subset: *this)
-            subset.destroy();
-        // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+    BoardSetBase(bool keep = false, ArmyId size = INITIAL_SIZE);
+    ~BoardSetBase() {
         ++subsets_;
         deallocate(subsets_, capacity());
     }
     ArmyId subsets() const PURE { return top_ - from(); }
     size_t size() const PURE { return size_; }
     bool empty() const PURE { return size() == 0; }
+    ArmyId back_id() const PURE { return top_-1; }
+    bool solve(ArmyId solution_id, Army const& solution) {
+        lock_guard<mutex> lock{exclude_};
+        if (solution_id_) return false;
+        solution_id_ = solution_id;
+        solution_ = solution;
+        return true;
+    }
+    ArmyId solution_id() const PURE { return solution_id_; }
+    Army const& solution() const PURE { return solution_; }
+    // Non copyable
+    BoardSetBase(BoardSetBase const&) = delete;
+    BoardSetBase& operator=(BoardSetBase const&) = delete;
+  protected:
+    ArmyId capacity() const PURE { return capacity_; }
+    ArmyId next() {
+        lock_guard<mutex> lock{exclude_};
+        return from_ < top_ ? from_++ : 0;
+    }
+    ArmyId from() const PURE { return keep_ ? 1 : from_; }
+    NOINLINE void resize() RESTRICT;
+    void down_size(ArmyId size) { size_ -= size; }
+    inline void clear(ArmyId size = INITIAL_SIZE);
+
+    size_t size_;
+    mutex exclude_;
+    Army solution_;
+    ArmyId solution_id_;
+    ArmyId capacity_;
+    ArmyId from_;
+    ArmyId top_;
+    BoardSubSetBase* subsets_;
+    bool const keep_;
+};
+
+class BoardSet: public BoardSetBase {
+    friend class BoardSubSetRef;
+  public:
+    BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE) :
+        BoardSetBase{keep, size} {}
+    ~BoardSet() {
+        for (auto& subset: *this)
+            subset.destroy();
+        // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+    }
     void clear(ArmyId size = INITIAL_SIZE);
     inline BoardSubSet const& cat(ArmyId id) const PURE {
         return static_cast<BoardSubSet const&>(subsets_[id]);
@@ -1204,7 +1266,7 @@ class BoardSet {
     inline BoardSubSet const& at(ArmyId id) const PURE { return cat(id); }
     inline BoardSubSet const* begin() const PURE { return &cat(from()); }
     inline BoardSubSet const* end()   const PURE { return &cat(top_); }
-    ArmyId back_id() const PURE { return top_-1; }
+
     inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (blue_id <= 0)
@@ -1222,15 +1284,6 @@ class BoardSet {
         size_ += result;
         return result;
     }
-    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red);
-    bool insert(Board const& board, ArmySet& armies_to_move, ArmySet& armies_opponent, int nr_moves, bool convert = true) {
-        int blue_to_move = nr_moves & 1;
-        bool result = blue_to_move ?
-            insert(board, armies_to_move, armies_opponent) :
-            insert(board, armies_opponent, armies_to_move);
-        if (convert && blue_to_move) convert_red();
-        return result;
-    }
     void insert(ArmyId blue_id, BoardSubSet const& subset) {
         if (CHECK) {
             if (blue_id <= 0)
@@ -1242,29 +1295,21 @@ class BoardSet {
             // Only in the multithreaded case blue_id can be different from top_
             // if (blue_id != top_) throw_logic("Cannot grow more than 1");
             while (blue_id > capacity_) resize();
+            // This is only called when doing red moves and all updates
+            // will be done as an overwrite. So use zero() instead of create()
             while (blue_id > top_) at(top_++).zero();
             ++top_;
         }
         at(blue_id) = subset;
         size_ += subset.size();
     }
-    void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) {
-        if (CHECK) {
-            if (blue_id <= 0)
-                throw_logic("red_id <= 0");
-        }
-        BoardSubSetRed subset_red = builder.extract();
-
-        lock_guard<mutex> lock{exclude_};
-        if (blue_id >= top_) {
-            // Only in the multithreaded case can blue_id be different from top_
-            // if (blue_id != top_) throw_logic("Cannot grow more than 1");
-            while (blue_id > capacity_) resize();
-            while (blue_id > top_) at(top_++).zero();
-            ++top_;
-        }
-        subsets_[blue_id] = subset_red;
-        size_ += subset_red.size();
+    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red);
+    bool insert(Board const& board, ArmySet& armies_to_move, ArmySet& armies_opponent, int nr_moves) {
+        int blue_to_move = nr_moves & 1;
+        bool result = blue_to_move ?
+            insert(board, armies_to_move, armies_opponent) :
+            insert(board, armies_opponent, armies_to_move);
+        return result;
     }
     bool find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
@@ -1283,46 +1328,74 @@ class BoardSet {
             find(board, armies_to_move, armies_opponent) :
             find(board, armies_opponent, armies_to_move);
     }
-    bool solve(ArmyId solution_id, Army const& solution) {
-        lock_guard<mutex> lock{exclude_};
-        if (solution_id_) return false;
-        solution_id_ = solution_id;
-        solution_ = solution;
-        return true;
-    }
-    ArmyId solution_id() const PURE { return solution_id_; }
-    Army const& solution() const PURE { return solution_; }
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
-    // Non copyable
-    BoardSet(BoardSet const&) = delete;
-    BoardSet& operator=(BoardSet const&) = delete;
     void print(ostream& os) const;
   private:
-    ArmyId capacity() const PURE { return capacity_; }
-    ArmyId next() {
-        lock_guard<mutex> lock{exclude_};
-        return from_ < top_ ? from_++ : 0;
-    }
-    ArmyId from() const PURE { return keep_ ? 1 : from_; }
     inline BoardSubSet& at(ArmyId id) PURE {
         return static_cast<BoardSubSet&>(subsets_[id]);
     }
-    NOINLINE void resize() RESTRICT;
-    void convert_red();
     BoardSubSet* begin() PURE { return &at(from()); }
     BoardSubSet* end()   PURE { return &at(top_); }
-    void down_size(ArmyId size) { size_ -= size; }
+};
 
-    size_t size_;
-    mutex exclude_;
-    Army solution_;
-    ArmyId solution_id_;
-    ArmyId capacity_;
-    ArmyId from_;
-    ArmyId top_;
-    BoardSubSetBase* subsets_;
-    bool const keep_;
+class BoardSetRed: public BoardSetBase {
+    friend class BoardSubSetRedRef;
+  public:
+    BoardSetRed(bool keep = false, ArmyId size = INITIAL_SIZE) :
+        BoardSetBase{keep, size} {}
+    ~BoardSetRed() {
+        for (auto& subset: *this)
+            subset.destroy();
+        // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+    }
+    void clear(ArmyId size = INITIAL_SIZE);
+    inline BoardSubSetRed const& cat(ArmyId id) const PURE {
+        return static_cast<BoardSubSetRed const&>(subsets_[id]);
+    }
+    inline BoardSubSetRed const& at(ArmyId id) const PURE { return cat(id); }
+    inline BoardSubSetRed const* begin() const PURE { return &cat(from()); }
+    inline BoardSubSetRed const* end()   const PURE { return &cat(top_); }
+    void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) {
+        if (CHECK) {
+            if (blue_id <= 0)
+                throw_logic("red_id <= 0");
+        }
+        BoardSubSetRed subset_red = builder.extract();
+
+        lock_guard<mutex> lock{exclude_};
+        if (blue_id >= top_) {
+            // Only in the multithreaded case can blue_id be different from top_
+            // if (blue_id != top_) throw_logic("Cannot grow more than 1");
+            while (blue_id > capacity_) resize();
+            while (blue_id > top_) at(top_++).zero();
+            ++top_;
+        }
+        at(blue_id) = subset_red;
+        size_ += subset_red.size();
+    }
+    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red);
+    bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE;
+    NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
+    NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
+  private:
+    // Inefficient for core use, only meant for simple initialization
+    bool _insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats);
+    bool _find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
+        if (CHECK) {
+            if (UNLIKELY(blue_id <= 0))
+                throw_logic("blue_id <= 0");
+            if (UNLIKELY(blue_id >= ARMYID_HIGHBIT))
+                throw_logic("blue_id is too large");
+        }
+        if (blue_id >= top_) return false;
+        return cat(blue_id)._find(red_id, symmetry);
+    }
+    inline BoardSubSetRed& at(ArmyId id) PURE {
+        return static_cast<BoardSubSetRed&>(subsets_[id]);
+    }
+    BoardSubSetRed* begin() PURE { return &at(from()); }
+    BoardSubSetRed* end()   PURE { return &at(top_); }
 };
 
 inline ostream& operator<<(ostream& os, BoardSet const& set) {
@@ -1332,17 +1405,15 @@ inline ostream& operator<<(ostream& os, BoardSet const& set) {
 
 class BoardSubSetRefBase {
   public:
-    ~BoardSubSetRefBase() { if (id_ && !keep_) subset_.destroy(); }
     ArmyId id() const PURE { return id_; }
 
     BoardSubSetRefBase(BoardSubSetRefBase const&) = delete;
     BoardSubSetRefBase& operator=(BoardSubSetRefBase const&) = delete;
     void keep() { id_ = 0; }
   protected:
-    static void down_size(BoardSet& set, ArmyId size) { set.down_size(size); }
+    static void down_size(BoardSetBase& set, ArmyId size) { set.down_size(size); }
 
-    BoardSubSetRefBase(BoardSet& set): BoardSubSetRefBase{set, set.next()} {}
-    BoardSubSetRefBase(BoardSet& set, ArmyId id): subset_{set.at(id)}, id_{id}, keep_{set.keep_} {}
+    BoardSubSetRefBase(BoardSubSetBase& subset, ArmyId id, bool keep): subset_{subset}, id_{id}, keep_{keep} {}
     BoardSubSetBase& subset_;
     ArmyId id_;
     bool const keep_;
@@ -1350,21 +1421,33 @@ class BoardSubSetRefBase {
 
 class BoardSubSetRef: public BoardSubSetRefBase {
   public:
-    BoardSubSetRef(BoardSet& set): BoardSubSetRefBase{set} {
-        if (id()) down_size(set, armies().size());
-    }
+    ~BoardSubSetRef() { if (id_ && !keep_) _armies().destroy(); }
+    BoardSubSetRef(BoardSet& set, ArmyId id): BoardSubSetRefBase{set.at(id), id, set.keep_} {
+    if (id) down_size(set, armies().size());
+}
+    BoardSubSetRef(BoardSet& set): BoardSubSetRef{set, set.next()} {}
     BoardSubSet const& armies() const PURE {
         return static_cast<BoardSubSet const&>(subset_);
+    }
+  private:
+    BoardSubSet& _armies() PURE {
+        return static_cast<BoardSubSet&>(subset_);
     }
 };
 
 class BoardSubSetRedRef: public BoardSubSetRefBase {
   public:
-    BoardSubSetRedRef(BoardSet& set): BoardSubSetRefBase{set} {
-        if (id()) down_size(set, armies().size());
-    }
+    ~BoardSubSetRedRef() { if (id_ && !keep_) _armies().destroy(); }
+    BoardSubSetRedRef(BoardSetRed& set, ArmyId id): BoardSubSetRefBase{set.at(id), id, set.keep_} {
+    if (id) down_size(set, armies().size());
+}
+    BoardSubSetRedRef(BoardSetRed& set): BoardSubSetRedRef{set, set.next()} { }
     BoardSubSetRed const& armies() const PURE {
         return static_cast<BoardSubSetRed const&>(subset_);
+    }
+  private:
+    BoardSubSetRed& _armies() PURE {
+        return static_cast<BoardSubSetRed&>(subset_);
     }
 };
 
@@ -1756,39 +1839,105 @@ void Board::do_move(FullMove const& move_) {
     do_move(move_.move());
 }
 
-StatisticsE make_all_moves_fast
-(BoardSet& boards_from,
+StatisticsE make_all_blue_moves_slow
+(BoardSetRed& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet& moved_armies,
  int nr_moves);
 
-StatisticsE make_all_moves_slow
-(BoardSet& boards_from,
+StatisticsE make_all_blue_moves_fast
+(BoardSetRed& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet& moved_armies,
  int nr_moves);
 
-inline StatisticsE make_all_moves
-(BoardSet& boards_from,
+inline StatisticsE make_all_blue_moves
+(BoardSetRed& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet& moved_armies,
  int nr_moves) {
     return verbose || statistics || hash_statistics ?
-        make_all_moves_slow(boards_from, boards_to,
-                               moving_armies, opponent_armies, moved_armies,
-                               nr_moves) :
-        make_all_moves_fast(boards_from, boards_to,
-                            moving_armies, opponent_armies, moved_armies,
-                            nr_moves);
+        make_all_blue_moves_slow(boards_from, boards_to,
+                                moving_armies, opponent_armies, moved_armies,
+                                nr_moves) :
+        make_all_blue_moves_fast(boards_from, boards_to,
+                                moving_armies, opponent_armies, moved_armies,
+                                nr_moves);
 }
 
-StatisticsE make_all_moves_backtrack_fast
+StatisticsE make_all_red_moves_slow
+(BoardSet& boards_from,
+ BoardSetRed& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves);
+
+StatisticsE make_all_red_moves_fast
+(BoardSet& boards_from,
+ BoardSetRed& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves);
+
+inline StatisticsE make_all_red_moves
+(BoardSet& boards_from,
+ BoardSetRed& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves) {
+    return verbose || statistics || hash_statistics ?
+        make_all_red_moves_slow(boards_from, boards_to,
+                                moving_armies, opponent_armies, moved_armies,
+                                nr_moves) :
+        make_all_red_moves_fast(boards_from, boards_to,
+                                moving_armies, opponent_armies, moved_armies,
+                                nr_moves);
+}
+
+StatisticsE make_all_blue_moves_backtrack_slow
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves);
+
+StatisticsE make_all_blue_moves_backtrack_fast
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves);
+
+inline StatisticsE make_all_blue_moves_backtrack
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves) {
+    return verbose || statistics || hash_statistics ?
+        make_all_blue_moves_backtrack_slow
+        (boards_from, boards_to,
+         moving_armies, opponent_armies, moved_armies,
+         nr_moves) :
+        make_all_blue_moves_backtrack_fast
+        (boards_from, boards_to,
+         moving_armies, opponent_armies, moved_armies,
+         nr_moves);
+}
+
+StatisticsE make_all_red_moves_backtrack_slow
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -1799,7 +1948,7 @@ StatisticsE make_all_moves_backtrack_fast
  BoardTable<uint8_t> const& red_backtrack_symmetric,
  int nr_moves);
 
-StatisticsE make_all_moves_backtrack_slow
+StatisticsE make_all_red_moves_backtrack_fast
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -1810,7 +1959,7 @@ StatisticsE make_all_moves_backtrack_slow
  BoardTable<uint8_t> const& red_backtrack_symmetric,
  int nr_moves);
 
-inline StatisticsE make_all_moves_backtrack
+inline StatisticsE make_all_red_moves_backtrack
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -1821,12 +1970,12 @@ inline StatisticsE make_all_moves_backtrack
  BoardTable<uint8_t> const& red_backtrack_symmetric,
  int nr_moves) {
     return verbose || statistics || hash_statistics ?
-        make_all_moves_backtrack_slow
+        make_all_red_moves_backtrack_slow
         (boards_from, boards_to,
          moving_armies, opponent_armies, moved_armies,
          solution_moves, red_backtrack, red_backtrack_symmetric,
          nr_moves) :
-        make_all_moves_backtrack_fast
+        make_all_red_moves_backtrack_fast
         (boards_from, boards_to,
          moving_armies, opponent_armies, moved_armies,
          solution_moves, red_backtrack, red_backtrack_symmetric,
