@@ -785,7 +785,7 @@ void Tables::init() {
     for (uint y=0; y<Y; ++y) {
         for (uint x=0; x<X; ++x) {
             Coord pos{x, y};
-            array<Coord, 8> slide_targets, jumpees, jump_targets;
+            Offsets slide_targets, jumpees, jump_targets;
             int jump  = 0;
             int slide = 0;
             for (uint r=0; r<RULES; ++r) {
@@ -849,13 +849,14 @@ void Tables::init() {
     for (auto const& pos: blue)
         if (base_red_[pos]) throw_logic("Red and blue overlap");
 
+    // Set up edge, distance and parity tables
     for (uint y=0; y < Y; ++y) {
         Norm d = infinity_;
 #if !__BMI2__
         Parity y_parity = y%2;
 #endif // !__BMI2__
         for (uint x=0; x < X; ++x) {
-            auto pos = Coord{x, y};
+            Coord const pos{x, y};
             for (uint i=0; i<ARMY; ++i) {
                 uint dy = (Y-1)+y-red[i].y();
                 uint dx = (X-1)+x-red[i].x();
@@ -877,6 +878,39 @@ void Tables::init() {
     parity_count_.fill(0);
     for (auto const& r: red)
         ++parity_count_[parity(r)];
+
+    BoardTable<uint8_t> seen;
+    seen.fill(0);
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            Coord const pos{x, y};
+            nr_slide_jumps_red_[pos] = 0;
+            if (base_red_[pos]) continue;
+
+            auto const pos_parity = parity(pos);
+            // We are outside the red base
+            auto steps1 = slide_targets(pos);
+            for (uint r = 0; r < RULES; ++r, steps1.next()) {
+                auto const target1 = steps1.current();
+                if (target1 == pos) break;
+                if (base_red_[target1]) continue;
+                auto steps2 = slide_targets(target1);
+                for (uint r = 0; r < RULES; ++r, steps2.next()) {
+                    auto const target2 = steps2.current();
+                    if (target2 == target1) break;
+                    if (!base_red_[target2]) continue;
+                    if (parity(target2) != pos_parity) continue;
+                    if (seen[target2]) continue;
+                    seen[target2] = 1;
+                    if (nr_slide_jumps_red_[pos] >= RULES)
+                        throw_logic("Too many slide_jumps_red");
+                    slide_jumps_red_[pos][nr_slide_jumps_red_[pos]++] = target2;
+                }
+            }
+            for (uint i=0; i < nr_slide_jumps_red_[pos]; ++i)
+                seen[slide_jumps_red_[pos][i]] = 0;
+        }
+    }
 
     min_nr_moves_ = start_.min_nr_moves();
 }
@@ -928,6 +962,16 @@ void Tables::print_parity(ostream& os) const {
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(parity(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_nr_slide_jumps_red(ostream& os) const {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            Coord const pos{x, y};
+            os << " " << static_cast<uint>(nr_slide_jumps_red(pos));
         }
         os << "\n";
     }
@@ -2194,6 +2238,8 @@ void my_main(int argc, char const* const* argv) {
         tables.print_blue_parity_count();
         cout << "Red Base parity count:\n";
         tables.print_red_parity_count();
+        cout << "Number of red slides blue jumps to red base:\n";
+        tables.print_nr_slide_jumps_red();
     }
 
     int needed_moves = tables.min_nr_moves();

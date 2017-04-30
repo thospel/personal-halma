@@ -193,6 +193,9 @@ int min_slides(ParityCount const& parity_count) {
 }
 
 class Coords;
+class Coord;
+using Offsets = array<Coord, 8>;
+
 class Coord {
     friend class Coords;
   public:
@@ -223,6 +226,8 @@ class Coord {
     inline Coords slide_targets() const PURE;
     inline Coords jumpees() const PURE;
     inline Coords jump_targets() const PURE;
+    inline uint8_t nr_slide_jumps_red() const PURE;
+    inline Offsets const& slide_jumps_red() const PURE;
 
     inline uint x() const PURE { return pos_ % MAX_X; }
     inline uint y() const PURE { return pos_ / MAX_X; }
@@ -276,7 +281,7 @@ class Coords {
         return Coord{static_cast<Coord::value_type>(coords_)};
     }
     void next() { coords_ >>= 8; }
-    void set(array<Coord, 8>& targets) {
+    void set(Offsets& targets) {
         coords_ = 0;
         for (int i=7; i>=0; --i)
             coords_ = coords_ << 8 | targets[i]._pos();
@@ -1484,6 +1489,9 @@ class Image {
     inline bool blue_jumpable(Coord const& jumpee, Coord const& target) const PURE {
         return ((get(target) << 2) & get(jumpee)) != 0;
     }
+    inline bool red_jumpable(Coord const& jumpee, Coord const& target) const PURE {
+        return ((get(target) + 3) & get(jumpee) & 4) != 0;
+    }
     NOINLINE string str() const PURE;
     NOINLINE string str(Coord from, Coord to, Color c);
     Image& operator=(Image const& image) {
@@ -1672,6 +1680,12 @@ class Tables {
     inline Coords jump_targets(Coord const& pos) const FUNCTIONAL {
         return jump_targets_[pos];
     }
+    inline uint8_t nr_slide_jumps_red(Coord const& pos) const FUNCTIONAL {
+        return nr_slide_jumps_red_[pos];
+    }
+    inline Offsets const& slide_jumps_red(Coord const& pos) const FUNCTIONAL {
+        return slide_jumps_red_[pos];
+    }
     inline ParityCount const& parity_count() const FUNCTIONAL {
         return parity_count_;
     }
@@ -1712,6 +1726,10 @@ class Tables {
     void print_red_parity_count() const {
         print_red_parity_count(cout);
     }
+    void print_nr_slide_jumps_red(ostream& os) const;
+    void print_nr_slide_jumps_red() const {
+        print_nr_slide_jumps_red(cout);
+    }
   private:
     BoardTable<Coords>  slide_targets_;
     BoardTable<Coords>  jumpees_;
@@ -1720,6 +1738,8 @@ class Tables {
     BoardTable<uint8_t> base_blue_;
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
+    BoardTable<uint8_t> nr_slide_jumps_red_;
+    BoardTable<Offsets> slide_jumps_red_;
 #if !__BMI2__
     BoardTable<Parity> parity_;
 #endif // !__BMI2__
@@ -1763,6 +1783,13 @@ Coords Coord::jumpees() const {
 
 Coords Coord::jump_targets() const {
     return tables.jump_targets(*this);
+}
+
+uint8_t Coord::nr_slide_jumps_red() const {
+    return tables.nr_slide_jumps_red(*this);
+}
+Offsets const& Coord::slide_jumps_red() const {
+    return tables.slide_jumps_red(*this);
 }
 
 ArmyId ArmySet::insert(Army const& army, Statistics& stats) RESTRICT {

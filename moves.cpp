@@ -110,7 +110,7 @@ Statistics NAME(uint thid,
 #endif  // BLUE_TO_MOVE
 
         Nbits Ndistance_red = tables.Ninfinity();
-        int off_base_from   = ARMY;
+        int off_base_from = ARMY;
         int edge_count_from = 0;
         ParityCount parity_blue = tables.parity_count();
         for (auto const& b: bZ) {
@@ -131,6 +131,8 @@ Statistics NAME(uint thid,
         }};
 #endif // BLUE_TO_MOVE
         int const slides = min_slides(parity_blue);
+        // jump_only indicates that all blue moves must now be jumps to base
+        bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
 #if !BLUE_TO_MOVE && !RED_NORMAL
         BoardSubSet subset_to;
@@ -190,12 +192,18 @@ Statistics NAME(uint thid,
                 continue;
             }
 
-            // jump_only indicates that all blue moves must now be jumps
-            bool const jump_only = available_moves <= off_base_from*2 && !slides;
 #if BLUE_TO_MOVE
             int const red_symmetry = red.symmetry();
             Army const& army           = blue;
             Army const& army_symmetric = symmetry ? bZ : bZ_symmetric;
+
+            array<Coord, MAX_X*MAX_Y/4+1> reachable;
+            uint red_empty = 1;
+            if (jump_only) {
+                red_empty = off_base_from -1;
+                for (auto const& r: red)
+                    red_empty -= r.base_red();
+            }
 #else  // BLUE_TO_MOVE
             Army const& army           = red;
             Army const  army_symmetric{red, SYMMETRIC};
@@ -217,24 +225,20 @@ Statistics NAME(uint thid,
                     ++balance_count_from[pos.parity()];
             }
 
-#endif // BLUE_TO_MOVE
-
-            ArmyPos armyE, armyESymmetric;
-#if BLUE_TO_MOVE
-            array<Coord, MAX_X*MAX_Y/4+1> reachable;
-#else  // BLUE_TO_MOVE
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
             if (jump_only) {
+                // Find RED/EMPTY in the red base
                 red_top_from = reachable.size()-1;
                 for (auto const& r: tables.army_red()) {
                     reachable[red_top_from] = r;
-                    red_top_from -= image.get(r) == EMPTY;
+                    red_top_from -= image.get(r) == (BLUE_TO_MOVE ? RED : EMPTY);
                 }
             }
 #endif // BLUE_TO_MOVE
 
             // Finally, finally we are going to do the actual moves
+            ArmyPos armyE, armyESymmetric;
             for (uint a=0; a<ARMY; ++a) {
                 armyE.copy(army, a);
                 if (CHECK) armyE.check(__FILE__, __LINE__);
@@ -432,53 +436,122 @@ Statistics NAME(uint thid,
                             }
                             continue;
                         }
+#if BLUE_TO_MOVE
+                        if (jump_only && red_empty == 0) {
+                            image.set(soldier, EMPTY);
+                            image.set(val, BLUE);
+                            // logger << "Full:\n" << image;
+                            array<Coord, MAX_X*MAX_Y/4+1> reachable;
+                            uint nr_reachable = 0;
+                            for (uint i=0; i<a; ++i) {
+                                // army == blue
+                                auto b = army[i];
+                                reachable[nr_reachable] = b;
+                                nr_reachable += 1-b.base_red();
+                            }
+                            for (uint i=a+1; i<ARMY; ++i) {
+                                // army == blue
+                                auto b = army[i];
+                                reachable[nr_reachable] = b;
+                                nr_reachable += 1-b.base_red();
+                            }
+
+                            for (uint i = 0; i < nr_reachable; ++i) {
+                                auto jumpees      = reachable[i].jumpees();
+                                auto jump_targets = reachable[i].jump_targets();
+                                for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                                    auto const jumpee = jumpees.current();
+                                    auto const target = jump_targets.current();
+                                    if (!image.red_jumpable(jumpee, target))
+                                        continue;
+                                    Color c = image.get(target);
+                                    if (c == RED) {
+                                        if (target.base_red()) {
+                                            // logger << "Reach:\n" << image << flush;
+                                            goto ACCEPTABLE;
+                                        }
+                                        continue;
+                                    }
+
+                                    image.set(target, COLORS);
+                                    reachable[nr_reachable++] = target;
+                                }
+                            }
+                            for (uint i = 0; i < nr_reachable; ++i) {
+                                auto pos = reachable[i];
+                                uint n = pos.nr_slide_jumps_red();
+                                for (uint j=0; j<n; ++j) {
+                                    auto slider = pos.slide_jumps_red()[j];
+                                    if (image.get(slider) == RED) {
+                                        // logger << "Slide:\n" << image << flush;
+                                        goto ACCEPTABLE;
+                                    }
+                                }
+                                image.set(pos, EMPTY);
+                            }
+                            // logger << "Fail:\n" << image << flush;
+                            image.set(val, EMPTY);
+                            image.set(soldier, BLUE);
+                            if (VERBOSE) {
+                                logger << "   Move " << soldier << " to " << val << "\n";
+                                logger << "   Red base is full and red cannot move away fast enough\n";
+                                logger.flush();
+                            }
+                            continue;
+                          ACCEPTABLE:
+                            for (uint i = 0; i < nr_reachable; ++i)
+                                image.set(reachable[i], EMPTY);
+                            image.set(val, EMPTY);
+                            image.set(soldier, BLUE);
+                        }
+#else  // BLUE_TO_MOVE
+                        if (jump_only) {
+                            image.set(soldier, EMPTY);
+                            uint r_top = red_top;
+                            for (uint i = reachable.size()-1; i > r_top; --i)
+                                image.set(reachable[i], COLORS);
+                            // Setting pos val must be able to override COLORS
+                            image.set(val, RED);
+                            // logger << "Start mass backtrack:\n" << image;
+                            for (uint i = reachable.size()-1; i > r_top; --i) {
+                                auto jumpees      = reachable[i].jumpees();
+                                auto jump_targets = reachable[i].jump_targets();
+                                for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                                    auto const jumpee = jumpees.current();
+                                    auto const target = jump_targets.current();
+                                    if (!image.blue_jumpable(jumpee, target))
+                                        continue;
+                                    Color c = image.get(target);
+                                    if (c == BLUE) {
+                                        if (!target.base_red()) goto ACCEPTABLE;
+                                        continue;
+                                    }
+                                    image.set(target, COLORS);
+                                    reachable[r_top--] = target;
+                                }
+                            }
+                            // logger << "Failed mass backtrack:\n" << image;
+                            for (uint i = reachable.size()-1; i > r_top; --i)
+                                image.set(reachable[i], EMPTY);
+                            image.set(val, EMPTY);
+                            image.set(soldier, RED);
+                            if (VERBOSE) {
+                                logger << "   Move " << soldier << " to " << val << "\n";
+                                logger << "   Prune blue cannot jump to target\n";
+                                logger.flush();
+                            }
+                            continue;
+                          ACCEPTABLE:
+                            // logger << "Succeeded mass backtrack:\n" << image;
+                            for (uint i = reachable.size()-1; i > r_top; --i)
+                                image.set(reachable[i], EMPTY);
+                            image.set(val, EMPTY);
+                            image.set(soldier, RED);
+                        }
+#endif // BLUE_TO_MOVE
                     }
 #if BLUE_TO_MOVE
                   SOLUTION:
-#else  // BLUE_TO_MOVE
-                    if (jump_only) {
-                        image.set(soldier, EMPTY);
-                        uint r_top = red_top;
-                        for (uint i = reachable.size()-1; i > r_top; --i)
-                            image.set(reachable[i], COLORS);
-                        // Setting pos val must be able to override COLORS
-                        image.set(val, RED);
-                        // logger << "Start mass backtrack:\n" << image;
-                        for (uint i = reachable.size()-1; i > r_top; --i) {
-                            auto jumpees      = reachable[i].jumpees();
-                            auto jump_targets = reachable[i].jump_targets();
-                            for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
-                                auto const jumpee = jumpees.current();
-                                auto const target = jump_targets.current();
-                                if (!image.blue_jumpable(jumpee, target))
-                                    continue;
-                                Color c = image.get(target);
-                                if (c == BLUE) {
-                                    if (!target.base_red()) goto ACCEPTABLE;
-                                    continue;
-                                }
-                                image.set(target, COLORS);
-                                reachable[r_top--] = target;
-                            }
-                        }
-                        // logger << "Failed mass backtrack:\n" << image;
-                        for (uint i = reachable.size()-1; i > r_top; --i)
-                            image.set(reachable[i], EMPTY);
-                        image.set(val, EMPTY);
-                        image.set(soldier, RED);
-                        if (VERBOSE) {
-                            logger << "   Move " << soldier << " to " << val << "\n";
-                            logger << "   Prune blue cannot jump to target\n";
-                            logger.flush();
-                        }
-                        continue;
-                      ACCEPTABLE:
-                        // logger << "Succeeded mass backtrack:\n" << image;
-                        for (uint i = reachable.size()-1; i > r_top; --i)
-                            image.set(reachable[i], EMPTY);
-                        image.set(val, EMPTY);
-                        image.set(soldier, RED);
-                    }
 #endif // BLUE_TO_MOVE
                     armyE.store(val);
                     // logger << "   Final Set pos " << pos << armyE[pos] << "\n";
