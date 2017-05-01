@@ -80,6 +80,8 @@ extern Align NIBBLE_RIGHT;
 extern bool statistics;
 extern bool hash_statistics;
 extern bool verbose;
+extern bool testq;
+extern int  testQ;
 
 #define STATISTICS	(SLOW && UNLIKELY(statistics))
 #define HASH_STATISTICS (SLOW && UNLIKELY(hash_statistics))
@@ -1498,6 +1500,7 @@ class Image {
         std::copy(image.begin(), image.end(), begin());
         return *this;
     }
+    void check(const char* file, int line) const;
   private:
     Color* begin() FUNCTIONAL { return image_.begin(); }
     Color* end  () PURE       { return image_.end(); }

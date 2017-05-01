@@ -33,6 +33,10 @@ bool verbose = false;
 bool attempt = true;
 char const* sample_subset_red = nullptr;
 
+// Flags without specific meaning. Used in experiments
+bool testq = false;
+int  testQ = 0;
+
 // 0 means let C++ decide
 uint nr_threads = 0;
 
@@ -602,6 +606,31 @@ string Image::str(Coord from, Coord to, Color color) {
     return string;
 }
 
+void Image::check(const char* file, int line) const {
+    uint blue = 0;
+    uint red  = 0;
+    for (uint y=0; y<Y; ++y)
+        for (uint x=0; x<X; ++x) {
+            Coord const pos{y, x};
+            switch(get(pos)) {
+                case BLUE:
+                  ++blue;
+                  break;
+                case RED:
+                  ++red;
+                  break;
+                case EMPTY:
+                  break;
+                default:
+                  throw_logic("\n" + str() + "Unexpected Image color", file, line);
+            }
+        }
+    if (blue != ARMY)
+        throw_logic("\n" + str() + "Unexpected Image BLUE count", file, line);
+    if (red  != ARMY)
+        throw_logic("\n" + str() + "Unexpected Image RED count", file, line);
+}
+
 void ArmySet::print(ostream& os) const {
     os << "[";
     if (values_) {
@@ -700,6 +729,9 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
 FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) : FullMove{} {
     bool blue_diff = board_from.blue() !=  board_to.blue();
     bool red_diff  = board_from.red()  !=  board_to.red();
+    // Temporary workaround until C++17 will support overallocated classes
+    //bool blue_diff = 0 == memcmp(&board_from.blue(), &board_to.blue(), sizeof(Army));
+    //bool red_diff  = 0 == memcmp(&board_from.red(),  &board_to.red(), sizeof(Army));
     if (blue_diff && red_diff) throw_logic("Both players move");
 
     if (blue_diff) {
@@ -2112,26 +2144,28 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 }
 
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpeEFvR:Ax:y:r:a:T", argv);
+    GetOpt options("b:B:t:sHSjpqQeEFvR:Ax:y:r:a:T", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
     while (options.next())
         switch (options.option()) {
-            case 'b': balance       = atoi(options.arg()); break;
-            case 'B': balance_delay = atoi(options.arg()); break;
-            case 'p': replay = true; break;
-            case 's': prune_slide = true; break;
-            case 'H': hash_statistics  = true; break;
-            case 'S': statistics  = true; break;
-            case 'v': verbose     = true; break;
-            case 'j': prune_jump  = true; break;
             case 'A': attempt     = false; break;
-            case 'e': example     =  1; break;
+            case 'B': balance_delay = atoi(options.arg()); break;
             case 'E': example     = -1; break;
             case 'F': FATAL       = true; break;
-            case 'T': show_tables = true; break;
+            case 'H': hash_statistics  = true; break;
+            case 'Q': testQ       = atoi(options.arg()); break;
             case 'R': sample_subset_red = options.arg(); break;
+            case 'S': statistics  = true; break;
+            case 'T': show_tables = true; break;
+            case 'b': balance     = atoi(options.arg()); break;
+            case 'e': example     =  1; break;
+            case 'j': prune_jump  = true; break;
+            case 'p': replay      = true; break;
+            case 'q': testq       = true; break;
+            case 's': prune_slide = true; break;
+            case 'v': verbose     = true; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)

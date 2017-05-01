@@ -228,11 +228,11 @@ Statistics NAME(uint thid,
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
             if (jump_only) {
-                // Find RED/EMPTY in the red base
+                // Find EMPTY in the red base
                 red_top_from = reachable.size()-1;
                 for (auto const& r: tables.army_red()) {
                     reachable[red_top_from] = r;
-                    red_top_from -= image.get(r) == (BLUE_TO_MOVE ? RED : EMPTY);
+                    red_top_from -= image.get(r) == EMPTY;
                 }
             }
 #endif // BLUE_TO_MOVE
@@ -437,7 +437,7 @@ Statistics NAME(uint thid,
                             continue;
                         }
 #if BLUE_TO_MOVE
-                        if (jump_only && red_empty == 0) {
+                        if (red_empty == 0 && jump_only) {
                             image.set(soldier, EMPTY);
                             image.set(val, BLUE);
                             // logger << "Full:\n" << image;
@@ -455,6 +455,7 @@ Statistics NAME(uint thid,
                                 reachable[nr_reachable] = b;
                                 nr_reachable += 1-b.base_red();
                             }
+                            uint blues = nr_reachable;
 
                             for (uint i = 0; i < nr_reachable; ++i) {
                                 auto jumpees      = reachable[i].jumpees();
@@ -487,9 +488,10 @@ Statistics NAME(uint thid,
                                         goto ACCEPTABLE;
                                     }
                                 }
-                                image.set(pos, EMPTY);
                             }
                             // logger << "Fail:\n" << image << flush;
+                            for (uint i = blues; i < nr_reachable; ++i)
+                                image.set(reachable[i], EMPTY);
                             image.set(val, EMPTY);
                             image.set(soldier, BLUE);
                             if (VERBOSE) {
@@ -499,7 +501,7 @@ Statistics NAME(uint thid,
                             }
                             continue;
                           ACCEPTABLE:
-                            for (uint i = 0; i < nr_reachable; ++i)
+                            for (uint i = blues; i < nr_reachable; ++i)
                                 image.set(reachable[i], EMPTY);
                             image.set(val, EMPTY);
                             image.set(soldier, BLUE);
@@ -584,8 +586,14 @@ Statistics NAME(uint thid,
                         }
                     }
 #endif // BLUE_TO_MOVE
+                    else if (VERBOSE) {
+                        logger << "   Move " << soldier << " to " << val << "\n";
+                        logger << "   Duplicate\n";
+                        logger.flush();
+                    }
                 }
             }
+            if (CHECK) image.check(__FILE__, __LINE__);
         }
 #if !BLUE_TO_MOVE
         if (edge_count_from) stats.edge(subset_to.size());
