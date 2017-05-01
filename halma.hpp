@@ -148,9 +148,10 @@ uint64_t murmur_mix(uint64_t v) {
 
 inline uint64_t hash64(uint64_t v) FUNCTIONAL;
 uint64_t hash64(uint64_t v) {
-    return murmur_mix(murmur_mix(v));
+    // return murmur_mix(murmur_mix(v));
     // return murmur_mix(murmur_mix(murmur_mix(v)));
     // return XXHash64::hash(reinterpret_cast<void const *>(&v), sizeof(v), SEED);
+    return v * 7;
 }
 
 using Norm = uint8_t;
@@ -714,8 +715,7 @@ class Statistics {
         armyset_size_ = size;
     }
     inline void armyset_try() {
-        if (!STATISTICS) return;
-        ++armyset_tries_;
+        if (STATISTICS || HASH_STATISTICS) ++armyset_tries_;
     }
     inline void armyset_untry(Counter del) {
         armyset_tries_ -= del;
@@ -725,8 +725,7 @@ class Statistics {
         boardset_size_ = size;
     }
     inline void boardset_try() {
-        if (!STATISTICS) return;
-        ++boardset_tries_;
+        if (STATISTICS || HASH_STATISTICS) ++boardset_tries_;
     }
     inline void boardset_untry(Counter del) {
         boardset_tries_ -= del;
@@ -753,19 +752,15 @@ class Statistics {
     Counter boardset_probes() const PURE { return boardset_probes_; }
 
     Statistics& operator+=(Statistics const& stats) {
-        if (STATISTICS) {
-            late_prunes_    += stats.late_prunes();
-            armyset_tries_  += stats.armyset_tries();
-            boardset_tries_ += stats.boardset_tries();
-            edge_count_     += stats.edges();
-        }
-        if (HASH_STATISTICS) {
-            armyset_probes_	+= stats.armyset_probes_;
-            armyset_immediate_	+= stats.armyset_immediate_;
-            boardset_probes_	+= stats.boardset_probes_;
-            boardset_immediate_	+= stats.boardset_immediate_;
-        }
-        return *this;
+      late_prunes_	  += stats.late_prunes();
+      armyset_tries_	  += stats.armyset_tries();
+      boardset_tries_	  += stats.boardset_tries();
+      edge_count_	  += stats.edges();
+      armyset_probes_	  += stats.armyset_probes_;
+      armyset_immediate_  += stats.armyset_immediate_;
+      boardset_probes_	  += stats.boardset_probes_;
+      boardset_immediate_ += stats.boardset_immediate_;
+      return *this;
     }
 
   private:
