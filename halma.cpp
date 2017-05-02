@@ -1,4 +1,4 @@
-#define SLOW 0
+#define SLOW 1
 #define ONCE 1
 #include "halma.hpp"
 
@@ -225,8 +225,17 @@ ostream& operator<<(ostream& os, ArmyPos const& army) {
     return os;
 }
 
+void Statistics::_largest_subset_size(BoardSet const& boards) {
+    for (auto const& subset: boards)
+        subset_size(subset.size());
+}
+
 void StatisticsE::print(ostream& os) const {
+    if (statistics || hash_statistics)
+        os << "\t" << time_string() << "\n";
+    
     if (statistics) {
+        os << "\tLargest subset: " << largest_subset() << "\n";
         os << "\tArmy inserts:  ";
         if (armyset_tries())
             os << setw(3) << armyset_size()*100 / armyset_tries() << "%";
@@ -249,6 +258,7 @@ void StatisticsE::print(ostream& os) const {
         os << "\t" << edges() << " / " << boardset_size() << " " << "\n";
 
         os << "\tMemory: " << allocated()/ 1000000  << " plain + " << mmapped()/1000000 << " mmapped (" << mmaps() << " mmaps) = " << (allocated() + mmapped()) / 1000000 << " MB\n";
+        os << "\tMlocks: " << mlocked()/ 1000000  << " MB in " << mlocks() << " ranges\n";
     }
     if (hash_statistics) {
         os << "\tArmy immediate:";
@@ -467,8 +477,8 @@ BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId size): army_list_{nullptr} {
     real_allocated_ = size;
     mask_ = size-1;
     left_ = capacity();
-    callocate(armies_, size);
-    allocate(army_list_, left_);
+    callocate(armies_, size, ALLOC_LOCK);
+    allocate(army_list_, left_, ALLOC_LOCK);
     // logger << "Create BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << size << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ")\n" << flush;
 }
 
@@ -479,13 +489,13 @@ void BoardSubSetRedBuilder::resize() {
     ArmyId *armies, *army_list;
     ArmyId nr_elems = size();
     if (new_allocated > real_allocated_) {
-        creallocate(armies_, real_allocated_, new_allocated);
+        creallocate(armies_, real_allocated_, new_allocated, ALLOC_LOCK);
         // logger << "Resize BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies) << " (size " << new_allocated << ")\n" << flush;
         armies = armies_;
 
         ArmyId new_left = FACTOR(new_allocated);
         army_list_ -= nr_elems;
-        army_list = reallocate(army_list_, FACTOR(real_allocated_), new_left, nr_elems);
+        army_list = reallocate_partial(army_list_, FACTOR(real_allocated_), new_left, nr_elems, ALLOC_LOCK);
         // logger << "Resize BoardSubSetRedBuilder list " << static_cast<void const *>(army_list_) << " (size " << FACTOR(real_allocated_) << ") -> " << static_cast<void const *>(army_list) << " (size " << new_left << ")\n" << flush;
         army_list_ = army_list + nr_elems;
         real_allocated_ = new_allocated;
@@ -1037,8 +1047,8 @@ void ArmySet::_init(size_t size) {
         throw(overflow_error("ArmySet size too large"));
     limit_ = min(FACTOR(size), static_cast<ArmyId>(alimit));
 
-    allocate(armies_, armies_size_);
-    callocate(values_, size);
+    allocate(armies_, armies_size_, memory_flags_);
+    callocate(values_, size, memory_flags_);
     // logger << "New value  " << static_cast<void const *>(values_) << "\n";
     // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
 }
@@ -1085,7 +1095,7 @@ void ArmySet::resize() {
         // always so much smaller than red that it doesn't matter
         if (alimit >= ARMYID_HIGHBIT)
             throw(overflow_error("ArmyId grew too large"));
-        reallocate(armies_, armies_size_, new_size);
+        reallocate(armies_, armies_size_, new_size, memory_flags_);
         armies_size_ = new_size;
         armies_limit = alimit;
     }
@@ -1097,7 +1107,7 @@ void ArmySet::resize() {
         if (new_size-1 > ARMYID_MAX)
             throw(overflow_error("Army hash grew too large"));
 
-        creallocate(values_, old_size, new_size);
+        creallocate(values_, old_size, new_size, memory_flags_);
         mask_ = new_size-1;
         auto values = values_;
         auto mask   = mask_;
@@ -1489,9 +1499,12 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Allocated<br/>(MB)</th>\n"
         "        <th>Mmapped<br/>(MB)</th>\n"
         "        <th>Mmaps</th>\n"
+        "        <th>Mlocked<br/>(MB)</th>\n"
+        "        <th>Mlocks</th>\n"
         "        <th>Boards per<br/>blue army</th>\n";
     if (statistics) {
         out_ <<
+            "        <th>Largest<br/>subset</th>\n"
             "        <th>Late<br/>prunes</th>\n"
             "        <th>Late<br/>prune<br/>ratio</th>\n"
             "        <th>Army inserts</th>\n"
@@ -1524,9 +1537,12 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <td class='allocated'>" << st.allocated() / 1000000 << "</td>\n"
             "        <td class='mmapped'>" << st.mmapped() / 1000000 << "</td>\n"
             "        <td class='mmaps'>" << st.mmaps() << "</td>\n"
+            "        <td class='mlocked'>" << st.mlocked() / 1000000 << "</td>\n"
+            "        <td class='mlocks'>" << st.mlocks() << "</td>\n"
             "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n";
         if (statistics) {
             out_ <<
+                "        <td>" << st.largest_subset() << "</td>\n"
                 "        <td>" << st.late_prunes() << "</td>\n"
                 "        <td>" << st.late_prunes() * 100 / old_boards << "%</td>\n"
                 "        <td>" << st.armyset_size() << " / " << st.armyset_tries() << "</td>\n"
@@ -1827,6 +1843,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
 
         bool blue_to_move = nr_moves & 1;
         if (blue_to_move) {
+            lock_guard<ArmySet> lock{moved_armies};
             stats_list.emplace_back
                 (make_all_blue_moves
                  (boards_red, boards_blue,
@@ -1841,8 +1858,8 @@ int solve(Board const& board, int nr_moves, Army& red_army,
                   nr_moves));
             boards_blue.clear();
         }
-        moved_armies.drop_hash();
         moving_armies.clear();
+        moved_armies.drop_hash();
 
         if (is_terminated()) {
             auto stop_solve = chrono::steady_clock::now();
@@ -1948,22 +1965,26 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         auto& boards_to   = *board_set[i+1];
 
         army_set.emplace_back(new ArmySet);
-        auto const& moving_armies   = *army_set[i];
+        auto& moving_armies         = *army_set[i];
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies          = *army_set[i+2];
 
         bool blue_to_move = nr_moves & 1;
-        stats_list.emplace_back
-            (blue_to_move ?
-             make_all_blue_moves_backtrack
-             (boards_from, boards_to,
-              moving_armies, opponent_armies, moved_armies,
-              nr_moves) :
-             make_all_red_moves_backtrack
-             (boards_from, boards_to,
-              moving_armies, opponent_armies, moved_armies,
-              solution_moves, red_backtrack, red_backtrack_symmetric,
-              nr_moves));
+        if (blue_to_move) {
+            lock_guard<ArmySet> lock{moved_armies};
+            stats_list.emplace_back
+                (make_all_blue_moves_backtrack
+                 (boards_from, boards_to,
+                  moving_armies, opponent_armies, moved_armies,
+                  nr_moves));
+        } else {
+            stats_list.emplace_back
+                (make_all_red_moves_backtrack
+                 (boards_from, boards_to,
+                  moving_armies, opponent_armies, moved_armies,
+                  solution_moves, red_backtrack, red_backtrack_symmetric,
+                  nr_moves));
+        }
 
         if (is_terminated()) {
             auto stop_backtrack = chrono::steady_clock::now();
@@ -1983,6 +2004,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         }
         cout << stats << flush;
     }
+
     auto stop_backtrack = chrono::steady_clock::now();
     duration = chrono::duration_cast<Sec>(stop_backtrack-start_backtrack).count();
     cout << setw(6) << duration << " s, backtrack tables built" << endl;
@@ -2235,6 +2257,9 @@ void my_main(int argc, char const* const* argv) {
     cout << "Commit: " << VCS_COMMIT << "\n";
     auto start_board = tables.start();
     if (show_tables) {
+        // g++ sizeof mutex=40, alignof mutex = 8
+        //cout << "Sizeof(mutex)   =" << setw(3) << sizeof(mutex) <<
+        //    " algnment " << setw(2) << alignof(mutex) << "\n";
         cout << "Sizeof(Coord)   =" << setw(3) << sizeof(Coord) <<
             " algnment " << setw(2) << alignof(Coord) << "\n";
         cout << "Sizeof(Align)   =" << setw(3) << sizeof(Align) <<
@@ -2329,12 +2354,12 @@ int main(int argc, char const* const* argv) {
         init_system();
 
         my_main(argc, argv);
-        cout << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << ")\n";
+        cout << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << "), mlocks " << total_mlocked() << "(" << total_mlocks() << ")\n";
         if (is_terminated())
             cout << "Terminated by signal" << endl;
     } catch(exception& e) {
         cerr << "Exception: " << e.what() << endl;
-        cerr << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << ")\n";
+        cerr << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << ") " << total_mlocked() << "(" << total_mlocks() << ")\n";
         exit(EXIT_FAILURE);
     }
     exit(EXIT_SUCCESS);

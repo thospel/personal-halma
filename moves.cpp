@@ -597,9 +597,9 @@ Statistics NAME(uint thid,
         }
 #if !BLUE_TO_MOVE
         if (edge_count_from) stats.edge(subset_to.size());
+        if (STATISTICS) stats.subset_size(subset_to.size());
         boards_to.insert(blue_id, subset_to);
 #endif // !BLUE_TO_MOVE
-
     }
 
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
@@ -670,6 +670,9 @@ StatisticsE ALL_NAME(
     for (auto& result: results) stats += result.get();
     stats.armyset_size(moved_armies.size());
     stats.boardset_size(boards_to.size());
+#if BLUE_TO_MOVE
+    stats.largest_subset_size(boards_to);
+#endif // BLUE_TO_MOVE
     stats.stop();
 
     return stats;

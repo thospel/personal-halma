@@ -1330,10 +1330,10 @@ Minimum possible number of moves: 45
    637 s, set 22 done, 777721999 boards /   824953 armies     942 (  7038 MB)
   5871 s, set 21 done,4478967305 boards / 65849809 armies    5429 ( 20389 MB)
   2427 s, set 20 done,2847157125 boards /  1272527 armies    2237 ( 25165 MB)
- 25228 s, set 19 done,14414743927 boards /320733931 armies   11327 ( 72101 MB)
+ 25228 s, set 19 done,14414743927 boards/320733931 armies   11327 ( 72101 MB)
   8227 s, set 18 done,8130344335 boards /  1485832 armies    5471 ( 78010 MB)
-257952 s, set 17 done,32624681402 boards /1409367944 armies   21957 (193625 MB)
- 29207 s, set 16 done,16953216878 boards /  1264765 armies   13404 (246706 MB)
+257952 s, set 17 done,32624681402 boards/1409367944 armies  21957 (193625 MB)
+ 29207 s, set 16 done,16953216878 boards/  1264765 armies   13404 (246706 MB)
 Exception: ArmyZ size grew too large (this code used the hash table instead of the army list as limit so there actually still about 30% available. However only a small set of the source boards had been examined so we would have run out anywas, even if the parity bit is moved to blue)
 Final memory -40884266960
 

@@ -93,6 +93,8 @@ bool const PASS = false;
 // bool const DOUBLE_CROSS = true;
 bool const BALANCE  = true;
 
+bool const MLOCK = true;
+
 #define CHECK   0
 #define RED_BUILDER 1
 
@@ -682,6 +684,7 @@ class ArmyMapperPair {
     ArmyMapper normal_, symmetric_;
 };
 
+class BoardSet;
 class Statistics {
   public:
     using Counter = uint64_t;
@@ -691,6 +694,7 @@ class Statistics {
     void clear() {
         late_prunes_ = 0;
         edge_count_  = 0;
+        largest_subset_ = 0;
 
         armyset_size_ = 0;
         armyset_tries_ = 0;
@@ -709,6 +713,14 @@ class Statistics {
     inline void edge(Counter add = 1)   {
         if (!STATISTICS) return;
         edge_count_ += add;
+    }
+    inline void subset_size(size_t size) {
+        if (!STATISTICS) return;
+        if (size > largest_subset_) largest_subset_ = size;
+    }
+    inline void largest_subset_size(BoardSet const& boards) {
+        if (!STATISTICS) return;
+        _largest_subset_size(boards);
     }
     inline void armyset_size(Counter size) {
         armyset_tries_ += size;
@@ -742,6 +754,7 @@ class Statistics {
     }
     Counter late_prunes() const PURE { return late_prunes_; }
     Counter edges() const PURE { return edge_count_; }
+    Counter largest_subset() const PURE { return largest_subset_; }
     Counter armyset_size() const PURE { return armyset_size_; }
     Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
@@ -753,9 +766,12 @@ class Statistics {
 
     Statistics& operator+=(Statistics const& stats) {
       late_prunes_	  += stats.late_prunes();
+      edge_count_	  += stats.edges();
+      auto largest_subset = stats.largest_subset();
+      if (largest_subset > largest_subset_) largest_subset_ = largest_subset;
+
       armyset_tries_	  += stats.armyset_tries();
       boardset_tries_	  += stats.boardset_tries();
-      edge_count_	  += stats.edges();
       armyset_probes_	  += stats.armyset_probes_;
       armyset_immediate_  += stats.armyset_immediate_;
       boardset_probes_	  += stats.boardset_probes_;
@@ -764,6 +780,8 @@ class Statistics {
     }
 
   private:
+    void _largest_subset_size(BoardSet const& boards);
+
     Counter late_prunes_;
     Counter edge_count_;
     Counter armyset_size_;
@@ -774,6 +792,7 @@ class Statistics {
     Counter boardset_tries_;
     Counter boardset_probes_;
     Counter boardset_immediate_;
+    size_t  largest_subset_;
 };
 
 STATIC const int ARMYID_BITS = std::numeric_limits<ArmyId>::digits;
@@ -785,20 +804,34 @@ class ArmySet {
   public:
     static size_t const INITIAL_SIZE = 32;
 
-    inline ArmySet(size_t size = INITIAL_SIZE) : armies_{nullptr}, values_{nullptr} {
+    inline ArmySet(bool lock = false, size_t size = INITIAL_SIZE) : armies_{nullptr}, values_{nullptr}, memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
         _init(size);
     }
     inline ~ArmySet() {
-        if (armies_) deallocate(armies_, armies_size_);
-        if (values_) deallocate(values_, allocated());
+        if (armies_) deallocate(armies_, armies_size_, memory_flags_);
+        if (values_) deallocate(values_, allocated(), memory_flags_);
+    }
+    void lock() {
+        if (!MLOCK) return;
+        if (memory_flags_ & ALLOC_LOCK) throw_logic("Already locked");
+        memory_flags_ |= ALLOC_LOCK;
+        memlock(armies_, armies_size_);
+        if (values_) memlock(values_, allocated());
+    }
+    void unlock() {
+        if (!MLOCK) return;
+        if (!(memory_flags_ & ALLOC_LOCK)) throw_logic("Already unlocked");
+        memory_flags_ &= ~ALLOC_LOCK;
+        memunlock(armies_, armies_size_);
+        if (values_) memunlock(values_, allocated());
     }
     inline void clear(size_t size = INITIAL_SIZE) {
-        deallocate(armies_, armies_size_);
-        if (values_) deallocate(values_, allocated());
+        deallocate(armies_, armies_size_, memory_flags_);
+        if (values_) deallocate(values_, allocated(), memory_flags_);
         _init(size);
     }
     inline void drop_hash() {
-        deallocate(values_, allocated());
+        deallocate(values_, allocated(), memory_flags_);
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
         values_ = nullptr;
     }
@@ -855,10 +888,12 @@ class ArmySet {
     Coord* armies_;
     ArmyId* values_;
     size_t armies_size_;
+    // g++ sizeof mutex=40, alignof mutex = 8
     mutex exclude_;
     ArmyId mask_;
     ArmyId used_;
     ArmyId limit_;
+    int    memory_flags_;
 };
 
 inline ostream& operator<<(ostream& os, ArmySet const& set) {
@@ -932,11 +967,15 @@ class StatisticsE: public Statistics {
         allocated_ = total_allocated();
         mmapped_ = total_mmapped();
         mmaps_ = total_mmaps();
+        mlocked_ = total_mlocked();
+        mlocks_ = total_mlocks();
     }
     size_t const memory()    const PURE { return memory_; }
     size_t const allocated() const PURE { return allocated_; }
     size_t const mmapped() const PURE { return mmapped_; }
     size_t const mmaps() const PURE { return mmaps_; }
+    size_t const mlocked() const PURE { return mlocked_; }
+    size_t const mlocks() const PURE { return mlocks_; }
     Sec::rep duration() const PURE {
         return chrono::duration_cast<Sec>(stop_-start_).count();
     }
@@ -958,6 +997,8 @@ class StatisticsE: public Statistics {
     ssize_t allocated_;
     ssize_t mmapped_;
     ssize_t mmaps_;
+    ssize_t mlocked_;
+    ssize_t mlocks_;
     chrono::steady_clock::time_point start_, stop_;
     Counter opponent_armies_size_;
     int available_moves_;
@@ -978,6 +1019,9 @@ class BoardSubSetBase {
         red_id = value & ARMYID_MASK;
         // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMYID_HIGHBIT) << dec << "\n";
         return value & ARMYID_HIGHBIT;
+    }
+    static inline constexpr ArmyId join(ArmyId id, bool flip) {
+        return id | (flip ? ARMYID_HIGHBIT : 0);
     }
     ArmyId const* begin() const PURE { return &armies_[0]; }
   protected:
@@ -1022,7 +1066,7 @@ class BoardSubSet: public BoardSubSetBase {
             if (red_id >= ARMYID_HIGHBIT)
                 throw_logic("red_id is too large");
         }
-        ArmyId value = red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0);
+        ArmyId value = join(red_id, symmetry < 0);
         return insert(value, stats);
     }
     bool find(ArmyId red_id, int symmetry) const PURE {
@@ -1032,7 +1076,7 @@ class BoardSubSet: public BoardSubSetBase {
             if (red_id >= ARMYID_HIGHBIT)
                 throw_logic("red_id is too large");
         }
-        return find(red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0));
+        return find(join(red_id, symmetry < 0));
     }
     ArmyId example(ArmyId& symmetry) const;
     ArmyId random_example(ArmyId& symmetry) const;
@@ -1107,7 +1151,7 @@ class BoardSubSetRed: public BoardSubSetBase {
             if (red_id >= ARMYID_HIGHBIT)
                 throw_logic("red_id is too large");
         }
-        ArmyId value = red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0);
+        ArmyId value = join(red_id, symmetry < 0);
         return _insert(value, stats);
     }
     bool _find(ArmyId red_id, int symmetry) const PURE {
@@ -1117,7 +1161,7 @@ class BoardSubSetRed: public BoardSubSetBase {
             if (red_id >= ARMYID_HIGHBIT)
                 throw_logic("red_id is too large");
         }
-        return _find(red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0));
+        return _find(join(red_id, symmetry < 0));
     }
   private:
     bool _insert(ArmyId red_value, Statistics& stats);
@@ -1130,9 +1174,9 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
 
     BoardSubSetRedBuilder(ArmyId allocate = INITIAL_SIZE);
     ~BoardSubSetRedBuilder() {
-        deallocate(armies_, real_allocated_);
+        deallocate(armies_, real_allocated_, ALLOC_LOCK);
         army_list_ -= size();
-        deallocate(army_list_, FACTOR(real_allocated_));
+        deallocate(army_list_, FACTOR(real_allocated_), ALLOC_LOCK);
         // logger << "Destroy BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
     }
     ArmyId allocated() const PURE { return mask_+1; }
@@ -1145,7 +1189,7 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
             if (red_id >= ARMYID_HIGHBIT)
                 throw_logic("red_id is too large");
         }
-        ArmyId value = red_id | (symmetry < 0 ? ARMYID_HIGHBIT : 0);
+        ArmyId value = join(red_id, symmetry < 0);
         return insert(value, stats);
     }
     inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {

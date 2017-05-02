@@ -76,6 +76,9 @@
 size_t const MMAP_THRESHOLD = 128 * 1024;
 bool const CLEAR = true;
 
+int const ALLOC_LOCK     = 1;
+int const ALLOC_POPULATE = 2;
+
 extern bool FATAL;
 
 extern uint nr_threads;
@@ -87,11 +90,12 @@ extern std::string HOSTNAME;
 extern std::string const VCS_COMMIT;
 extern std::string const VCS_COMMIT_TIME;
 
-[[noreturn]] void throw_errno(std::string text);
+[[noreturn]] void throw_errno(std::string const& text);
+[[noreturn]] void throw_errno(int err, std::string const& text);
 [[noreturn]] void throw_logic(char const* text);
 [[noreturn]] void throw_logic(char const*, const char* file, int line);
-[[noreturn]] void throw_logic(std::string text);
-[[noreturn]] void throw_logic(std::string text, const char* file, int line);
+[[noreturn]] void throw_logic(std::string const& text);
+[[noreturn]] void throw_logic(std::string const& text, const char* file, int line);
 
 void rm_file(std::string const& file);
 std::string time_string(time_t time);
@@ -103,6 +107,8 @@ bool is_terminated();
 ssize_t total_allocated() PURE;
 ssize_t total_mmapped() PURE;
 ssize_t total_mmaps() PURE;
+ssize_t total_mlocked() PURE;
+ssize_t total_mlocks() PURE;
 void update_allocated();
 void init_system();
 
@@ -111,12 +117,33 @@ inline bool use_mmap(size_t size) {
     // return false;
 }
 
+void _mlock(void* ptr, size_t length);
+void _munlock(void* ptr, size_t length);
 void* _allocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _allocate(size_t new_size, int flags) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
 void* _callocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _callocate(size_t new_size, int flags) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
 void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 // void* _creallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 void _deallocate(void *ptr, size_t old_size) NONNULL;
+void _deallocate(void *ptr, size_t old_size, int flags) NONNULL;
+
+template<class T>
+void memlock(T* ptr, size_t size) {
+    size *= sizeof(T);
+    // We assume only complete ranges are locked so size also implies mmmapped
+    if (use_mmap(size)) _mlock(ptr, size);
+}
+
+template<class T>
+void memunlock(T* ptr, size_t size) {
+    size *= sizeof(T);
+    // We assume only complete ranges are unlocked so size also implies mmmapped
+    if (use_mmap(size)) _munlock(ptr, size);
+}
 
 template<class T>
 inline T* allocate(size_t new_size) {
@@ -126,6 +153,16 @@ inline T* allocate(size_t new_size) {
 template<class T>
 inline void allocate(T*& ptr, size_t new_size) {
     ptr = allocate<T>(new_size);
+}
+
+template<class T>
+inline T* allocate(size_t new_size, int flags) {
+    return static_cast<T*>(_allocate(new_size * sizeof(T), flags));
+}
+
+template<class T>
+inline void allocate(T*& ptr, size_t new_size, int flags) {
+    ptr = allocate<T>(new_size, flags);
 }
 
 template<class T>
@@ -139,13 +176,35 @@ inline void callocate(T*& ptr, size_t new_size) {
 }
 
 template<class T>
+inline T* callocate(size_t new_size, int flags) {
+    return static_cast<T*>(_callocate(new_size * sizeof(T), flags));
+}
+
+template<class T>
+inline void callocate(T*& ptr, size_t new_size, int flags) {
+    ptr = callocate<T>(new_size, flags);
+}
+
+template<class T>
 inline void reallocate(T*& old_ptr, size_t old_size, size_t new_size) {
     old_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
 }
 
 template<class T>
-inline T* reallocate(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
-    T* new_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
+inline void reallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
+    old_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+}
+
+template<class T>
+inline T* reallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
+    T* new_ptr = static_cast<T*>(_reallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
+    old_ptr = nullptr;
+    return new_ptr;
+}
+
+template<class T>
+inline T* reallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
+    T* new_ptr = static_cast<T*>(_reallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T), flags));
     old_ptr = nullptr;
     return new_ptr;
 }
@@ -158,6 +217,13 @@ inline void creallocate(T*& old_ptr, size_t old_size, size_t new_size) {
 }
 
 template<class T>
+inline void creallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
+    _deallocate(old_ptr, old_size * sizeof(T), flags);
+    old_ptr = nullptr;
+    old_ptr = static_cast<T*>(_callocate(new_size * sizeof(T), flags));
+}
+
+template<class T>
 inline void deallocate(T*& old_ptr, size_t old_size) {
     _deallocate(old_ptr, old_size * sizeof(T));
 }
@@ -165,6 +231,16 @@ inline void deallocate(T*& old_ptr, size_t old_size) {
 template<class T>
 inline void unallocate(T* old_ptr, size_t old_size) {
     _deallocate(old_ptr, old_size * sizeof(T));
+}
+
+template<class T>
+inline void deallocate(T*& old_ptr, size_t old_size, int flags) {
+    _deallocate(old_ptr, old_size * sizeof(T), flags);
+}
+
+template<class T>
+inline void unallocate(T* old_ptr, size_t old_size, int flags) {
+    _deallocate(old_ptr, old_size * sizeof(T), flags);
 }
 
 class LogBuffer: public std::streambuf {
