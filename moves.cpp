@@ -564,7 +564,7 @@ Statistics NAME(uint thid,
                     if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
                     int result_symmetry = cmp(armyE, armyESymmetric);
                     auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric, stats);
-                    if (CHECK && moved_id == 0)
+                    if (CHECK && UNLIKELY(moved_id == 0))
                         throw_logic("Army Insert returns 0", __FILE__, __LINE__);
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move

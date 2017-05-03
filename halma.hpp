@@ -97,6 +97,7 @@ bool const MLOCK = true;
 
 #define CHECK   0
 #define RED_BUILDER 1
+#define ARMYSET_SPARSE 1
 
 extern uint X;
 extern uint Y;
@@ -105,12 +106,16 @@ extern uint ARMY;
 extern uint ARMY_ALIGNED;
 extern uint ARMY_PADDING;
 extern uint ARMY64_DOWN;
+extern uint ELEMENT_SIZE;
 
 uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
 uint const MAX_RULES = 8;
 uint const MIN_MAX_ARMY = 21;
 
+constexpr uint LOG2(size_t value) {
+    return value <= 1 ? 0 : 1+LOG2(value / 2);
+}
 // ARMY < 32
 using BalanceMask = uint32_t;
 int const BALANCE_BITS = std::numeric_limits<BalanceMask>::digits;
@@ -275,7 +280,8 @@ Coord Coord::MAX() {
     return Coord{std::numeric_limits<value_type>::max()};
 }
 
-inline ostream& operator<<(ostream& os, Coord const& pos) {
+inline ostream& operator<<(ostream& os, Coord const& pos) ALWAYS_INLINE;
+ostream& operator<<(ostream& os, Coord const& pos) {
     os << setw(2) << pos.x() << "," << setw(3) << pos.y();
     return os;
 }
@@ -314,7 +320,13 @@ ArmyId const SYMMETRIC = 1;
 class Tables;
 struct Move;
 class ArmyPos;
-class ArmySet;
+class ArmySetDense;
+class ArmySetSparse;
+#if ARMYSET_SPARSE
+using ArmySet = ArmySetSparse;
+#else // ARMYSET_SPARSE
+using ArmySet = ArmySetDense;
+#endif // ARMYSET_SPARSE
 class ArmyZconst;
 // Army as a set of Coord
 class alignas(Align) Army {
@@ -800,17 +812,13 @@ STATIC const ArmyId ARMYID_HIGHBIT = static_cast<ArmyId>(1) << (ARMYID_BITS-1);
 STATIC const ArmyId ARMYID_MASK = ARMYID_HIGHBIT-1;
 STATIC const ArmyId ARMYID_MAX  = std::numeric_limits<ArmyId>::max();
 
-class ArmySet {
+class ArmySetDense {
   public:
     static size_t const INITIAL_SIZE = 32;
 
-    inline ArmySet(bool lock = false, size_t size = INITIAL_SIZE) : armies_{nullptr}, values_{nullptr}, memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
-        _init(size);
-    }
-    inline ~ArmySet() {
-        if (armies_) deallocate(armies_, armies_size_, memory_flags_);
-        if (values_) deallocate(values_, allocated(), memory_flags_);
-    }
+    ArmySetDense(bool lock = false, size_t size = INITIAL_SIZE);
+    ~ArmySetDense();
+    void clear(size_t size = INITIAL_SIZE);
     void lock() {
         if (!MLOCK) return;
         if (memory_flags_ & ALLOC_LOCK) throw_logic("Already locked");
@@ -825,26 +833,22 @@ class ArmySet {
         memunlock(armies_, armies_size_);
         if (values_) memunlock(values_, allocated());
     }
-    inline void clear(size_t size = INITIAL_SIZE) {
-        deallocate(armies_, armies_size_, memory_flags_);
-        if (values_) deallocate(values_, allocated(), memory_flags_);
-        _init(size);
-    }
-    inline void drop_hash() {
-        deallocate(values_, allocated(), memory_flags_);
+    void drop_hash() {
+        demallocate(values_, allocated(), memory_flags_);
         // logger << "Drop hash values " << static_cast<void const *>(values_) << "\n" << flush;
         values_ = nullptr;
     }
-    ArmyId size() const PURE { return used_; }
-    size_t allocated() const PURE {
+    inline void convert_hash() {}
+    inline ArmyId size() const PURE { return used_; }
+    inline size_t allocated() const PURE {
         return static_cast<size_t>(mask_)+1;
     }
-    ArmyId capacity() const PURE {
+    inline ArmyId capacity() const PURE {
         return limit_;
     }
 #if CHECK
     ArmyZconst at(ArmyId i) const {
-        if (i > used_)
+        if (UNLIKELY(i > used_))
             throw_logic("Army id " + to_string(i) + " out of range of set");
         return ArmyZconst{armies_[i * static_cast<size_t>(ARMY)]};
     }
@@ -862,20 +866,21 @@ class ArmySet {
     inline Coord const* end()   const PURE { return &armies_[used_*static_cast<size_t>(ARMY)+ARMY]; }
 
     void print(ostream& os) const;
-    // Non copyable
-    ArmySet(ArmySet const&) = delete;
-    ArmySet& operator=(ArmySet const&) = delete;
+    // Not copyable (avoid accidents)
+    ArmySetDense(ArmySetDense const&) = delete;
+    ArmySetDense& operator=(ArmySetDense const&) = delete;
 
   private:
-    NOINLINE void _init(size_t size);
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
     static size_t constexpr MIN_SIZE_GENERATOR(size_t v) { return FACTOR(2*v) >= 1 ? v : MIN_SIZE_GENERATOR(2*v); }
     static size_t constexpr MIN_SIZE() { return MIN_SIZE_GENERATOR(1); }
+
+    inline void _init(size_t size);
     NOINLINE void resize() RESTRICT;
 
 #if CHECK
     ArmyZ at(ArmyId i) {
-        if (i > used_)
+        if (UNLIKELY(i > used_))
             throw_logic("Army id " + to_string(i) + " out of range of set");
         return ArmyZ{armies_[i * static_cast<size_t>(ARMY)]};
     }
@@ -893,6 +898,201 @@ class ArmySet {
     ArmyId mask_;
     ArmyId used_;
     ArmyId limit_;
+    int    memory_flags_;
+};
+
+// This is essentially google sparse hash for variable size elements
+class ArmySetSparse {
+  private:
+    static ArmyId const GROUP_SIZE = 64;
+    static uint   const GROUP_BITS = LOG2(GROUP_SIZE);
+    static uint   const GROUP_MASK = GROUP_SIZE - 1;
+    static size_t const INITIAL_SIZE = GROUP_SIZE * 1;
+    class alignas(char) Element {
+      public:
+        inline ArmyId id() const PURE { return id_; }
+        inline void id(ArmyId army_id) { id_ = army_id; }
+        inline ArmyZconst armyZ() const PURE { return ArmyZconst{coord_[0]}; }
+        inline uint64_t hash() const PURE {
+            return army_hash(&coord_[0]);
+        }
+
+        Coord*       begin()       PURE { return &coord_[0]; }
+        Coord const* begin() const PURE { return &coord_[0]; }
+        Coord*       end()         PURE { return &coord_[ARMY]; }
+        Coord const* end()   const PURE { return &coord_[ARMY]; }
+      private:
+        ArmyId id_;
+        Coord  coord_[0];
+    };
+    class Group {
+        // Not copyable (avoid accidents)
+        Group(Group const&) = delete;
+        Group& operator=(Group const&) = delete;
+      public:
+        static size_t ELEMENT_SIZE;
+
+        using bitmap_type = uint64_t;
+        inline void _free_data() {
+            deallocate(data_, bits() * ELEMENT_SIZE);
+        }
+        inline void _free_converted_data() {
+            deallocate(data_, bits() * sizeof(ArmyId));
+        }
+        inline void _free_data(ArmyId* new_data) {
+            deallocate(data_, bits() * ELEMENT_SIZE);
+            data_ = reinterpret_cast<char *>(new_data);
+        }
+        inline void _free(bool zero) {
+            if (bitmap_) {
+                _free_data();
+                if (zero) bitmap_ = 0;
+            }
+        }
+        inline void _free_converted(bool zero) {
+            if (bitmap_) {
+                _free_converted_data();
+                if (zero) bitmap_ = 0;
+            }
+        }
+        inline uint bits() const PURE {
+            return popcount64(bitmap_);
+        }
+        inline bool bit(uint n) const PURE {
+            return (bitmap_ & (UINT64_C(1) << n)) != 0;
+        }
+        inline uint index(uint n) const PURE {
+            return popcount64(bitmap_ & ((UINT64_C(1) << n)-1));
+        }
+        inline void set(uint n) {
+            bitmap_ = bitmap_ | (UINT64_C(1) << n);
+        }
+        inline void append(ArmyId pos, ArmyId id, Coord const* army) {
+            if (bitmap_) {
+                uint i = index(pos);
+                uint n = bits();
+                auto new_data = allocate<char>((n+1) * ELEMENT_SIZE);
+                std::copy(&data_[0], &data_[i * ELEMENT_SIZE], &new_data[0]);
+                auto new_element = &new_data[i * ELEMENT_SIZE];
+                auto& element = *static_cast<Element *>(static_cast<void *>(new_element));
+                element.id(id);
+                std::copy(army, army+ARMY, element.begin());
+                std::copy(&data_[i * ELEMENT_SIZE], &data_[n * ELEMENT_SIZE],
+                          new_element + ELEMENT_SIZE);
+                deallocate(data_, n * ELEMENT_SIZE);
+                data_ = new_data;
+            } else {
+                allocate(data_, ELEMENT_SIZE);
+                auto& element = *static_cast<Element *>(static_cast<void *>(data_));
+                element.id(id);
+                std::copy(army, army+ARMY, element.begin());
+            }
+            set(pos);
+        }
+        inline void append(ArmyId pos, Element const& old_element) {
+            char const* old_e = static_cast<char const*>(static_cast<void const *>(&old_element));
+            if (bitmap_) {
+                uint i = index(pos);
+                uint n = bits();
+                auto new_data = allocate<char>((n+1) * ELEMENT_SIZE);
+                std::copy(&data_[0], &data_[i * ELEMENT_SIZE], &new_data[0]);
+                auto new_element = &new_data[i * ELEMENT_SIZE];
+                std::copy(old_e, old_e + ELEMENT_SIZE, new_element);
+                std::copy(&data_[i * ELEMENT_SIZE], &data_[n * ELEMENT_SIZE],
+                          new_element + ELEMENT_SIZE);
+                deallocate(data_, n * ELEMENT_SIZE);
+                data_ = new_data;
+            } else {
+                allocate(data_, ELEMENT_SIZE);
+                std::copy(old_e, old_e + ELEMENT_SIZE, data_);
+            }
+            set(pos);
+        }
+        inline Element const& at(uint pos) const PURE {
+            uint i = index(pos);
+            return *reinterpret_cast<Element const*>(&data_[i * ELEMENT_SIZE]);
+        }
+        inline ArmyId const& id(uint pos) const PURE {
+            uint i = index(pos);
+            return reinterpret_cast<ArmyId const*>(data_)[i];
+        }
+        inline char const* _data() const PURE { return data_; }
+      private:
+        char* data_;
+        bitmap_type bitmap_;
+    };
+  public:
+    static void set_ELEMENT_SIZE() {
+        Group::ELEMENT_SIZE = ARMY * sizeof(Coord) + sizeof(Element);
+        // cout << "sizeof(Element) = " << sizeof(Element) << ", ELEMENT_SIZE = " << Group::ELEMENT_SIZE << "\n";
+    }
+    ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
+    ~ArmySetSparse();
+    void lock() {
+        // Only lock the groups_ spine (if it is actively being built)
+        if (!MLOCK) return;
+        if (memory_flags_ & ALLOC_LOCK) throw_logic("Already locked");
+        memory_flags_ |= ALLOC_LOCK;
+        // logger << "Would lock " << groups_ << " " << armies_ << " g=" << nr_groups() << endl;
+        if (groups_ && !armies_) memlock(groups_, nr_groups());
+    }
+    void unlock() {
+        // Only unlock the groups_ spine (if it is actively being built)
+        if (!MLOCK) return;
+        if (!(memory_flags_ & ALLOC_LOCK)) throw_logic("Already unlocked");
+        memory_flags_ &= ~ALLOC_LOCK;
+        // logger << "Would unlock " << groups_ << " " << armies_ << " g=" << nr_groups() << endl;
+        if (groups_ && !armies_) memunlock(groups_, nr_groups());
+    }
+    void clear(size_t size = INITIAL_SIZE);
+    inline void drop_hash()    { _convert_hash(false); }
+    inline void convert_hash() { _convert_hash(true);  }
+
+    inline ArmyId size() const PURE { return size_; }
+    size_t nr_groups() const PURE {
+        return static_cast<size_t>(mask_)+1;
+    }
+    size_t allocated() const PURE {
+        return nr_groups() * GROUP_SIZE;
+    }
+    inline ArmyId insert(Army    const& army, Statistics& stats) RESTRICT;
+    inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT;
+    ArmyId find(Army const& army) const PURE;
+    ArmyId find(ArmyPos const& army) const PURE;
+#if CHECK
+    ArmyZconst at(ArmyId i) const {
+        if (UNLIKELY(i > size_))
+            throw_logic("Army id " + to_string(i) + " out of range of set");
+        if (UNLIKELY(!armies_)) throw_logic("No army list allocated");
+        return ArmyZconst{armies_[i * static_cast<size_t>(ARMY)]};
+    }
+#else  // CHECK
+    inline ArmyZconst at(ArmyId i) const PURE {
+        return ArmyZconst{armies_[i * static_cast<size_t>(ARMY)]};
+    }
+#endif // CHECK
+    inline ArmyZconst cat(ArmyId i) const { return at(i); }
+    void print(ostream& os) const;
+
+    // Not copyable (avoid accidents)
+    ArmySetSparse(ArmySetSparse const&) = delete;
+    ArmySetSparse& operator=(ArmySetSparse const&) = delete;
+
+  private:
+    static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
+
+    inline void _init(size_t size);
+    inline void _free(bool zero);
+    NOINLINE void resize() RESTRICT;
+    void _convert_hash(bool keep = false);
+    inline void __convert_hash(bool keep);
+
+    Coord* armies_;
+    Group* groups_;
+    mutex exclude_;
+    ArmyId size_;
+    ArmyId left_;
+    ArmyId mask_;
     int    memory_flags_;
 };
 
@@ -1043,7 +1243,7 @@ class BoardSubSet: public BoardSubSetBase {
     inline void create(ArmyId size = INITIAL_SIZE) {
         mask_ = size-1;
         left_ = FACTOR(size);
-        callocate(armies_, size);
+        cmallocate(armies_, size);
         // logger << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
     }
     inline void zero() {
@@ -1053,7 +1253,7 @@ class BoardSubSet: public BoardSubSetBase {
     }
     inline void destroy() {
         if (armies_) {
-            deallocate(armies_, allocated());
+            demallocate(armies_, allocated());
             // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << allocated() << "\n" << flush;
         }
     }
@@ -1061,9 +1261,9 @@ class BoardSubSet: public BoardSubSetBase {
 
     inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
-            if (red_id <= 0)
+            if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
-            if (red_id >= ARMYID_HIGHBIT)
+            if (UNLIKELY(red_id >= ARMYID_HIGHBIT))
                 throw_logic("red_id is too large");
         }
         ArmyId value = join(red_id, symmetry < 0);
@@ -1071,9 +1271,9 @@ class BoardSubSet: public BoardSubSetBase {
     }
     bool find(ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
-            if (red_id <= 0)
+            if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
-            if (red_id >= ARMYID_HIGHBIT)
+            if (UNLIKELY(red_id >= ARMYID_HIGHBIT))
                 throw_logic("red_id is too large");
         }
         return find(join(red_id, symmetry < 0));
@@ -1094,11 +1294,11 @@ class BoardSubSet: public BoardSubSetBase {
 };
 
 bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
-    // cout << "Insert " << red_value << "\n";
+    // logger << "Insert " << red_value << "\n";
     if (left_ == 0) resize();
     auto mask = mask_;
     ArmyId pos = hash64(red_value) & mask;
-    uint offset = 0;
+    ArmyId offset = 0;
     auto armies = armies_;
     while (true) {
         // cout << "Try " << pos << " of " << mask+1 << "\n";
@@ -1135,7 +1335,7 @@ class BoardSubSetRed: public BoardSubSetBase {
     }
     inline void destroy() {
         if (armies_) {
-            deallocate(armies_, size());
+            demallocate(armies_, size());
             // logger << "Destroy BoardSubSetRed " << static_cast<void const*>(armies_) << ": size " << size() << "\n" << flush;
         }
     }
@@ -1146,9 +1346,9 @@ class BoardSubSetRed: public BoardSubSetBase {
     ArmyId random_example(ArmyId& symmetry) const;
     inline bool _insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
-            if (red_id <= 0)
+            if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
-            if (red_id >= ARMYID_HIGHBIT)
+            if (UNLIKELY(red_id >= ARMYID_HIGHBIT))
                 throw_logic("red_id is too large");
         }
         ArmyId value = join(red_id, symmetry < 0);
@@ -1156,9 +1356,9 @@ class BoardSubSetRed: public BoardSubSetBase {
     }
     bool _find(ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
-            if (red_id <= 0)
+            if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
-            if (red_id >= ARMYID_HIGHBIT)
+            if (UNLIKELY(red_id >= ARMYID_HIGHBIT))
                 throw_logic("red_id is too large");
         }
         return _find(join(red_id, symmetry < 0));
@@ -1174,9 +1374,9 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
 
     BoardSubSetRedBuilder(ArmyId allocate = INITIAL_SIZE);
     ~BoardSubSetRedBuilder() {
-        deallocate(armies_, real_allocated_, ALLOC_LOCK);
+        demallocate(armies_, real_allocated_, ALLOC_LOCK);
         army_list_ -= size();
-        deallocate(army_list_, FACTOR(real_allocated_), ALLOC_LOCK);
+        demallocate(army_list_, FACTOR(real_allocated_), ALLOC_LOCK);
         // logger << "Destroy BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
     }
     ArmyId allocated() const PURE { return mask_+1; }
@@ -1184,9 +1384,9 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
     ArmyId size()      const PURE { return capacity() - left_; }
     inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
-            if (red_id <= 0)
+            if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
-            if (red_id >= ARMYID_HIGHBIT)
+            if (UNLIKELY(red_id >= ARMYID_HIGHBIT))
                 throw_logic("red_id is too large");
         }
         ArmyId value = join(red_id, symmetry < 0);
@@ -1194,7 +1394,7 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
     }
     inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {
         ArmyId sz = size();
-        ArmyId* new_list = allocate<ArmyId>(sz);
+        ArmyId* new_list = mallocate<ArmyId>(sz);
         // logger << "Extract BoardSubSetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
         ArmyId* old_list = army_list_ - sz;
         std::copy(&old_list[0], &old_list[sz], new_list);
@@ -1220,11 +1420,11 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
 };
 
 bool BoardSubSetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
-    // cout << "Insert " << red_value << " into BoardSubSetRedBuilder\n";
+    // logger << "Insert " << red_value << " into BoardSubSetRedBuilder\n";
     if (left_ == 0) resize();
     auto mask = mask_;
     ArmyId pos = hash64(red_value) & mask;
-    uint offset = 0;
+    ArmyId offset = 0;
     auto armies = armies_;
     while (true) {
         // cout << "Try " << pos << " of " << mask+1 << "\n";
@@ -1255,7 +1455,7 @@ class BoardSetBase {
     BoardSetBase(bool keep = false, ArmyId size = INITIAL_SIZE);
     ~BoardSetBase() {
         ++subsets_;
-        deallocate(subsets_, capacity());
+        demallocate(subsets_, capacity());
     }
     ArmyId subsets() const PURE { return top_ - from(); }
     size_t size() const PURE { return size_; }
@@ -1315,7 +1515,7 @@ class BoardSet: public BoardSetBase {
 
     inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
-            if (blue_id <= 0)
+            if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
         }
         lock_guard<mutex> lock{exclude_};
@@ -1332,7 +1532,7 @@ class BoardSet: public BoardSetBase {
     }
     void insert(ArmyId blue_id, BoardSubSet const& subset) {
         if (CHECK) {
-            if (blue_id <= 0)
+            if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
         }
         lock_guard<mutex> lock{exclude_};
@@ -1404,7 +1604,7 @@ class BoardSetRed: public BoardSetBase {
     inline BoardSubSetRed const* end()   const PURE { return &cat(top_); }
     void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) {
         if (CHECK) {
-            if (blue_id <= 0)
+            if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
         }
         BoardSubSetRed subset_red = builder.extract();
@@ -1510,6 +1710,9 @@ class Image {
     inline explicit Image(Army const& army, Color color = BLUE): Image{} {
         set(army, color);
     }
+    inline explicit Image(ArmyPos const& army, Color color = BLUE): Image{} {
+        set(army, color);
+    }
     inline explicit Image(ArmyZconst army, Color color = BLUE): Image{} {
         set(army, color);
     }
@@ -1522,6 +1725,9 @@ class Image {
         for (auto const& pos: army) set(pos, c);
     }
     inline void  set(Army const& army, Color c) {
+        for (auto const& pos: army) set(pos, c);
+    }
+    inline void  set(ArmyPos const& army, Color c) {
         for (auto const& pos: army) set(pos, c);
     }
     inline bool jumpable(Coord const& jumpee, Coord const& target) const PURE {
@@ -1834,8 +2040,8 @@ Offsets const& Coord::slide_jumps_red() const {
     return tables.slide_jumps_red(*this);
 }
 
-ArmyId ArmySet::insert(Army const& army, Statistics& stats) RESTRICT {
-    // cout << "Insert:\n" << Image{army};
+ArmyId ArmySetDense::insert(Army const& army, Statistics& stats) RESTRICT {
+    // logger << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
     ArmyId hash = army.hash();
     lock_guard<mutex> lock{exclude_};
@@ -1851,7 +2057,7 @@ ArmyId ArmySet::insert(Army const& army, Statistics& stats) RESTRICT {
         if (i == 0) {
             stats.armyset_probe(offset);
             ArmyId id = ++used_;
-            // logger << "Found empty, assign id " << id << "\n" + Image{army}.str() << flush;
+            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
             values[pos] = id;
             at(id).append(army);
             return id;
@@ -1867,8 +2073,8 @@ ArmyId ArmySet::insert(Army const& army, Statistics& stats) RESTRICT {
     }
 }
 
-ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
-    // cout << "Insert:\n" << Image{army};
+ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
+    // logger << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
     ArmyId hash = army.hash();
     lock_guard<mutex> lock{exclude_};
@@ -1884,7 +2090,7 @@ ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
         if (i == 0) {
             stats.armyset_probe(offset);
             ArmyId id = ++used_;
-            // logger << "Found empty, assign id " << id << "\n" + Image{army}.str() << flush;
+            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
             values[pos] = id;
             at(id).append(army);
             return id;
@@ -1897,6 +2103,74 @@ ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
         }
         ++offset;
         pos = (pos + offset) & mask;
+    }
+}
+
+ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
+    // logger << "Insert:\n" << Image{army};
+    // Leave hash calculation out of the mutex
+    ArmyId hash = army.hash();
+    lock_guard<mutex> lock{exclude_};
+    // logger << "left_ = " << left_ << endl;
+    if (left_ == 0) resize();
+    ArmyId const mask = mask_;
+    Group* groups = groups_;
+    ArmyId offset = 0;
+    while (true) {
+        ArmyId group_id = (hash >> GROUP_BITS) & mask;
+        auto& group = groups[group_id];
+        uint pos = hash & GROUP_MASK;
+        // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;
+        if (group.bit(pos) == 0) {
+            stats.armyset_probe(offset);
+            --left_;
+            ArmyId id = ++size_;
+            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
+            group.append(pos, id, army.begin());
+            return id;
+        }
+        Element const& element = group.at(pos);
+        if (army == element.armyZ()) {
+            stats.armyset_probe(offset);
+            stats.armyset_try();
+            // logger << "Found duplicate " << hash << "\n" << flush;
+            return element.id();
+        }
+        hash += ++offset;
+    }
+}
+
+ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
+    // logger << "Insert:\n" << Image{army};
+    // Leave hash calculation out of the mutex
+    ArmyId hash = army.hash();
+    lock_guard<mutex> lock{exclude_};
+    // logger << "left_ = " << left_ << endl;
+    if (left_ == 0) resize();
+    ArmyId const mask = mask_;
+    Group* groups = groups_;
+    ArmyId offset = 0;
+    while (true) {
+        ArmyId group_id = (hash >> GROUP_BITS) & mask;
+        auto& group = groups[group_id];
+        uint pos = hash & GROUP_MASK;
+        // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;
+        if (group.bit(pos) == 0) {
+            stats.armyset_probe(offset);
+            --left_;
+            ArmyId id = ++size_;
+            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
+            group.append(pos, id, army.begin());
+            return id;
+        }
+        Element const& element = group.at(pos);
+        if (army == element.armyZ()) {
+            stats.armyset_probe(offset);
+            stats.armyset_try();
+            // logger << "Found duplicate " << hash << "\n" << flush;
+            return element.id();
+        }
+        hash += ++offset;
     }
 }
 

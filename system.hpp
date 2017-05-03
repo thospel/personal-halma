@@ -84,6 +84,7 @@ extern bool FATAL;
 extern uint nr_threads;
 extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
+extern thread_local ssize_t allocated_;
 
 extern uint64_t PID;
 extern std::string HOSTNAME;
@@ -112,6 +113,18 @@ ssize_t total_mlocks() PURE;
 void update_allocated();
 void init_system();
 
+inline uint popcount64(uint64_t value) FUNCTIONAL;
+uint popcount64(uint64_t value) {
+    // __builtin_popcountll generates the same assembly as _mm_popcnt_u64
+    // if _mm_popcnt_u64 is available so the define doesn't really matter.
+    // However it seems older gcc's were not as good, so this just makes sure
+#if __POPCNT__
+    return _mm_popcnt_u64(value);
+#else
+    return __builtin_popcountll(value);
+#endif
+}
+
 inline bool use_mmap(size_t size) {
     return size >= MMAP_THRESHOLD;
     // return false;
@@ -119,17 +132,17 @@ inline bool use_mmap(size_t size) {
 
 void _mlock(void* ptr, size_t length);
 void _munlock(void* ptr, size_t length);
-void* _allocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-void* _allocate(size_t new_size, int flags) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-void* _callocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-void* _callocate(size_t new_size, int flags) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
-void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-// void* _creallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
-void _deallocate(void *ptr, size_t old_size) NONNULL;
-void _deallocate(void *ptr, size_t old_size, int flags) NONNULL;
+void* _mallocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _mallocate(size_t new_size, int flags) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _cmallocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _cmallocate(size_t new_size, int flags) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
+void* _remallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _remallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+// void* _cremallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void _demallocate(void *ptr, size_t old_size) NONNULL;
+void _demallocate(void *ptr, size_t old_size, int flags) NONNULL;
 
 template<class T>
 void memlock(T* ptr, size_t size) {
@@ -146,101 +159,124 @@ void memunlock(T* ptr, size_t size) {
 }
 
 template<class T>
-inline T* allocate(size_t new_size) {
-    return static_cast<T*>(_allocate(new_size * sizeof(T)));
+inline T* mallocate(size_t new_size) {
+    return static_cast<T*>(_mallocate(new_size * sizeof(T)));
 }
 
 template<class T>
-inline void allocate(T*& ptr, size_t new_size) {
-    ptr = allocate<T>(new_size);
+inline void mallocate(T*& ptr, size_t new_size) {
+    ptr = mallocate<T>(new_size);
 }
 
 template<class T>
-inline T* allocate(size_t new_size, int flags) {
-    return static_cast<T*>(_allocate(new_size * sizeof(T), flags));
+inline T* mallocate(size_t new_size, int flags) {
+    return static_cast<T*>(_mallocate(new_size * sizeof(T), flags));
 }
 
 template<class T>
-inline void allocate(T*& ptr, size_t new_size, int flags) {
+inline void mallocate(T*& ptr, size_t new_size, int flags) {
+    ptr = mallocate<T>(new_size, flags);
+}
+
+template<class T>
+inline T* cmallocate(size_t new_size) {
+    return static_cast<T*>(_cmallocate(new_size * sizeof(T)));
+}
+
+template<class T>
+inline void cmallocate(T*& ptr, size_t new_size) {
+    ptr = cmallocate<T>(new_size);
+}
+
+template<class T>
+inline T* cmallocate(size_t new_size, int flags) {
+    return static_cast<T*>(_cmallocate(new_size * sizeof(T), flags));
+}
+
+template<class T>
+inline void cmallocate(T*& ptr, size_t new_size, int flags) {
+    ptr = cmallocate<T>(new_size, flags);
+}
+
+template<class T>
+inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size) {
+    old_ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
+}
+
+template<class T>
+inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
+    old_ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+}
+
+template<class T>
+inline T* remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
+    T* new_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
+    old_ptr = nullptr;
+    return new_ptr;
+}
+
+template<class T>
+inline T* remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
+    T* new_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T), flags));
+    old_ptr = nullptr;
+    return new_ptr;
+}
+
+template<class T>
+inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size) {
+    _demallocate(old_ptr, old_size * sizeof(T));
+    old_ptr = nullptr;
+    old_ptr = static_cast<T*>(_cmallocate(new_size * sizeof(T)));
+}
+
+template<class T>
+inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
+    _demallocate(old_ptr, old_size * sizeof(T), flags);
+    old_ptr = nullptr;
+    old_ptr = static_cast<T*>(_cmallocate(new_size * sizeof(T), flags));
+}
+
+template<class T>
+inline void demallocate(T* old_ptr, size_t old_size) {
+    _demallocate(old_ptr, old_size * sizeof(T));
+}
+
+template<class T>
+inline void demallocate(T* old_ptr, size_t old_size, int flags) {
+    _demallocate(old_ptr, old_size * sizeof(T), flags);
+}
+
+template<class T>
+inline T* allocate(size_t new_size, int flags=0) {
+    new_size *= sizeof(T);
+    auto new_ptr = reinterpret_cast<T*>(new char[new_size]);
+    allocated_ += new_size;
+    return new_ptr;
+}
+
+template<class T>
+inline void allocate(T*& ptr, size_t new_size, int flags=0) {
     ptr = allocate<T>(new_size, flags);
 }
 
 template<class T>
-inline T* callocate(size_t new_size) {
-    return static_cast<T*>(_callocate(new_size * sizeof(T)));
+inline T* callocate(size_t new_size, int flags=0) {
+    new_size *= sizeof(T);
+    auto new_ptr = reinterpret_cast<T*>(new char[new_size]);
+    std::memset(new_ptr, 0, new_size);
+    allocated_ += new_size;
+    return new_ptr;
 }
 
 template<class T>
-inline void callocate(T*& ptr, size_t new_size) {
-    ptr = callocate<T>(new_size);
-}
-
-template<class T>
-inline T* callocate(size_t new_size, int flags) {
-    return static_cast<T*>(_callocate(new_size * sizeof(T), flags));
-}
-
-template<class T>
-inline void callocate(T*& ptr, size_t new_size, int flags) {
+inline void callocate(T*& ptr, size_t new_size, int flags=0) {
     ptr = callocate<T>(new_size, flags);
 }
 
 template<class T>
-inline void reallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    old_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
-}
-
-template<class T>
-inline void reallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
-    old_ptr = static_cast<T*>(_reallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
-}
-
-template<class T>
-inline T* reallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
-    T* new_ptr = static_cast<T*>(_reallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
-    old_ptr = nullptr;
-    return new_ptr;
-}
-
-template<class T>
-inline T* reallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
-    T* new_ptr = static_cast<T*>(_reallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T), flags));
-    old_ptr = nullptr;
-    return new_ptr;
-}
-
-template<class T>
-inline void creallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    _deallocate(old_ptr, old_size * sizeof(T));
-    old_ptr = nullptr;
-    old_ptr = static_cast<T*>(_callocate(new_size * sizeof(T)));
-}
-
-template<class T>
-inline void creallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
-    _deallocate(old_ptr, old_size * sizeof(T), flags);
-    old_ptr = nullptr;
-    old_ptr = static_cast<T*>(_callocate(new_size * sizeof(T), flags));
-}
-
-template<class T>
-inline void deallocate(T*& old_ptr, size_t old_size) {
-    _deallocate(old_ptr, old_size * sizeof(T));
-}
-
-template<class T>
-inline void unallocate(T* old_ptr, size_t old_size) {
-    _deallocate(old_ptr, old_size * sizeof(T));
-}
-
-template<class T>
-inline void deallocate(T*& old_ptr, size_t old_size, int flags) {
-    _deallocate(old_ptr, old_size * sizeof(T), flags);
-}
-
-template<class T>
-inline void unallocate(T* old_ptr, size_t old_size, int flags) {
-    _deallocate(old_ptr, old_size * sizeof(T), flags);
+inline void deallocate(T* old_ptr, size_t old_size, int flags=0) {
+    delete [] reinterpret_cast<char*>(old_ptr);
+    allocated_ -= old_size * sizeof(T);
 }
 
 class LogBuffer: public std::streambuf {

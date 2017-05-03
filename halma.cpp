@@ -11,6 +11,8 @@ uint Y = 0;
 uint RULES = 6;
 uint ARMY = 10;
 
+size_t ArmySetSparse::Group::ELEMENT_SIZE;
+
 Align ARMY_MASK;
 Align ARMY_MASK_NOT;
 Align NIBBLE_LEFT;
@@ -369,7 +371,7 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
 bool BoardSubSet::find(ArmyId red_id) const {
     auto mask = mask_;
     ArmyId pos = hash64(red_id) & mask;
-    uint offset = 0;
+    ArmyId offset = 0;
     auto armies = armies_;
     while (true) {
         // cout << "Try " << pos << " of " << size_ << "\n";
@@ -387,7 +389,7 @@ bool BoardSubSet::find(ArmyId red_id) const {
 void BoardSubSet::resize() {
     auto old_size = allocated();
     ArmyId new_size = old_size*2;
-    auto new_armies = callocate<ArmyId>(new_size);
+    auto new_armies = cmallocate<ArmyId>(new_size);
     auto old_armies = armies_;
     armies_ = new_armies;
     // logger << "Resize BoardSubSet " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(new_armies) << ": " << new_size << "\n" << flush;
@@ -399,7 +401,7 @@ void BoardSubSet::resize() {
         if (value == 0) continue;
         // cout << "Insert " << value << "\n";
         ArmyId pos = hash64(value) & mask;
-        uint offset = 0;
+        ArmyId offset = 0;
         while (new_armies[pos]) {
             // cout << "Try " << pos << " of " << mask+1 << "\n";
             ++offset;
@@ -408,7 +410,7 @@ void BoardSubSet::resize() {
         new_armies[pos] = value;
         // cout << "Found empty\n";
     }
-    unallocate(old_armies, old_size);
+    demallocate(old_armies, old_size);
 }
 
 ArmyId BoardSubSet::example(ArmyId& symmetry) const {
@@ -477,8 +479,8 @@ BoardSubSetRedBuilder::BoardSubSetRedBuilder(ArmyId size): army_list_{nullptr} {
     real_allocated_ = size;
     mask_ = size-1;
     left_ = capacity();
-    callocate(armies_, size, ALLOC_LOCK);
-    allocate(army_list_, left_, ALLOC_LOCK);
+    cmallocate(armies_, size, ALLOC_LOCK);
+    mallocate(army_list_, left_, ALLOC_LOCK);
     // logger << "Create BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << size << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ")\n" << flush;
 }
 
@@ -489,13 +491,13 @@ void BoardSubSetRedBuilder::resize() {
     ArmyId *armies, *army_list;
     ArmyId nr_elems = size();
     if (new_allocated > real_allocated_) {
-        creallocate(armies_, real_allocated_, new_allocated, ALLOC_LOCK);
+        cremallocate(armies_, real_allocated_, new_allocated, ALLOC_LOCK);
         // logger << "Resize BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies) << " (size " << new_allocated << ")\n" << flush;
         armies = armies_;
 
         ArmyId new_left = FACTOR(new_allocated);
         army_list_ -= nr_elems;
-        army_list = reallocate_partial(army_list_, FACTOR(real_allocated_), new_left, nr_elems, ALLOC_LOCK);
+        army_list = remallocate_partial(army_list_, FACTOR(real_allocated_), new_left, nr_elems, ALLOC_LOCK);
         // logger << "Resize BoardSubSetRedBuilder list " << static_cast<void const *>(army_list_) << " (size " << FACTOR(real_allocated_) << ") -> " << static_cast<void const *>(army_list) << " (size " << new_left << ")\n" << flush;
         army_list_ = army_list + nr_elems;
         real_allocated_ = new_allocated;
@@ -512,7 +514,7 @@ void BoardSubSetRedBuilder::resize() {
         auto value = army_list[i];
         // cout << "Insert " << value << "\n";
         ArmyId pos = hash64(value) & mask;
-        uint offset = 0;
+        ArmyId offset = 0;
         while (armies[pos]) {
             // cout << "Try " << pos << " of " << mask+1 << "\n";
             ++offset;
@@ -524,7 +526,7 @@ void BoardSubSetRedBuilder::resize() {
 }
 
 BoardSetBase::BoardSetBase(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
-    allocate(subsets_, capacity());
+    mallocate(subsets_, capacity());
     --subsets_;
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
@@ -534,14 +536,14 @@ void BoardSetBase::clear(ArmyId size) {
     size_ = 0;
     solution_id_ = keep_;
     ++subsets_;
-    reallocate(subsets_, capacity(), size);
+    remallocate(subsets_, capacity(), size);
     --subsets_;
     capacity_ = size;
 }
 
 void BoardSetBase::resize() {
     auto old_subsets = subsets_;
-    subsets_ = allocate<BoardSubSet>(capacity()*2) - 1;
+    subsets_ = mallocate<BoardSubSet>(capacity()*2) - 1;
     // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity() << "\n" << flush;
     std::copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
     if (!keep_) {
@@ -549,7 +551,7 @@ void BoardSetBase::resize() {
         from_ = 1;
     }
     ++old_subsets;
-    deallocate(old_subsets, capacity());
+    demallocate(old_subsets, capacity());
     capacity_ *= 2;
 }
 
@@ -641,15 +643,363 @@ void Image::check(const char* file, int line) const {
         throw_logic("\n" + str() + "Unexpected Image RED count", file, line);
 }
 
-void ArmySet::print(ostream& os) const {
+void ArmySetDense::_init(size_t size) {
+    if (size < MIN_SIZE())
+        throw_logic("ArmySetDense clear size too small");
+
+    mask_ = size-1;
+    used_ = 0;
+
+    armies_size_ = size * ARMY;
+    while (armies_size_ < ARMY+ARMY_PADDING) armies_size_ *= 2;
+    size_t alimit = (armies_size_-ARMY_PADDING)/ARMY - 1;
+    if (alimit >= ARMYID_HIGHBIT)
+        throw(overflow_error("ArmySetDense size too large"));
+    limit_ = min(FACTOR(size), static_cast<ArmyId>(alimit));
+
+    mallocate(armies_, armies_size_, memory_flags_);
+    cmallocate(values_, size, memory_flags_);
+    // logger << "New value  " << static_cast<void const *>(values_) << "\n";
+    // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
+}
+
+ArmySetDense::ArmySetDense(bool lock, size_t size):
+    armies_{nullptr},
+    values_{nullptr},
+    memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
+        _init(size);
+    }
+
+ArmySetDense::~ArmySetDense() {
+    if (armies_) demallocate(armies_, armies_size_, memory_flags_);
+    if (values_) demallocate(values_, allocated(), memory_flags_);
+}
+
+void ArmySetDense::clear(size_t size) {
+    demallocate(armies_, armies_size_, memory_flags_);
+    if (values_) demallocate(values_, allocated(), memory_flags_);
+    _init(size);
+}
+
+ArmyId ArmySetDense::find(Army const& army) const {
+    if (true || CHECK) {
+        if (UNLIKELY(!values_)) throw_logic("dropped hash ArmySetDense::find");
+    }
+    ArmyId const mask = mask_;
+    ArmyId pos = army.hash() & mask;
+    auto values = values_;
+    ArmyId offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        ArmyId i = values[pos];
+        if (i == 0) return 0;
+        if (army == cat(i)) return i;
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
+}
+
+ArmyId ArmySetDense::find(ArmyPos const& army) const {
+    if (true || CHECK) {
+        if (UNLIKELY(!values_)) throw_logic("dropped hash ArmySetDense::find");
+    }
+    ArmyId const mask = mask_;
+    ArmyId pos = army.hash() & mask;
+    auto values = values_;
+    ArmyId offset = 0;
+    while (true) {
+        // cout << "Try " << pos << " of " << size_ << "\n";
+        ArmyId i = values[pos];
+        if (i == 0) return 0;
+        if (army == cat(i)) return i;
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
+}
+
+void ArmySetDense::resize() {
+    ArmyId values_limit = FACTOR(allocated());
+    ArmyId armies_limit = (armies_size_-ARMY_PADDING)/ARMY - 1;
+
+    if (used_ >= armies_limit) {
+        size_t new_size = armies_size_ * 2;
+        // logger << "Resize ArmySetDense armies: new size=" << new_size/ARMY << endl;
+        size_t alimit = (new_size-ARMY_PADDING)/ARMY - 1;
+        // Only applies to the red armyset really. But the blue armyset is
+        // always so much smaller than red that it doesn't matter
+        if (alimit >= ARMYID_HIGHBIT)
+            throw(overflow_error("ArmyId grew too large"));
+        remallocate(armies_, armies_size_, new_size, memory_flags_);
+        armies_size_ = new_size;
+        armies_limit = alimit;
+    }
+
+    if (used_ >= values_limit) {
+        size_t old_size = allocated();
+        size_t new_size = old_size * 2;
+        // logger << "Resize ArmySetDense values: new size=" << new_size << "\n" << flush;
+        if (new_size-1 > ARMYID_MAX)
+            throw(overflow_error("Army hash grew too large"));
+
+        cremallocate(values_, old_size, new_size, memory_flags_);
+        mask_ = new_size-1;
+        auto values = values_;
+        auto mask   = mask_;
+        auto used   = used_;
+        auto armies = armies_;
+        for (ArmyId i = 1; i <= used; ++i) {
+            armies += ARMY;
+            ArmyId hash = army_hash(armies);
+            ArmyId pos = hash & mask;
+            ArmyId offset = 0;
+            while (values[pos]) {
+                ++offset;
+                pos = (pos + offset) & mask;
+            }
+            values[pos] = i;
+        }
+        values_limit = FACTOR(allocated());
+    }
+    limit_ = min(values_limit, armies_limit);
+    // logger << "Resize done\n" << flush;
+}
+
+void ArmySetDense::print(ostream& os) const {
     os << "[";
     if (values_) {
         for (size_t i=0; i < allocated(); ++i)
             os << " " << values_[i];
-        } else os << " deleted";
+        } else os << " D";
     os << " ] (" << static_cast<void const *>(this) << ")\n";
     for (size_t i=1; i <= used_; ++i) {
         os << "Army " << i << "\n" << Image{cat(i)};
+    }
+}
+
+void ArmySetSparse::_init(size_t size) {
+    size_t nr_groups = size / GROUP_SIZE;
+
+    mask_ = nr_groups-1;
+    size_ = 0;
+    left_ = FACTOR(size);
+
+    cmallocate(groups_, nr_groups, memory_flags_);
+    // logger << "New groups  " << static_cast<void const *>(groups_) << "\n";
+}
+
+void ArmySetSparse::_free(bool zero) {
+    size_t n = nr_groups();
+    if (armies_)
+        if (zero)
+            for (size_t i=0; i<n; ++i)
+                groups_[i]._free_converted(true);
+        else
+            for (size_t i=0; i<n; ++i)
+                groups_[i]._free_converted(false);
+    else
+        if (zero)
+            for (size_t i=0; i<n; ++i)
+                groups_[i]._free(true);
+        else
+            for (size_t i=0; i<n; ++i)
+                groups_[i]._free(false);
+}
+
+ArmySetSparse::ArmySetSparse(bool lock, size_t size):
+    armies_{nullptr},
+    groups_{nullptr},
+    size_{0},
+    memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
+        _init(size);
+    }
+
+ArmySetSparse::~ArmySetSparse() {
+    // Free groups_ before armies_ because _free looks at armies_
+    if (groups_) {
+        _free(false);
+        demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
+    }
+    if (armies_) demallocate(armies_+ARMY, size_ * ARMY);
+}
+
+void ArmySetSparse::clear(size_t size) {
+    // Free groups_ before armies_ because _free looks at armies_
+    if (groups_) {
+        _free(true);
+        demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
+        groups_ = nullptr;
+    }
+    if (armies_) {
+        demallocate(armies_+ARMY, size_ * ARMY);
+        armies_ = nullptr;
+    }
+    _init(size);
+}
+
+ArmyId ArmySetSparse::find(Army const& army) const {
+    if (true || CHECK) {
+        if (UNLIKELY(!armies_)) throw_logic("unconverted ArmySetSparse::find");
+        if (UNLIKELY(!groups_)) throw_logic("dropped hash ArmySetSparse::find");
+    }
+    ArmyId hash = army.hash();
+    ArmyId const mask = mask_;
+    Group const* groups = groups_;
+    ArmyId offset = 0;
+    while (true) {
+        ArmyId group_id = (hash >> GROUP_BITS) & mask;
+        auto& group = groups[group_id];
+        uint pos = hash & GROUP_MASK;
+        // cout << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n";
+        if (group.bit(pos) == 0) return 0;
+        ArmyId i = group.id(pos);
+        if (army == cat(i)) return i;
+        hash += ++offset;
+    }
+}
+
+ArmyId ArmySetSparse::find(ArmyPos const& army) const {
+    if (true || CHECK) {
+        if (UNLIKELY(!armies_)) throw_logic("unconverted ArmySetSparse::find");
+        if (UNLIKELY(!groups_)) throw_logic("dropped hash ArmySetSparse::find");
+    }
+    ArmyId hash = army.hash();
+    ArmyId const mask = mask_;
+    Group const* groups = groups_;
+    ArmyId offset = 0;
+    while (true) {
+        ArmyId group_id = (hash >> GROUP_BITS) & mask;
+        auto& group = groups[group_id];
+        uint pos = hash & GROUP_MASK;
+        // cout << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n";
+        if (group.bit(pos) == 0) return 0;
+        ArmyId i = group.id(pos);
+        if (army == cat(i)) return i;
+        hash += ++offset;
+    }
+}
+
+void ArmySetSparse::resize() {
+    if (true || CHECK) {
+        if (armies_) throw_logic("Resize with army list");
+    }
+    ArmyId old_nr_groups = nr_groups();
+    ArmyId new_nr_groups = old_nr_groups * 2;
+    Group* old_groups = groups_;
+    Group* new_groups = cmallocate<Group>(new_nr_groups, memory_flags_);
+    // logger << "Resize ArmySetSparse: " << old_groups << " -> " << new_groups << ", new size=" << new_nr_groups * GROUP_SIZE << endl;
+
+    left_ += 
+        + FACTOR(new_nr_groups * GROUP_SIZE)
+        - FACTOR(old_nr_groups * GROUP_SIZE);
+
+    ArmyId mask = new_nr_groups-1;
+    for (ArmyId g=0; g<old_nr_groups; ++g) {
+        auto& old_group = old_groups[g];
+        uint n = old_group.bits();
+        if (n == 0) continue;
+        auto ptr = old_group._data();
+        for (uint i=0; i<n; ++i, ptr += Group::ELEMENT_SIZE) {
+            auto& old_element = *static_cast<Element const*>(static_cast<void const*>(ptr));
+            ArmyId hash = old_element.hash();
+            // logger << "Rehashing " << old_element.id() << ", hash " << hex << hash << dec << "\n" << Image{old_element.armyZ()};
+            ArmyId offset = 0;
+            while (true) {
+                ArmyId group_id = (hash >> GROUP_BITS) & mask;
+                auto& new_group = new_groups[group_id];
+                uint pos = hash & GROUP_MASK;
+                // logger << "Try [" << group_id << "," << pos << "]\n";
+                if (new_group.bit(pos) == 0) {
+                    // logger << "Hit\n";
+                    new_group.append(pos, old_element);
+                    break;
+                }
+                hash += ++offset;
+                // logger << "Miss\n";
+            }
+            // logger.flush();
+        }
+        old_group._free_data();
+    }
+    demallocate(old_groups, old_nr_groups, memory_flags_);
+    groups_ = new_groups;
+    mask_ = mask;
+    // logger << "Resize done\n";
+}
+
+void ArmySetSparse::__convert_hash(bool keep) {
+    // cout << *this;
+
+    if (true || CHECK) 
+        if (armies_) throw_logic("Already converted");
+
+    mallocate(armies_, size() * ARMY);
+    armies_ -= ARMY;
+    auto armies = armies_;
+    ArmyId n_groups = nr_groups();
+    Group* groups = groups_;
+
+    for (ArmyId g=0; g<n_groups; ++g) {
+        auto& group = groups[g];
+        uint n = group.bits();
+        // cout << "Converting group " << g << " with " << n << " elements\n";
+        if (n == 0) continue;
+        ArmyId* new_elements;
+        ArmyId* new_ptr;
+        if (keep) new_ptr = new_elements = allocate<ArmyId>(n);
+        auto old_ptr = group._data();
+        for (uint i=0; i<n; ++i, old_ptr += Group::ELEMENT_SIZE, ++new_ptr) {
+            auto& old_element = *static_cast<Element const*>(static_cast<void const*>(old_ptr));
+            auto armyZ = old_element.armyZ();
+            // cout << "Copying element " << old_element.id() << "\n";
+            if (CHECK && (UNLIKELY(old_element.id() > size()) || UNLIKELY(old_element.id() == 0)))
+                throw_logic("Element " + to_string(old_element.id()) + " is out of range [1.." + to_string(size()) + "]");
+            std::copy(armyZ.begin(), armyZ.end(), &armies[old_element.id() * ARMY]);
+            if (keep) *new_ptr = old_element.id();
+        }
+        if (keep) group._free_data(new_elements);
+        else group._free_data();
+    }
+    if (keep) {
+        if (memory_flags_ & ALLOC_LOCK) memunlock(groups, n_groups);
+    } else {
+        demallocate(groups, n_groups, memory_flags_);
+        groups_ = nullptr;
+    }
+}
+
+void ArmySetSparse::_convert_hash(bool keep) {
+    if (keep) __convert_hash(true);
+    else      __convert_hash(false);
+}
+
+void ArmySetSparse::print(ostream& os) const {
+    ArmyId n_groups = nr_groups();
+    Group* groups = groups_;
+    os << "[";
+    for (ArmyId g=0; g<n_groups; ++g) {
+        auto& group = groups[g];
+        char const* ptr = group._data();
+        for (uint i=0; i<GROUP_SIZE; ++i) 
+            if (group.bit(i)) {
+                Element const& element = *static_cast<Element const*>(static_cast<void const*>(ptr));
+                os << " " << element.id();
+                ptr += Group::ELEMENT_SIZE;
+            } else
+                os << " D";
+    }
+    os << " ] (" << static_cast<void const *>(this) << ")\n";
+
+    auto mask = mask_;
+    for (ArmyId g=0; g<n_groups; ++g) {
+        auto& group = groups[g];
+        char const* ptr = group._data();
+        for (uint i=0; i<GROUP_SIZE; ++i) 
+            if (group.bit(i)) {
+                Element const& element = *static_cast<Element const*>(static_cast<void const*>(ptr));
+                auto h = element.hash();
+                os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
+                ptr += Group::ELEMENT_SIZE;
+            }
     }
 }
 
@@ -737,11 +1087,11 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
 }
 
 FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) : FullMove{} {
-    bool blue_diff = board_from.blue() !=  board_to.blue();
-    bool red_diff  = board_from.red()  !=  board_to.red();
+    //bool blue_diff = board_from.blue() !=  board_to.blue();
+    //bool red_diff  = board_from.red()  !=  board_to.red();
     // Temporary workaround until C++17 will support overallocated classes
-    //bool blue_diff = 0 == memcmp(&board_from.blue(), &board_to.blue(), sizeof(Army));
-    //bool red_diff  = 0 == memcmp(&board_from.red(),  &board_to.red(), sizeof(Army));
+    bool blue_diff = 0 != memcmp(&board_from.blue(), &board_to.blue(), sizeof(Coord) * ARMY);
+    bool red_diff  = 0 != memcmp(&board_from.red(),  &board_to.red(), sizeof(Coord) * ARMY);
     if (blue_diff && red_diff) throw_logic("Both players move");
 
     if (blue_diff) {
@@ -1033,103 +1383,6 @@ void Tables::print_red_parity_count(ostream& os) const {
 
 Tables tables;
 
-void ArmySet::_init(size_t size) {
-    if (size < MIN_SIZE())
-        throw_logic("ArmySet clear size too small");
-
-    mask_ = size-1;
-    used_ = 0;
-
-    armies_size_ = size * ARMY;
-    while (armies_size_ < ARMY+ARMY_PADDING) armies_size_ *= 2;
-    size_t alimit = (armies_size_-ARMY_PADDING)/ARMY - 1;
-    if (alimit >= ARMYID_HIGHBIT)
-        throw(overflow_error("ArmySet size too large"));
-    limit_ = min(FACTOR(size), static_cast<ArmyId>(alimit));
-
-    allocate(armies_, armies_size_, memory_flags_);
-    callocate(values_, size, memory_flags_);
-    // logger << "New value  " << static_cast<void const *>(values_) << "\n";
-    // logger << "New armies " << static_cast<void const *>(armies_) << "\n";
-}
-
-ArmyId ArmySet::find(Army const& army) const {
-    ArmyId const mask = mask_;
-    ArmyId pos = army.hash() & mask;
-    auto values = values_;
-    uint offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        ArmyId i = values[pos];
-        if (i == 0) return 0;
-        if (army == cat(i)) return i;
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
-}
-
-ArmyId ArmySet::find(ArmyPos const& army) const {
-    ArmyId const mask = mask_;
-    ArmyId pos = army.hash() & mask;
-    auto values = values_;
-    uint offset = 0;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        ArmyId i = values[pos];
-        if (i == 0) return 0;
-        if (army == cat(i)) return i;
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
-}
-
-void ArmySet::resize() {
-    ArmyId values_limit = FACTOR(allocated());
-    ArmyId armies_limit = (armies_size_-ARMY_PADDING)/ARMY - 1;
-
-    if (used_ >= armies_limit) {
-        size_t new_size = armies_size_ * 2;
-        // logger << "Resize ArmySet armies: new size=" << new_size/ARMY << endl;
-        size_t alimit = (new_size-ARMY_PADDING)/ARMY - 1;
-        // Only applies to the red armyset really. But the blue armyset is
-        // always so much smaller than red that it doesn't matter
-        if (alimit >= ARMYID_HIGHBIT)
-            throw(overflow_error("ArmyId grew too large"));
-        reallocate(armies_, armies_size_, new_size, memory_flags_);
-        armies_size_ = new_size;
-        armies_limit = alimit;
-    }
-
-    if (used_ >= values_limit) {
-        size_t old_size = allocated();
-        size_t new_size = old_size * 2;
-        // logger << "Resize ArmySet values: new size=" << new_size << "\n" << flush;
-        if (new_size-1 > ARMYID_MAX)
-            throw(overflow_error("Army hash grew too large"));
-
-        creallocate(values_, old_size, new_size, memory_flags_);
-        mask_ = new_size-1;
-        auto values = values_;
-        auto mask   = mask_;
-        auto used   = used_;
-        auto armies = armies_;
-        for (ArmyId i = 1; i <= used; ++i) {
-            armies += ARMY;
-            ArmyId hash = army_hash(armies);
-            ArmyId pos = hash & mask;
-            ArmyId offset = 0;
-            while (values[pos]) {
-                ++offset;
-                pos = (pos + offset) & mask;
-            }
-            values[pos] = i;
-        }
-        values_limit = FACTOR(allocated());
-    }
-    limit_ = min(values_limit, armies_limit);
-    // logger << "Resize done\n" << flush;
-}
-
 bool BoardSet::insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) {
     Statistics dummy_stats;
 
@@ -1202,7 +1455,7 @@ Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& mo
 bool BoardSubSetRed::_insert(ArmyId red_value, Statistics& stats) {
     // cout << "Insert " << red_value << "\n";
     if (armies_) throw_logic("Multiple single insert in BoardSubSetRed");
-    ArmyId* new_list = allocate<ArmyId>(1);
+    ArmyId* new_list = mallocate<ArmyId>(1);
     new_list[0] = red_value;
     *this = BoardSubSetRed{new_list, 1};
     return true;
@@ -1210,7 +1463,7 @@ bool BoardSubSetRed::_insert(ArmyId red_value, Statistics& stats) {
 
 bool BoardSetRed::_insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
     if (CHECK) {
-        if (blue_id <= 0)
+        if (UNLIKELY(blue_id <= 0))
             throw_logic("red_id <= 0");
     }
     lock_guard<mutex> lock{exclude_};
@@ -1734,6 +1987,8 @@ void play(bool print_moves=false) {
         bool blue_to_move = nr_moves & 1;
         if (blue_to_move) {
             red_boards.insert(board, army_set[0], army_set[1]);
+            army_set[0].drop_hash();
+            army_set[1].convert_hash();
 
             auto stats = make_all_blue_moves
                 (red_boards, blue_boards,
@@ -1742,6 +1997,7 @@ void play(bool print_moves=false) {
             cout << stats << "===============================\n";
             --nr_moves;
             board.do_move(move);
+            army_set[2].convert_hash();
             if (blue_boards.find(board, army_set[1], army_set[2], nr_moves)) {
                 cout << "Good\n";
             } else {
@@ -1749,6 +2005,8 @@ void play(bool print_moves=false) {
             }
         } else {
             blue_boards.insert(board, army_set[0], army_set[1], nr_moves);
+            army_set[0].drop_hash();
+            army_set[1].convert_hash();
 
             auto stats = make_all_red_moves
                 (blue_boards, red_boards,
@@ -1757,6 +2015,7 @@ void play(bool print_moves=false) {
             cout << stats << "===============================\n";
             --nr_moves;
             board.do_move(move);
+            army_set[2].convert_hash();
             if (red_boards.find(board, army_set[1], army_set[2])) {
                 cout << "Good\n";
             } else {
@@ -1833,6 +2092,8 @@ int solve(Board const& board, int nr_moves, Army& red_army,
         boards_red.insert(board, army_set[0], army_set[1]);
     else
         boards_blue.insert(board, army_set[0], army_set[1], nr_moves);
+    army_set[0].drop_hash();
+    army_set[1].drop_hash();
 
     ArmyId red_id = 0;
     int i;
@@ -1851,6 +2112,9 @@ int solve(Board const& board, int nr_moves, Army& red_army,
                   nr_moves));
             boards_red.clear();
         } else {
+#if ARMYSET_SPARSE
+            lock_guard<ArmySet> lock{moved_armies};
+#endif // ARMYSET_SPARSE
             stats_list.emplace_back
                 (make_all_red_moves
                  (boards_blue, boards_red,
@@ -1936,6 +2200,8 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     army_set.emplace_back(new ArmySet);
     army_set.emplace_back(new ArmySet);
     board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves);
+    army_set[0]->convert_hash();
+    army_set[1]->convert_hash();
 
     BoardTable<uint8_t> red_backtrack{};
     red_backtrack.fill(0);
@@ -1978,6 +2244,9 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
                   moving_armies, opponent_armies, moved_armies,
                   nr_moves));
         } else {
+#if ARMYSET_SPARSE
+            lock_guard<ArmySet> lock{moved_armies};
+#endif // ARMYSET_SPARSE
             stats_list.emplace_back
                 (make_all_red_moves_backtrack
                  (boards_from, boards_to,
@@ -1994,6 +2263,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
         if (boards_to.size() == 0)
             throw_logic("No solution while backtracking");
+        moved_armies.convert_hash();
         auto& stats = stats_list.back();
         if (example) {
             stats.example_board
@@ -2237,6 +2507,7 @@ void my_main(int argc, char const* const* argv) {
         else X = Y;
     else
         if (Y == 0) Y = X;
+
     // +DO_ALIGN to allow for a terminating Coord
     ARMY_ALIGNED = ((ARMY+DO_ALIGN)+ALIGNSIZE-1) / ALIGNSIZE;
     ARMY_MASK    = Coord::ArmyMask();
@@ -2245,6 +2516,7 @@ void my_main(int argc, char const* const* argv) {
     ARMY64_DOWN  = ARMY / sizeof(uint64_t);
     NIBBLE_LEFT  = AlignFill(0xf0);
     NIBBLE_RIGHT = AlignFill(0x0f);
+    ArmySetSparse::set_ELEMENT_SIZE();
 
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;
