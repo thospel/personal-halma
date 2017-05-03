@@ -222,6 +222,7 @@ int _mlock2(void const* addr, size_t length, int flags) {
 void _mlock(void* ptr, size_t length) {
     if (_mlock2(ptr, length, MLOCK_ONFAULT))
         throw_errno("Could not mlock " + std::to_string(length) + " bytes");
+    // logger << "mlock(" << ptr << ", " << length << ")" << std::endl;
     mlocked_ += length;
     ++mlocks_;
 }
@@ -229,6 +230,7 @@ void _mlock(void* ptr, size_t length) {
 void _munlock(void* ptr, size_t length) {
     if (munlock(ptr, length))
         throw_errno("Could not munlock " + std::to_string(length) + " bytes");
+    // logger << "munlock(" << ptr << ", " << length << ")" << std::endl;
     mlocked_ -= length;
     --mlocks_;
 }
@@ -240,7 +242,7 @@ void* _mmap(size_t length, int flags) {
                      length_rounded,
                      PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    // logger << "mmap(" << length << "[" << PAGE_ROUND(length) << "]) -> " << ptr << "\n" << std::flush;
+    // logger << "mmap(" << length << "[" << PAGE_ROUND(length) << "], " << std::hex << flags << std::dec << ") -> " << ptr << "\n" << std::flush;
     if (ptr == MAP_FAILED)
         throw_errno("Could not mmap " + std::to_string(length) + " bytes");
     if (flags & ALLOC_LOCK) {
@@ -249,6 +251,7 @@ void* _mmap(size_t length, int flags) {
             munmap(ptr, length_rounded);
             throw_errno(err, "Could not mlock2 " + std::to_string(length) + " bytes");
         }
+        // logger << "mlock(" << ptr << ", " << length << ")" << std::endl;
         mlocked_ += length;
         ++mlocks_;
     }
@@ -298,21 +301,21 @@ void* _mremap(void* old_ptr, size_t old_length, size_t new_length, int flags) {
     return new_ptr;
 }
 
-void* _allocate(size_t new_size) {
+void* _mallocate(size_t new_size) {
     if (use_mmap(new_size)) return _mmap(new_size, 0);
     void* ptr = new char[new_size];
     allocated_ += new_size;
     return ptr;
 }
 
-void* _allocate(size_t new_size, int flags) {
+void* _mallocate(size_t new_size, int flags) {
     if (use_mmap(new_size)) return _mmap(new_size, flags);
     void* ptr = new char[new_size];
     allocated_ += new_size;
     return ptr;
 }
 
-void* _callocate(size_t new_size) {
+void* _cmallocate(size_t new_size) {
     if (use_mmap(new_size)) return _mmap(new_size, 0);
     void* ptr = new char[new_size];
     allocated_ += new_size;
@@ -320,7 +323,7 @@ void* _callocate(size_t new_size) {
     return ptr;
 }
 
-void* _callocate(size_t new_size, int flags) {
+void* _cmallocate(size_t new_size, int flags) {
     if (use_mmap(new_size)) return _mmap(new_size, flags);
     void* ptr = new char[new_size];
     allocated_ += new_size;
@@ -328,7 +331,7 @@ void* _callocate(size_t new_size, int flags) {
     return ptr;
 }
 
-void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) {
+void* _remallocate(void* old_ptr, size_t old_size, size_t new_size) {
     void* new_ptr;
     if (use_mmap(old_size)) {
         if (use_mmap(new_size))
@@ -353,7 +356,7 @@ void* _reallocate(void* old_ptr, size_t old_size, size_t new_size) {
     return new_ptr;
 }
 
-void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) {
+void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) {
     void* new_ptr;
     if (use_mmap(old_size)) {
         if (use_mmap(new_size))
@@ -378,7 +381,7 @@ void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_
     return new_ptr;
 }
 
-void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) {
+void* _remallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) {
     void* new_ptr;
     if (use_mmap(old_size)) {
         if (use_mmap(new_size))
@@ -403,7 +406,7 @@ void* _reallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) {
     return new_ptr;
 }
 
-void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
+void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
     void* new_ptr;
     if (use_mmap(old_size)) {
         if (use_mmap(new_size))
@@ -428,7 +431,7 @@ void* _reallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_
     return new_ptr;
 }
 
-void _deallocate(void *old_ptr, size_t old_size) {
+void _demallocate(void *old_ptr, size_t old_size) {
     if (use_mmap(old_size)) _munmap(old_ptr, old_size, 0);
     else {
         delete [] static_cast<char *>(old_ptr);
@@ -436,7 +439,7 @@ void _deallocate(void *old_ptr, size_t old_size) {
     }
 }
 
-void _deallocate(void *old_ptr, size_t old_size, int flags) {
+void _demallocate(void *old_ptr, size_t old_size, int flags) {
     if (use_mmap(old_size)) _munmap(old_ptr, old_size, flags);
     else {
         delete [] static_cast<char *>(old_ptr);
@@ -481,11 +484,11 @@ ssize_t total_mlocks() {
 
 void update_allocated() {
     if (tid) {
-      total_allocated_ += allocated_;
-      total_mmapped_   += mmapped_;
-      total_mmaps_     += mmaps_;
-      total_mlocked_   += mlocked_;
-      total_mlocks_    += mlocks_;
+        total_allocated_ += allocated_;
+        total_mmapped_   += mmapped_;
+        total_mmaps_     += mmaps_;
+        total_mlocked_   += mlocked_;
+        total_mlocks_    += mlocks_;
     }
 }
 
