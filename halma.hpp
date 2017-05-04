@@ -106,7 +106,6 @@ extern uint ARMY;
 extern uint ARMY_ALIGNED;
 extern uint ARMY_PADDING;
 extern uint ARMY64_DOWN;
-extern uint ELEMENT_SIZE;
 
 uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
@@ -908,8 +907,45 @@ class ArmySetSparse {
     static uint   const GROUP_BITS = LOG2(GROUP_SIZE);
     static uint   const GROUP_MASK = GROUP_SIZE - 1;
     static size_t const INITIAL_SIZE = GROUP_SIZE * 1;
+
+    class DataCache {
+      public:
+        static uint   const DATA_CACHE_SIZE = 4;
+
+        DataCache() {
+            std::fill(used_.begin(), used_.end(), 0);
+        }
+        // Not copyable (avoid accidents)
+        DataCache(DataCache const&) = delete;
+        DataCache& operator=(DataCache const&) = delete;
+
+        inline void free(bool zero);
+        inline char* allocate(uint n) {
+            uint i = n-1;
+            if (used_[i]) return cache_[i][--used_[i]];
+            return ::allocate<char>(Element::SIZE * n);
+        }
+        void deallocate(uint n, char* data) {
+            uint i = n-1;
+            if (used_[i] < DATA_CACHE_SIZE) cache_[i][used_[i]++] = data;
+            else ::deallocate(data, Element::SIZE * n);
+        }
+
+      private:
+        array<array<char*, DATA_CACHE_SIZE>, GROUP_SIZE> cache_;
+        array<uint8_t, GROUP_SIZE> used_;
+    };
+
     class alignas(char) Element {
       public:
+        static size_t SIZE;
+        
+        static Element& element(char* ptr, uint i = 0) {
+            return *reinterpret_cast<Element *>(&ptr[i * SIZE]);
+        }
+        static Element const& element(char const* ptr, uint i = 0) {
+            return *reinterpret_cast<Element const*>(&ptr[i * SIZE]);
+        }
         inline ArmyId id() const PURE { return id_; }
         inline void id(ArmyId army_id) { id_ = army_id; }
         inline ArmyZconst armyZ() const PURE { return ArmyZconst{coord_[0]}; }
@@ -930,17 +966,16 @@ class ArmySetSparse {
         Group(Group const&) = delete;
         Group& operator=(Group const&) = delete;
       public:
-        static size_t ELEMENT_SIZE;
 
         using bitmap_type = uint64_t;
         inline void _free_data() {
-            deallocate(data_, bits() * ELEMENT_SIZE);
+            deallocate(data_, bits() * Element::SIZE);
         }
         inline void _free_converted_data() {
             deallocate(data_, bits() * sizeof(ArmyId));
         }
         inline void _free_data(ArmyId* new_data) {
-            deallocate(data_, bits() * ELEMENT_SIZE);
+            deallocate(data_, bits() * Element::SIZE);
             data_ = reinterpret_cast<char *>(new_data);
         }
         inline void _free() {
@@ -958,64 +993,25 @@ class ArmySetSparse {
         inline void set(uint n) {
             bitmap_ = bitmap_ | (UINT64_C(1) << n);
         }
-        inline void append(ArmyId pos, ArmyId id, Coord const* army) {
-            if (bitmap_) {
-                uint i = index(pos);
-                uint n = bits();
-                auto new_data = allocate<char>((n+1) * ELEMENT_SIZE);
-                std::copy(&data_[0], &data_[i * ELEMENT_SIZE], &new_data[0]);
-                auto new_element = &new_data[i * ELEMENT_SIZE];
-                auto& element = *static_cast<Element *>(static_cast<void *>(new_element));
-                element.id(id);
-                std::copy(army, army+ARMY, element.begin());
-                std::copy(&data_[i * ELEMENT_SIZE], &data_[n * ELEMENT_SIZE],
-                          new_element + ELEMENT_SIZE);
-                deallocate(data_, n * ELEMENT_SIZE);
-                data_ = new_data;
-            } else {
-                allocate(data_, ELEMENT_SIZE);
-                auto& element = *static_cast<Element *>(static_cast<void *>(data_));
-                element.id(id);
-                std::copy(army, army+ARMY, element.begin());
-            }
-            set(pos);
-        }
-        inline void append(ArmyId pos, Element const& old_element) {
-            char const* old_e = static_cast<char const*>(static_cast<void const *>(&old_element));
-            if (bitmap_) {
-                uint i = index(pos);
-                uint n = bits();
-                auto new_data = allocate<char>((n+1) * ELEMENT_SIZE);
-                std::copy(&data_[0], &data_[i * ELEMENT_SIZE], &new_data[0]);
-                auto new_element = &new_data[i * ELEMENT_SIZE];
-                std::copy(old_e, old_e + ELEMENT_SIZE, new_element);
-                std::copy(&data_[i * ELEMENT_SIZE], &data_[n * ELEMENT_SIZE],
-                          new_element + ELEMENT_SIZE);
-                deallocate(data_, n * ELEMENT_SIZE);
-                data_ = new_data;
-            } else {
-                allocate(data_, ELEMENT_SIZE);
-                std::copy(old_e, old_e + ELEMENT_SIZE, data_);
-            }
-            set(pos);
-        }
         inline Element const& at(uint pos) const PURE {
             uint i = index(pos);
-            return *reinterpret_cast<Element const*>(&data_[i * ELEMENT_SIZE]);
+            return Element::element(data_, i);
         }
         inline ArmyId const& id(uint pos) const PURE {
             uint i = index(pos);
             return reinterpret_cast<ArmyId const*>(data_)[i];
         }
         inline char const* _data() const PURE { return data_; }
+        inline void append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army);
+        inline void append(DataCache& cache, ArmyId pos, Element const& old_element);
       private:
         char* data_;
         bitmap_type bitmap_;
     };
   public:
     static void set_ELEMENT_SIZE() {
-        Group::ELEMENT_SIZE = ARMY * sizeof(Coord) + sizeof(Element);
-        // cout << "sizeof(Element) = " << sizeof(Element) << ", ELEMENT_SIZE = " << Group::ELEMENT_SIZE << "\n";
+        Element::SIZE = ARMY * sizeof(Coord) + sizeof(Element);
+        // cout << "sizeof(Element) = " << sizeof(Element) << ", Element::SIZE = " << Element::SIZE << "\n";
     }
     ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
     ~ArmySetSparse();
@@ -1050,6 +1046,7 @@ class ArmySetSparse {
     inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT;
     ArmyId find(Army const& army) const PURE;
     ArmyId find(ArmyPos const& army) const PURE;
+
 #if CHECK
     ArmyZconst at(ArmyId i) const {
         if (UNLIKELY(i > size_))
@@ -1081,6 +1078,7 @@ class ArmySetSparse {
     Coord* armies_;
     Group* groups_;
     ArmyId* indices_;
+    DataCache data_cache_;
     mutex exclude_;
     ArmyId size_;
     ArmyId left_;
@@ -2098,6 +2096,49 @@ ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
     }
 }
 
+void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army) {
+    if (bitmap_) {
+        uint i = index(pos);
+        uint n = bits();
+        auto new_data = cache.allocate(n+1);
+        std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
+        auto new_element = &new_data[i * Element::SIZE];
+        auto& element = Element::element(new_element);
+        element.id(id);
+        std::copy(army, army+ARMY, element.begin());
+        std::copy(&data_[i * Element::SIZE], &data_[n * Element::SIZE],
+                  new_element + Element::SIZE);
+        cache.deallocate(n, data_);
+        data_ = new_data;
+    } else {
+        allocate(data_, Element::SIZE);
+        auto& element = Element::element(data_);
+        element.id(id);
+        std::copy(army, army+ARMY, element.begin());
+    }
+    set(pos);
+}
+
+void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, Element const& old_element) {
+    char const* old_e = static_cast<char const*>(static_cast<void const *>(&old_element));
+    if (bitmap_) {
+        uint i = index(pos);
+        uint n = bits();
+        auto new_data = cache.allocate(n+1);
+        std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
+        auto new_element = &new_data[i * Element::SIZE];
+        std::copy(old_e, old_e + Element::SIZE, new_element);
+        std::copy(&data_[i * Element::SIZE], &data_[n * Element::SIZE],
+                  new_element + Element::SIZE);
+        cache.deallocate(n, data_);
+        data_ = new_data;
+    } else {
+        allocate(data_, Element::SIZE);
+        std::copy(old_e, old_e + Element::SIZE, data_);
+    }
+    set(pos);
+}
+
 ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
     // logger << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
@@ -2118,7 +2159,7 @@ ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
             --left_;
             ArmyId id = ++size_;
             // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            group.append(pos, id, army.begin());
+            group.append(data_cache_, pos, id, army.begin());
             return id;
         }
         Element const& element = group.at(pos);
@@ -2152,7 +2193,7 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
             --left_;
             ArmyId id = ++size_;
             // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            group.append(pos, id, army.begin());
+            group.append(data_cache_, pos, id, army.begin());
             return id;
         }
         Element const& element = group.at(pos);

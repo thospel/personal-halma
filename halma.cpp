@@ -11,7 +11,7 @@ uint Y = 0;
 uint RULES = 6;
 uint ARMY = 10;
 
-size_t ArmySetSparse::Group::ELEMENT_SIZE;
+size_t ArmySetSparse::Element::SIZE;
 
 Align ARMY_MASK;
 Align ARMY_MASK_NOT;
@@ -776,6 +776,18 @@ void ArmySetDense::print(ostream& os) const {
     }
 }
 
+void ArmySetSparse::DataCache::free(bool zero) {
+    size_t size = 0;
+    for (uint i=0; i<ArmySetSparse::GROUP_SIZE; ++i) {
+        size += Element::SIZE;
+        while (used_[i]) {
+            auto& cache = cache_[i][--used_[i]];
+            ::deallocate(cache, size);
+            if (zero) cache = nullptr;
+        }
+    }
+}
+
 void ArmySetSparse::_init(size_t size) {
     size_t nr_groups = size / GROUP_SIZE;
 
@@ -814,6 +826,7 @@ ArmySetSparse::~ArmySetSparse() {
         demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
     }
     if (armies_) demallocate(armies_+ARMY, size() * ARMY);
+    else data_cache_.free(false);
     // This can only happen if we ran out of memory during __convert_hash
     // army list allocation after indices_ allocation succeeded
     if (indices_) {
@@ -832,7 +845,8 @@ void ArmySetSparse::clear(size_t initial_size) {
     if (armies_) {
         demallocate(armies_+ARMY, size() * ARMY);
         armies_ = nullptr;
-    }
+    } else
+        data_cache_.free(true);
     _init(initial_size);
 }
 
@@ -905,9 +919,9 @@ void ArmySetSparse::resize() {
         auto& old_group = old_groups[g];
         uint n = old_group.bits();
         if (n == 0) continue;
-        auto ptr = old_group._data();
-        for (uint i=0; i<n; ++i, ptr += Group::ELEMENT_SIZE) {
-            auto& old_element = *static_cast<Element const*>(static_cast<void const*>(ptr));
+        char const* ptr = old_group._data();
+        for (uint i=0; i<n; ++i, ptr += Element::SIZE) {
+            auto& old_element = Element::element(ptr);
             ArmyId hash = old_element.hash();
             // logger << "Rehashing " << old_element.id() << ", hash " << hex << hash << dec << "\n" << Image{old_element.armyZ()};
             ArmyId offset = 0;
@@ -918,7 +932,7 @@ void ArmySetSparse::resize() {
                 // logger << "Try [" << group_id << "," << pos << "]\n";
                 if (new_group.bit(pos) == 0) {
                     // logger << "Hit\n";
-                    new_group.append(pos, old_element);
+                    new_group.append(data_cache_, pos, old_element);
                     break;
                 }
                 hash += ++offset;
@@ -941,6 +955,7 @@ void ArmySetSparse::__convert_hash(bool keep) {
         if (armies_) throw_logic("Already converted ArmySetSparse");
     }
 
+    data_cache_.free(true);
     ArmyId* indices;
     if (keep) {
         mallocate(indices_, size());
@@ -957,15 +972,15 @@ void ArmySetSparse::__convert_hash(bool keep) {
         uint n = group.bits();
         // cout << "Converting group " << g << " with " << n << " elements\n";
         if (n == 0) continue;
-        auto old_ptr = group._data();
-        for (uint i=0; i<n; ++i, old_ptr += Group::ELEMENT_SIZE, ++indices) {
-            auto& old_element = *static_cast<Element const*>(static_cast<void const*>(old_ptr));
+        char const* old_ptr = group._data();
+        for (uint i=0; i<n; ++i, old_ptr += Element::SIZE, ++indices) {
+            auto& old_element = Element::element(old_ptr);
             auto armyZ = old_element.armyZ();
             // cout << "Copying element " << old_element.id() << "\n";
             if (CHECK && (UNLIKELY(old_element.id() > size()) || UNLIKELY(old_element.id() == 0)))
                 throw_logic("Element " + to_string(old_element.id()) + " is out of range [1.." + to_string(size()) + "]");
-            std::copy(armyZ.begin(), armyZ.end(), &armies[old_element.id() * ARMY]);
             if (keep) *indices = old_element.id();
+            std::copy(armyZ.begin(), armyZ.end(), &armies[old_element.id() * ARMY]);
         }
         if (keep) group._free_data(indices - n);
         else group._free_data();
@@ -992,9 +1007,9 @@ void ArmySetSparse::print(ostream& os) const {
         char const* ptr = group._data();
         for (uint i=0; i<GROUP_SIZE; ++i) 
             if (group.bit(i)) {
-                Element const& element = *static_cast<Element const*>(static_cast<void const*>(ptr));
+                Element const& element = Element::element(ptr);
                 os << " " << element.id();
-                ptr += Group::ELEMENT_SIZE;
+                ptr += Element::SIZE;
             } else
                 os << " D";
     }
@@ -1006,10 +1021,10 @@ void ArmySetSparse::print(ostream& os) const {
         char const* ptr = group._data();
         for (uint i=0; i<GROUP_SIZE; ++i) 
             if (group.bit(i)) {
-                Element const& element = *static_cast<Element const*>(static_cast<void const*>(ptr));
+                Element const& element = Element::element(ptr);
                 auto h = element.hash();
                 os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
-                ptr += Group::ELEMENT_SIZE;
+                ptr += Element::SIZE;
             }
     }
 }
