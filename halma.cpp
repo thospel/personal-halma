@@ -787,27 +787,21 @@ void ArmySetSparse::_init(size_t size) {
     // logger << "New groups  " << static_cast<void const *>(groups_) << "\n";
 }
 
-void ArmySetSparse::_free(bool zero) {
-    size_t n = nr_groups();
-    if (armies_)
-        if (zero)
-            for (size_t i=0; i<n; ++i)
-                groups_[i]._free_converted(true);
-        else
-            for (size_t i=0; i<n; ++i)
-                groups_[i]._free_converted(false);
-    else
-        if (zero)
-            for (size_t i=0; i<n; ++i)
-                groups_[i]._free(true);
-        else
-            for (size_t i=0; i<n; ++i)
-                groups_[i]._free(false);
+void ArmySetSparse::free_groups() {
+    if (armies_) {
+        demallocate(indices_, size());
+        indices_ = nullptr;
+    } else {
+        size_t n = nr_groups();
+        for (size_t i=0; i<n; ++i)
+            groups_[i]._free();
+    }
 }
 
 ArmySetSparse::ArmySetSparse(bool lock, size_t size):
     armies_{nullptr},
     groups_{nullptr},
+    indices_{nullptr},
     size_{0},
     memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
         _init(size);
@@ -816,30 +810,40 @@ ArmySetSparse::ArmySetSparse(bool lock, size_t size):
 ArmySetSparse::~ArmySetSparse() {
     // Free groups_ before armies_ because _free looks at armies_
     if (groups_) {
-        _free(false);
+        free_groups();
         demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
     }
-    if (armies_) demallocate(armies_+ARMY, size_ * ARMY);
+    if (armies_) demallocate(armies_+ARMY, size() * ARMY);
+    // This can only happen if we ran out of memory during __convert_hash
+    // army list allocation after indices_ allocation succeeded
+    if (indices_) {
+        demallocate(indices_, size());
+        logger << "Unexpectedly freed indices_" << endl;
+    }
 }
 
-void ArmySetSparse::clear(size_t size) {
+void ArmySetSparse::clear(size_t initial_size) {
     // Free groups_ before armies_ because _free looks at armies_
     if (groups_) {
-        _free(true);
+        free_groups();
         demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
         groups_ = nullptr;
     }
     if (armies_) {
-        demallocate(armies_+ARMY, size_ * ARMY);
+        demallocate(armies_+ARMY, size() * ARMY);
         armies_ = nullptr;
     }
-    _init(size);
+    _init(initial_size);
 }
 
 ArmyId ArmySetSparse::find(Army const& army) const {
     if (true || CHECK) {
-        if (UNLIKELY(!armies_)) throw_logic("unconverted ArmySetSparse::find");
-        if (UNLIKELY(!groups_)) throw_logic("dropped hash ArmySetSparse::find");
+        if (UNLIKELY(!armies_))
+            throw_logic("ArmySetSparse::find without armies");
+        if (UNLIKELY(!groups_))
+            throw_logic("ArmySetSparse::find without groups");
+        if (UNLIKELY(!indices_))
+            throw_logic("ArmySetSparse::find without indices");
     }
     ArmyId hash = army.hash();
     ArmyId const mask = mask_;
@@ -859,8 +863,12 @@ ArmyId ArmySetSparse::find(Army const& army) const {
 
 ArmyId ArmySetSparse::find(ArmyPos const& army) const {
     if (true || CHECK) {
-        if (UNLIKELY(!armies_)) throw_logic("unconverted ArmySetSparse::find");
-        if (UNLIKELY(!groups_)) throw_logic("dropped hash ArmySetSparse::find");
+        if (UNLIKELY(!armies_))
+            throw_logic("ArmySetSparse::find without armies");
+        if (UNLIKELY(!groups_))
+            throw_logic("ArmySetSparse::find without groups");
+        if (UNLIKELY(!indices_))
+            throw_logic("ArmySetSparse::find without indices");
     }
     ArmyId hash = army.hash();
     ArmyId const mask = mask_;
@@ -929,9 +937,15 @@ void ArmySetSparse::resize() {
 void ArmySetSparse::__convert_hash(bool keep) {
     // cout << *this;
 
-    if (true || CHECK) 
-        if (armies_) throw_logic("Already converted");
+    if (true || CHECK) {
+        if (armies_) throw_logic("Already converted ArmySetSparse");
+    }
 
+    ArmyId* indices;
+    if (keep) {
+        mallocate(indices_, size());
+        indices = indices_;
+    }
     mallocate(armies_, size() * ARMY);
     armies_ -= ARMY;
     auto armies = armies_;
@@ -943,20 +957,17 @@ void ArmySetSparse::__convert_hash(bool keep) {
         uint n = group.bits();
         // cout << "Converting group " << g << " with " << n << " elements\n";
         if (n == 0) continue;
-        ArmyId* new_elements;
-        ArmyId* new_ptr;
-        if (keep) new_ptr = new_elements = allocate<ArmyId>(n);
         auto old_ptr = group._data();
-        for (uint i=0; i<n; ++i, old_ptr += Group::ELEMENT_SIZE, ++new_ptr) {
+        for (uint i=0; i<n; ++i, old_ptr += Group::ELEMENT_SIZE, ++indices) {
             auto& old_element = *static_cast<Element const*>(static_cast<void const*>(old_ptr));
             auto armyZ = old_element.armyZ();
             // cout << "Copying element " << old_element.id() << "\n";
             if (CHECK && (UNLIKELY(old_element.id() > size()) || UNLIKELY(old_element.id() == 0)))
                 throw_logic("Element " + to_string(old_element.id()) + " is out of range [1.." + to_string(size()) + "]");
             std::copy(armyZ.begin(), armyZ.end(), &armies[old_element.id() * ARMY]);
-            if (keep) *new_ptr = old_element.id();
+            if (keep) *indices = old_element.id();
         }
-        if (keep) group._free_data(new_elements);
+        if (keep) group._free_data(indices - n);
         else group._free_data();
     }
     if (keep) {

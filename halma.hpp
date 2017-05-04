@@ -943,17 +943,8 @@ class ArmySetSparse {
             deallocate(data_, bits() * ELEMENT_SIZE);
             data_ = reinterpret_cast<char *>(new_data);
         }
-        inline void _free(bool zero) {
-            if (bitmap_) {
-                _free_data();
-                if (zero) bitmap_ = 0;
-            }
-        }
-        inline void _free_converted(bool zero) {
-            if (bitmap_) {
-                _free_converted_data();
-                if (zero) bitmap_ = 0;
-            }
+        inline void _free() {
+            if (bitmap_) _free_data();
         }
         inline uint bits() const PURE {
             return popcount64(bitmap_);
@@ -1082,13 +1073,14 @@ class ArmySetSparse {
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
 
     inline void _init(size_t size);
-    inline void _free(bool zero);
+    inline void free_groups();
     NOINLINE void resize() RESTRICT;
     void _convert_hash(bool keep = false);
     inline void __convert_hash(bool keep);
 
     Coord* armies_;
     Group* groups_;
+    ArmyId* indices_;
     mutex exclude_;
     ArmyId size_;
     ArmyId left_;
