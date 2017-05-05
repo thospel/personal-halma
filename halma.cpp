@@ -789,16 +789,21 @@ void ArmySetDense::print(ostream& os) const {
     }
 }
 
-void ArmySetSparse::DataCache::free(bool zero) {
-    size_t size = 0;
-    for (uint i=0; i<ArmySetSparse::GROUP_SIZE; ++i) {
-        size += Element::SIZE;
-        while (used_[i]) {
-            auto& cache = cache_[i][--used_[i]];
-            ::deallocate(cache, size);
-            if (zero) cache = nullptr;
-        }
+array<uint, ArmySetSparse::GROUP_SIZE> ArmySetSparse::DataCache::SizeCache::block_size_;
+
+void ArmySetSparse::DataCache::SizeCache::free(uint i, bool zero) {
+    size_t block_size = block_size_[i];
+    while (cached_) {
+        auto& data = cache_[--cached_];
+        ::deallocate(data, block_size);
+        if (zero) data = nullptr;
     }
+}
+
+void ArmySetSparse::DataCache::free(bool zero) {
+    for (uint i=0; i<ArmySetSparse::GROUP_SIZE; ++i)
+        cache_[i].free(i, zero);
+
     if (overflow_size_) {
         demallocate(overflow_, overflow_size_);
         if (zero) overflow_size_ = 0;
@@ -941,8 +946,8 @@ void ArmySetSparse::resize() {
          ++g_low, ++g_high) {
         uint g = g_low % GROUP_BUILDERS;
         if (g_low >= GROUP_BUILDERS) {
-            new_groups[g_low  - GROUP_BUILDERS].copy(data_cache_, groups_low [g]);
-            new_groups[g_high - GROUP_BUILDERS].copy(data_cache_, groups_high[g]);
+            new_groups[g_low  - GROUP_BUILDERS].copy(data_cache_, g_low  - GROUP_BUILDERS, groups_low [g]);
+            new_groups[g_high - GROUP_BUILDERS].copy(data_cache_, g_high - GROUP_BUILDERS, groups_high[g]);
         }
         groups_low [g].clear();
         groups_high[g].clear();
@@ -991,8 +996,9 @@ void ArmySetSparse::resize() {
 
     for (GroupId g_low = old_nr_groups < GROUP_BUILDERS ? 0 : old_nr_groups-GROUP_BUILDERS; g_low < old_nr_groups; ++g_low) {
         uint g = g_low % GROUP_BUILDERS;
-        new_groups[g_low]                .copy(data_cache_, groups_low [g]);
-        new_groups[g_low + old_nr_groups].copy(data_cache_, groups_high[g]);
+        new_groups[g_low] .copy(data_cache_, g_low,  groups_low [g]);
+        GroupId g_high = g_low + old_nr_groups;
+        new_groups[g_high].copy(data_cache_, g_high, groups_high[g]);
     }
 
     // logger << "overflow " << data_cache_.overflowed() << " / " << old_nr_groups << endl;
@@ -1008,7 +1014,7 @@ void ArmySetSparse::resize() {
             // logger << "Try [" << group_id << "," << pos << "]\n";
             if (new_group.bit(pos) == 0) {
                 // logger << "Hit\n";
-                new_group.append(data_cache_, pos, old_element);
+                new_group.append(data_cache_, group_id, pos, old_element);
                 break;
             }
             hash += ++offset;
@@ -2625,7 +2631,7 @@ void my_main(int argc, char const* const* argv) {
     ARMY64_DOWN  = ARMY / sizeof(uint64_t);
     NIBBLE_LEFT  = AlignFill(0xf0);
     NIBBLE_RIGHT = AlignFill(0x0f);
-    ArmySetSparse::set_ELEMENT_SIZE();
+    ArmySetSparse::set_ARMY_size();
 
     balance_min = ARMY     / 4 - balance;
     balance_max = (ARMY+3) / 4 + balance;

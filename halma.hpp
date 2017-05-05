@@ -954,47 +954,76 @@ class ArmySetSparse {
 
     class Element;
     class DataCache {
-      public:
-        static uint   const DATA_CACHE_SIZE = 8;
+        class SizeCache {
+            // Not copyable (avoid accidents)
+            SizeCache(SizeCache const&) = delete;
+            SizeCache& operator=(SizeCache const&) = delete;
 
-        DataCache(): overflow_used_{0}, overflow_size_{0} {
-            std::fill(used_.begin(), used_.end(), 0);
-        }
-        // Not copyable (avoid accidents)
-        DataCache(DataCache const&) = delete;
-        DataCache& operator=(DataCache const&) = delete;
-
-        inline void free(bool zero);
-        inline char* allocate(uint n) {
-            uint i = n-1;
-            // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
-            if (DATA_CACHE_SIZE && used_[i]) return cache_[i][--used_[i]];
-            return ::allocate<char>(Element::SIZE * n);
-        }
-        inline char* allocate(uint n, Statistics& stats) {
-            stats.armyset_alloc();
-            uint i = n-1;
-            // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
-            if (DATA_CACHE_SIZE && used_[i]) {
-                stats.armyset_alloc_cached();
-                return cache_[i][--used_[i]];
+          public:
+            static uint   const DATA_CACHE_SIZE = 8;
+            static void set_ARMY_size(uint i) {
+                block_size_[i] = (i+1) * Element::SIZE;
             }
-            return ::allocate<char>(Element::SIZE * n);
+
+            SizeCache(): cached_{0} {}
+            inline char* allocate(GroupId id, uint i) {
+                // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
+                if (DATA_CACHE_SIZE && cached_) return cache_[--cached_];
+                return ::allocate<char>(block_size_[i]);
+            }
+            inline char* allocate(GroupId id, uint i, Statistics& stats) {
+                stats.armyset_alloc();
+                // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
+                if (DATA_CACHE_SIZE && cached_) {
+                    stats.armyset_alloc_cached();
+                    return cache_[--cached_];
+                }
+                return ::allocate<char>(block_size_[i]);
+            }
+            void deallocate(uint i, char* data) {
+                if (cached_ < DATA_CACHE_SIZE) cache_[cached_++] = data;
+                else ::deallocate(data, block_size_[i]);
+            }
+            void deallocate(uint i, char* data, Statistics& stats) {
+                stats.armyset_dealloc();
+                if (cached_ < DATA_CACHE_SIZE) {
+                    stats.armyset_dealloc_cached();
+                    cache_[cached_++] = data;
+                }
+                else ::deallocate(data, block_size_[i]);
+            }
+            inline void free(uint i, bool zero);
+          private:
+            static array<uint, GROUP_SIZE> block_size_;
+
+            array<char*, DATA_CACHE_SIZE> cache_;
+            uint cached_;
+            // uint block_size_;
+            char* data_;
+            size_t size_;
+            size_t free_;
+            size_t lower_bound_;
+            size_t upper_bound_;
+        };
+      public:
+        static void set_ARMY_size() {
+            for (uint i=0; i<GROUP_SIZE; ++i)
+                SizeCache::set_ARMY_size(i);
+        }
+
+        inline char* allocate(GroupId id, uint n) {
+            return cache_[n-1].allocate(id, n-1);
+        }
+        inline char* allocate(GroupId id, uint n, Statistics& stats) {
+            return cache_[n-1].allocate(id, n-1, stats);
         }
         void deallocate(uint n, char* data) {
-            uint i = n-1;
-            if (used_[i] < DATA_CACHE_SIZE) cache_[i][used_[i]++] = data;
-            else ::deallocate(data, Element::SIZE * n);
+            cache_[n-1].deallocate(n-1, data);
         }
         void deallocate(uint n, char* data, Statistics& stats) {
-            stats.armyset_dealloc();
-            uint i = n-1;
-            if (used_[i] < DATA_CACHE_SIZE) {
-                stats.armyset_dealloc_cached();
-                cache_[i][used_[i]++] = data;
-            }
-            else ::deallocate(data, Element::SIZE * n);
+            cache_[n-1].deallocate(n-1, data, stats);
         }
+        inline void free(bool zero);
         inline size_t _overflowed() const PURE {
             return overflow_used_;
         }
@@ -1023,11 +1052,10 @@ class ArmySetSparse {
             overflow_used_ += Element::SIZE;
         }
       private:
-        array<array<char*, DATA_CACHE_SIZE>, GROUP_SIZE> cache_;
-        array<uint8_t, GROUP_SIZE> used_;
         char* overflow_;
         size_t overflow_used_;
         size_t overflow_size_;
+        array<SizeCache, GROUP_SIZE> cache_;
     };
 
     class alignas(char) Element {
@@ -1110,9 +1138,9 @@ class ArmySetSparse {
             return reinterpret_cast<ArmyId const*>(data_)[i];
         }
         inline char const* _data() const PURE { return data_; }
-        inline void append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army, Statistics& stats);
-        inline void append(DataCache& cache, ArmyId pos, Element const& old_element);
-        inline void copy(DataCache& cache, GroupBuilder const& group_builder);
+        inline void append(DataCache& cache, GroupId group_id, uint pos, ArmyId army_id, Coord const* army, Statistics& stats);
+        inline void append(DataCache& cache, GroupId group_id, uint pos, Element const& old_element);
+        inline void copy(DataCache& cache, GroupId id, GroupBuilder const& group_builder);
       protected:
         char* data_;
     };
@@ -1137,9 +1165,10 @@ class ArmySetSparse {
         array<char, GROUP_SIZE * (MAX_ARMY * sizeof(Coord) + sizeof(Element))> data_;
     };
   public:
-    static void set_ELEMENT_SIZE() {
+    static void set_ARMY_size() {
         Element::SIZE = ARMY * sizeof(Coord) + sizeof(Element);
         // cout << "sizeof(Element) = " << sizeof(Element) << ", Element::SIZE = " << Element::SIZE << "\n";
+        DataCache::set_ARMY_size();
     }
     ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
     ~ArmySetSparse();
@@ -1217,12 +1246,12 @@ class ArmySetSparse {
     int    memory_flags_;
 };
 
-void ArmySetSparse::Group::copy(DataCache& cache, GroupBuilder const& group_builder) {
+void ArmySetSparse::Group::copy(DataCache& cache, GroupId id, GroupBuilder const& group_builder) {
     bitmap_ = group_builder.bitmap();
     if (bitmap_ == 0) return;
     Bitmap b{bitmap_};
     uint n = b.bits();
-    data_ = cache.allocate(n);
+    data_ = cache.allocate(id, n);
     char* ptr = data_;
     for (uint i=0; i < n; ++i, ptr += Element::SIZE) {
         uint j = b.drop_one();
@@ -2240,35 +2269,35 @@ ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
     }
 }
 
-void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army, Statistics& stats) {
+void ArmySetSparse::Group::append(DataCache& cache, GroupId group_id, uint pos, ArmyId army_id, Coord const* army, Statistics& stats) {
     if (bitmap_) {
         uint i = index(pos);
         uint n = bits();
-        auto new_data = cache.allocate(n+1, stats);
+        auto new_data = cache.allocate(group_id, n+1, stats);
         std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
         auto new_element = &new_data[i * Element::SIZE];
         auto& element = Element::element(new_element);
-        element.id(id);
+        element.id(army_id);
         std::copy(army, army+ARMY, element.begin());
         std::copy(&data_[i * Element::SIZE], &data_[n * Element::SIZE],
                   new_element + Element::SIZE);
         cache.deallocate(n, data_, stats);
         data_ = new_data;
     } else {
-        data_ = cache.allocate(1, stats);
+        data_ = cache.allocate(group_id, 1, stats);
         auto& element = Element::element(data_);
-        element.id(id);
+        element.id(army_id);
         std::copy(army, army+ARMY, element.begin());
     }
     set(pos);
 }
 
-void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, Element const& old_element) {
+void ArmySetSparse::Group::append(DataCache& cache, GroupId group_id, uint pos, Element const& old_element) {
     char const* old_e = static_cast<char const*>(static_cast<void const *>(&old_element));
     if (bitmap_) {
         uint i = index(pos);
         uint n = bits();
-        auto new_data = cache.allocate(n+1);
+        auto new_data = cache.allocate(group_id, n+1);
         std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
         auto new_element = &new_data[i * Element::SIZE];
         std::copy(old_e, old_e + Element::SIZE, new_element);
@@ -2277,7 +2306,7 @@ void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, Element const& o
         cache.deallocate(n, data_);
         data_ = new_data;
     } else {
-        data_ = cache.allocate(1);
+        data_ = cache.allocate(group_id, 1);
         std::copy(old_e, old_e + Element::SIZE, data_);
     }
     set(pos);
@@ -2301,10 +2330,10 @@ ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
         if (group.bit(pos) == 0) {
             stats.armyset_probe(offset);
             --left_;
-            ArmyId id = ++size_;
-            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            group.append(data_cache_, pos, id, army.begin(), stats);
-            return id;
+            ArmyId army_id = ++size_;
+            // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
+            group.append(data_cache_, group_id, pos, army_id, army.begin(), stats);
+            return army_id;
         }
         Element const& element = group.at(pos);
         if (army == element.armyZ()) {
@@ -2335,10 +2364,10 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
         if (group.bit(pos) == 0) {
             stats.armyset_probe(offset);
             --left_;
-            ArmyId id = ++size_;
-            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            group.append(data_cache_, pos, id, army.begin(), stats);
-            return id;
+            ArmyId army_id = ++size_;
+            // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
+            group.append(data_cache_, group_id, pos, army_id, army.begin(), stats);
+            return army_id;
         }
         Element const& element = group.at(pos);
         if (army == element.armyZ()) {

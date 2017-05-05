@@ -87,7 +87,7 @@ Statistics NAME(uint thid,
 
         if (thread_data.signalled()) {
             if (tid == 0) {
-                logger << time_string() << ": Processing blue " << setw(6) << blue_id << "\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n" << flush;
+                logger << time_string() << ": Processing blue " << setw(6) << blue_id << " (" << get_memory() / 1000000 << " MB)\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n" << flush;
             }
             if (thread_data.is_terminated()) {
                 logger << "Forced exit" << endl;
