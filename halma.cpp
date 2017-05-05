@@ -39,9 +39,6 @@ char const* sample_subset_red = nullptr;
 bool testq = false;
 int  testQ = 0;
 
-// 0 means let C++ decide
-uint nr_threads = 0;
-
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
 class GetOpt {
@@ -239,26 +236,41 @@ void StatisticsE::print(ostream& os) const {
     if (statistics) {
         os << "\tLargest subset: " << largest_subset() << "\n";
         os << "\tLargest army resize overflow: " << max_overflow() << "\n";
+
+        os << "\tCached army   allocs: ";
+        if (armyset_allocs())
+            os << setw(3) << armyset_allocs_cached()*100 / armyset_allocs() << "%s";
+        else
+            os << "----";
+        os << "\t" << armyset_allocs_cached() << " / " << armyset_allocs() << "\n";
+
+        os << "\tCached army deallocs: ";
+        if (armyset_deallocs())
+            os << setw(3) << armyset_deallocs_cached()*100 / armyset_deallocs() << "%s";
+        else
+            os << "----";
+        os << "\t" << armyset_deallocs_cached() << " / " << armyset_deallocs() << "\n";
+
         os << "\tArmy inserts:  ";
         if (armyset_tries())
             os << setw(3) << armyset_size()*100 / armyset_tries() << "%";
         else
             os << "----";
-        os << "\t" << armyset_size() << " / " << armyset_tries() << " " << "\n";
+        os << "\t" << armyset_size() << " / " << armyset_tries() << "\n";
 
         os << "\tBoard inserts: ";
         if (boardset_tries())
             os << setw(3) << boardset_size()*100 / boardset_tries() << "%";
         else
             os << "----";
-        os << "\t" << boardset_size() << " / " << boardset_tries() << " " << "\n";
+        os << "\t" << boardset_size() << " / " << boardset_tries() << "\n";
 
         os << "\tBlue on red base edge: ";
         if (boardset_size())
             os << setw(3) << edges()*100 / boardset_size() << "%";
         else
             os << "----";
-        os << "\t" << edges() << " / " << boardset_size() << " " << "\n";
+        os << "\t" << edges() << " / " << boardset_size() << "\n";
 
         os << "\tMemory: " << allocated()/ 1000000  << " plain + " << mmapped()/1000000 << " mmapped (" << mmaps() << " mmaps) = " << (allocated() + mmapped()) / 1000000 << " MB\n";
         os << "\tMlocks: " << mlocked()/ 1000000  << " MB in " << mlocks() << " ranges\n";
@@ -269,7 +281,7 @@ void StatisticsE::print(ostream& os) const {
             os << setw(3) << armyset_immediate() * 100 / armyset_tries() << "%";
         else
             os << "----";
-        os << "\t" << armyset_immediate() << " / " << armyset_tries() << " " << "\n";
+        os << "\t" << armyset_immediate() << " / " << armyset_tries() << "\n";
 
         os << "\tArmy probes:  ";
         auto probes = armyset_tries();
@@ -285,7 +297,7 @@ void StatisticsE::print(ostream& os) const {
             os << setw(3) << boardset_immediate() * 100 / boardset_tries() << "%";
         else
             os << "----";
-        os << "\t" << boardset_immediate() << " / " << boardset_tries() << " " << "\n";
+        os << "\t" << boardset_immediate() << " / " << boardset_tries() << "\n";
 
         os << "\tBoard probes:  ";
         probes = boardset_tries();
@@ -910,6 +922,9 @@ void ArmySetSparse::resize() {
         if (armies_) throw_logic("Resize with army list");
     }
 
+    if (size() >= ARMYID_HIGHBIT - 1)
+        throw_logic("ArmySet has grown too large");
+
     array<GroupBuilder, GROUP_BUILDERS> groups_low;
     array<GroupBuilder, GROUP_BUILDERS> groups_high;
 
@@ -919,10 +934,6 @@ void ArmySetSparse::resize() {
     Group* new_groups = mallocate<Group>(new_nr_groups, memory_flags_);
     // logger << "Resize ArmySetSparse: " << old_groups << " -> " << new_groups << ", new size=" << new_nr_groups * GROUP_SIZE << endl;
     // print(logger, false);
-
-    left_ +=
-        + FACTOR(new_nr_groups * GROUP_SIZE)
-        - FACTOR(old_nr_groups * GROUP_SIZE);
 
     GroupId mask = new_nr_groups-1;
     for (GroupId g_low = 0, g_high = old_nr_groups;
@@ -1004,6 +1015,11 @@ void ArmySetSparse::resize() {
             // logger << "Miss\n";
         }
     }
+
+    left_ = min(left_
+                + FACTOR(new_nr_groups * GROUP_SIZE)
+                - FACTOR(old_nr_groups * GROUP_SIZE),
+                ARMYID_HIGHBIT - 1 - size());
 
     // logger << "Overflow " << overflow() << endl;
     // print(logger, false);

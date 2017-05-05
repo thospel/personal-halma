@@ -17,6 +17,9 @@
 
 bool FATAL = false;
 
+// 0 means let C++ decide
+uint nr_threads = 0;
+
 uint signal_counter;
 std::atomic<uint> signal_generation;
 thread_local ssize_t allocated_ = 0;
@@ -235,6 +238,9 @@ void _munlock(void* ptr, size_t length) {
     --mlocks_;
 }
 
+// On my system (notebook with skylake):
+//   about 0.5 to 1   microsecond per mmap/munmap pair (2.5 us for 100G)
+//   about 0.3 to 0.5 microsecond per mremap (4 us for 100G)
 inline void* _mmap(size_t length, int flags) ALWAYS_INLINE;
 void* _mmap(size_t length, int flags) {
     size_t length_rounded = PAGE_ROUND(length);

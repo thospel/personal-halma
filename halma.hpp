@@ -136,7 +136,6 @@ extern int example;
 
 // There is no fundamental limit. Just make up *SOME* bound
 uint const THREADS_MAX = 256;
-extern uint nr_threads;
 
 const char letters[] = "abcdefghijklmnopqrstuvwxyz";
 
@@ -712,6 +711,10 @@ class Statistics {
         armyset_tries_ = 0;
         armyset_probes_ = 0;
         armyset_immediate_ = 0;
+        armyset_allocs_ = 0;
+        armyset_allocs_cached_ = 0;
+        armyset_deallocs_ = 0;
+        armyset_deallocs_cached_ = 0;
 
         boardset_size_ = 0;
         boardset_tries_ = 0;
@@ -748,6 +751,22 @@ class Statistics {
     inline void armyset_untry(Counter del) {
         armyset_tries_ -= del;
     }
+    inline void armyset_alloc() {
+        if (!STATISTICS) return;
+        ++armyset_allocs_;
+    }
+    inline void armyset_alloc_cached() {
+        if (!STATISTICS) return;
+        ++armyset_allocs_cached_;
+    }
+    inline void armyset_dealloc() {
+        if (!STATISTICS) return;
+        ++armyset_deallocs_;
+    }
+    inline void armyset_dealloc_cached() {
+        if (!STATISTICS) return;
+        ++armyset_deallocs_cached_;
+    }
     inline void boardset_size(Counter size) {
         boardset_tries_ += size;
         boardset_size_ = size;
@@ -776,6 +795,10 @@ class Statistics {
     Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
     Counter armyset_probes() const PURE { return armyset_probes_; }
+    Counter armyset_allocs() const PURE { return armyset_allocs_; }
+    Counter armyset_allocs_cached() const PURE { return armyset_allocs_cached_; }
+    Counter armyset_deallocs() const PURE { return armyset_deallocs_; }
+    Counter armyset_deallocs_cached() const PURE { return armyset_deallocs_cached_; }
     Counter boardset_size() const PURE { return boardset_size_; }
     Counter boardset_tries() const PURE { return boardset_tries_; }
     Counter boardset_immediate() const PURE { return boardset_immediate_; }
@@ -789,12 +812,17 @@ class Statistics {
         auto max_overflow   = stats.max_overflow();
         if (max_overflow > max_overflow_) max_overflow_ = max_overflow;
 
-        armyset_tries_	  += stats.armyset_tries();
-        boardset_tries_	  += stats.boardset_tries();
-        armyset_probes_	  += stats.armyset_probes_;
         armyset_immediate_  += stats.armyset_immediate_;
-        boardset_probes_	  += stats.boardset_probes_;
+        armyset_probes_	  += stats.armyset_probes_;
+        armyset_tries_	  += stats.armyset_tries();
+        armyset_allocs_          += stats.armyset_allocs();
+        armyset_allocs_cached_   += stats.armyset_allocs_cached();
+        armyset_deallocs_        += stats.armyset_deallocs();
+        armyset_deallocs_cached_ += stats.armyset_deallocs_cached();
+
         boardset_immediate_ += stats.boardset_immediate_;
+        boardset_probes_    += stats.boardset_probes_;
+        boardset_tries_	    += stats.boardset_tries();
         return *this;
     }
 
@@ -807,6 +835,10 @@ class Statistics {
     Counter armyset_tries_;
     Counter armyset_probes_;
     Counter armyset_immediate_;
+    Counter armyset_allocs_;
+    Counter armyset_allocs_cached_;
+    Counter armyset_deallocs_;
+    Counter armyset_deallocs_cached_;
     Counter boardset_size_;
     Counter boardset_tries_;
     Counter boardset_probes_;
@@ -923,7 +955,7 @@ class ArmySetSparse {
     class Element;
     class DataCache {
       public:
-        static uint   const DATA_CACHE_SIZE = 4;
+        static uint   const DATA_CACHE_SIZE = 8;
 
         DataCache(): overflow_used_{0}, overflow_size_{0} {
             std::fill(used_.begin(), used_.end(), 0);
@@ -935,12 +967,32 @@ class ArmySetSparse {
         inline void free(bool zero);
         inline char* allocate(uint n) {
             uint i = n-1;
-            if (used_[i]) return cache_[i][--used_[i]];
+            // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
+            if (DATA_CACHE_SIZE && used_[i]) return cache_[i][--used_[i]];
+            return ::allocate<char>(Element::SIZE * n);
+        }
+        inline char* allocate(uint n, Statistics& stats) {
+            stats.armyset_alloc();
+            uint i = n-1;
+            // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
+            if (DATA_CACHE_SIZE && used_[i]) {
+                stats.armyset_alloc_cached();
+                return cache_[i][--used_[i]];
+            }
             return ::allocate<char>(Element::SIZE * n);
         }
         void deallocate(uint n, char* data) {
             uint i = n-1;
             if (used_[i] < DATA_CACHE_SIZE) cache_[i][used_[i]++] = data;
+            else ::deallocate(data, Element::SIZE * n);
+        }
+        void deallocate(uint n, char* data, Statistics& stats) {
+            stats.armyset_dealloc();
+            uint i = n-1;
+            if (used_[i] < DATA_CACHE_SIZE) {
+                stats.armyset_dealloc_cached();
+                cache_[i][used_[i]++] = data;
+            }
             else ::deallocate(data, Element::SIZE * n);
         }
         inline size_t _overflowed() const PURE {
@@ -1058,7 +1110,7 @@ class ArmySetSparse {
             return reinterpret_cast<ArmyId const*>(data_)[i];
         }
         inline char const* _data() const PURE { return data_; }
-        inline void append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army);
+        inline void append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army, Statistics& stats);
         inline void append(DataCache& cache, ArmyId pos, Element const& old_element);
         inline void copy(DataCache& cache, GroupBuilder const& group_builder);
       protected:
@@ -2188,11 +2240,11 @@ ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
     }
 }
 
-void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army) {
+void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army, Statistics& stats) {
     if (bitmap_) {
         uint i = index(pos);
         uint n = bits();
-        auto new_data = cache.allocate(n+1);
+        auto new_data = cache.allocate(n+1, stats);
         std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
         auto new_element = &new_data[i * Element::SIZE];
         auto& element = Element::element(new_element);
@@ -2200,10 +2252,10 @@ void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, ArmyId id, Coord
         std::copy(army, army+ARMY, element.begin());
         std::copy(&data_[i * Element::SIZE], &data_[n * Element::SIZE],
                   new_element + Element::SIZE);
-        cache.deallocate(n, data_);
+        cache.deallocate(n, data_, stats);
         data_ = new_data;
     } else {
-        allocate(data_, Element::SIZE);
+        data_ = cache.allocate(1, stats);
         auto& element = Element::element(data_);
         element.id(id);
         std::copy(army, army+ARMY, element.begin());
@@ -2225,7 +2277,7 @@ void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, Element const& o
         cache.deallocate(n, data_);
         data_ = new_data;
     } else {
-        allocate(data_, Element::SIZE);
+        data_ = cache.allocate(1);
         std::copy(old_e, old_e + Element::SIZE, data_);
     }
     set(pos);
@@ -2251,7 +2303,7 @@ ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
             --left_;
             ArmyId id = ++size_;
             // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            group.append(data_cache_, pos, id, army.begin());
+            group.append(data_cache_, pos, id, army.begin(), stats);
             return id;
         }
         Element const& element = group.at(pos);
@@ -2285,7 +2337,7 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
             --left_;
             ArmyId id = ++size_;
             // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            group.append(data_cache_, pos, id, army.begin());
+            group.append(data_cache_, pos, id, army.begin(), stats);
             return id;
         }
         Element const& element = group.at(pos);
