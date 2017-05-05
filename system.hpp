@@ -125,6 +125,16 @@ uint popcount64(uint64_t value) {
 #endif
 }
 
+inline uint clz64(uint64_t value) FUNCTIONAL;
+uint clz64(uint64_t value) {
+    return __builtin_clzll(value);
+}
+
+inline uint ctz64(uint64_t value) FUNCTIONAL;
+uint ctz64(uint64_t value) {
+    return __builtin_ctzll(value);
+}
+
 inline bool use_mmap(size_t size) {
     return size >= MMAP_THRESHOLD;
     // return false;
@@ -274,7 +284,9 @@ inline void callocate(T*& ptr, size_t new_size, int flags=0) {
 }
 
 template<class T>
-inline void deallocate(T* old_ptr, size_t old_size, int flags=0) {
+inline void deallocate(T* old_ptr, size_t old_size, int flags=0) ALWAYS_INLINE;
+template<class T>
+void deallocate(T* old_ptr, size_t old_size, int flags) {
     delete [] reinterpret_cast<char*>(old_ptr);
     allocated_ -= old_size * sizeof(T);
 }

@@ -706,6 +706,7 @@ class Statistics {
         late_prunes_ = 0;
         edge_count_  = 0;
         largest_subset_ = 0;
+        max_overflow_ = 0;
 
         armyset_size_ = 0;
         armyset_tries_ = 0;
@@ -728,6 +729,10 @@ class Statistics {
     inline void subset_size(size_t size) {
         if (!STATISTICS) return;
         if (size > largest_subset_) largest_subset_ = size;
+    }
+    inline void overflow(size_t size) {
+        if (!STATISTICS) return;
+        if (size > max_overflow_) max_overflow_ = size;
     }
     inline void largest_subset_size(BoardSet const& boards) {
         if (!STATISTICS) return;
@@ -765,7 +770,8 @@ class Statistics {
     }
     Counter late_prunes() const PURE { return late_prunes_; }
     Counter edges() const PURE { return edge_count_; }
-    Counter largest_subset() const PURE { return largest_subset_; }
+    size_t  largest_subset() const PURE { return largest_subset_; }
+    size_t  max_overflow() const PURE { return max_overflow_; }
     Counter armyset_size() const PURE { return armyset_size_; }
     Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
@@ -776,18 +782,20 @@ class Statistics {
     Counter boardset_probes() const PURE { return boardset_probes_; }
 
     Statistics& operator+=(Statistics const& stats) {
-      late_prunes_	  += stats.late_prunes();
-      edge_count_	  += stats.edges();
-      auto largest_subset = stats.largest_subset();
-      if (largest_subset > largest_subset_) largest_subset_ = largest_subset;
+        late_prunes_	  += stats.late_prunes();
+        edge_count_	  += stats.edges();
+        auto largest_subset = stats.largest_subset();
+        if (largest_subset > largest_subset_) largest_subset_ = largest_subset;
+        auto max_overflow   = stats.max_overflow();
+        if (max_overflow > max_overflow_) max_overflow_ = max_overflow;
 
-      armyset_tries_	  += stats.armyset_tries();
-      boardset_tries_	  += stats.boardset_tries();
-      armyset_probes_	  += stats.armyset_probes_;
-      armyset_immediate_  += stats.armyset_immediate_;
-      boardset_probes_	  += stats.boardset_probes_;
-      boardset_immediate_ += stats.boardset_immediate_;
-      return *this;
+        armyset_tries_	  += stats.armyset_tries();
+        boardset_tries_	  += stats.boardset_tries();
+        armyset_probes_	  += stats.armyset_probes_;
+        armyset_immediate_  += stats.armyset_immediate_;
+        boardset_probes_	  += stats.boardset_probes_;
+        boardset_immediate_ += stats.boardset_immediate_;
+        return *this;
     }
 
   private:
@@ -804,6 +812,7 @@ class Statistics {
     Counter boardset_probes_;
     Counter boardset_immediate_;
     size_t  largest_subset_;
+    size_t  max_overflow_;
 };
 
 STATIC const int ARMYID_BITS = std::numeric_limits<ArmyId>::digits;
@@ -907,12 +916,16 @@ class ArmySetSparse {
     static uint   const GROUP_BITS = LOG2(GROUP_SIZE);
     static uint   const GROUP_MASK = GROUP_SIZE - 1;
     static size_t const INITIAL_SIZE = GROUP_SIZE * 1;
+    static uint   const GROUP_BUILDERS = 8;
 
+    using GroupId = ArmyId;
+
+    class Element;
     class DataCache {
       public:
         static uint   const DATA_CACHE_SIZE = 4;
 
-        DataCache() {
+        DataCache(): overflow_used_{0}, overflow_size_{0} {
             std::fill(used_.begin(), used_.end(), 0);
         }
         // Not copyable (avoid accidents)
@@ -930,10 +943,39 @@ class ArmySetSparse {
             if (used_[i] < DATA_CACHE_SIZE) cache_[i][used_[i]++] = data;
             else ::deallocate(data, Element::SIZE * n);
         }
-
+        inline size_t _overflowed() const PURE {
+            return overflow_used_;
+        }
+        inline size_t overflowed() const PURE {
+            return _overflowed() / Element::SIZE;
+        }
+        inline size_t max_overflow() const PURE {
+            return overflow_size_ / Element::SIZE;
+        }
+        inline Element const& overflow_pop() {
+            overflow_used_ -= Element::SIZE;
+            return Element::element(&overflow_[overflow_used_]);
+        }
+        inline void overflow(Element const& element) {
+            if (overflow_used_ >= overflow_size_) {
+                if (overflow_size_) {
+                    remallocate(overflow_, overflow_size_, overflow_size_ * 2);
+                    overflow_size_ *= 2;
+                } else {
+                    mallocate(overflow_, GROUP_SIZE * Element::SIZE);
+                    overflow_size_ = GROUP_SIZE * Element::SIZE;
+                }
+            }
+            char const* ptr = reinterpret_cast<char const*>(&element);
+            std::copy(ptr, ptr+Element::SIZE, &overflow_[overflow_used_]);
+            overflow_used_ += Element::SIZE;
+        }
       private:
         array<array<char*, DATA_CACHE_SIZE>, GROUP_SIZE> cache_;
         array<uint8_t, GROUP_SIZE> used_;
+        char* overflow_;
+        size_t overflow_used_;
+        size_t overflow_size_;
     };
 
     class alignas(char) Element {
@@ -961,13 +1003,39 @@ class ArmySetSparse {
         ArmyId id_;
         Coord  coord_[0];
     };
-    class Group {
+    class Bitmap {
         // Not copyable (avoid accidents)
-        Group(Group const&) = delete;
-        Group& operator=(Group const&) = delete;
+        Bitmap(Bitmap const&) = delete;
+        Bitmap& operator=(Bitmap const&) = delete;
       public:
-
         using bitmap_type = uint64_t;
+
+        Bitmap() {}
+        Bitmap(bitmap_type bitmap): bitmap_{bitmap} {}
+        inline uint bits() const PURE {
+            return popcount64(bitmap_);
+        }
+        inline uint drop_one() {
+            uint i = ctz64(bitmap_);
+            bitmap_ = bitmap_ & (UINT64_C(-2) << i);
+            return i;
+        }
+        inline bool bit(uint n) const PURE {
+            return (bitmap_ & (UINT64_C(1) << n)) != 0;
+        }
+        inline uint index(uint n) const PURE {
+            return popcount64(bitmap_ & ((UINT64_C(1) << n)-1));
+        }
+        inline void set(uint n) {
+            bitmap_ = bitmap_ | (UINT64_C(1) << n);
+        }
+        inline bitmap_type bitmap() const PURE { return bitmap_; }
+      protected:
+        bitmap_type bitmap_;
+    };
+    class GroupBuilder;
+    class Group: public Bitmap {
+      public:
         inline void _free_data() {
             deallocate(data_, bits() * Element::SIZE);
         }
@@ -981,18 +1049,6 @@ class ArmySetSparse {
         inline void _free() {
             if (bitmap_) _free_data();
         }
-        inline uint bits() const PURE {
-            return popcount64(bitmap_);
-        }
-        inline bool bit(uint n) const PURE {
-            return (bitmap_ & (UINT64_C(1) << n)) != 0;
-        }
-        inline uint index(uint n) const PURE {
-            return popcount64(bitmap_ & ((UINT64_C(1) << n)-1));
-        }
-        inline void set(uint n) {
-            bitmap_ = bitmap_ | (UINT64_C(1) << n);
-        }
         inline Element const& at(uint pos) const PURE {
             uint i = index(pos);
             return Element::element(data_, i);
@@ -1004,9 +1060,29 @@ class ArmySetSparse {
         inline char const* _data() const PURE { return data_; }
         inline void append(DataCache& cache, ArmyId pos, ArmyId id, Coord const* army);
         inline void append(DataCache& cache, ArmyId pos, Element const& old_element);
-      private:
+        inline void copy(DataCache& cache, GroupBuilder const& group_builder);
+      protected:
         char* data_;
-        bitmap_type bitmap_;
+    };
+    class GroupBuilder: public Bitmap {
+      public:
+        inline void clear() {
+            bitmap_ = 0;
+        }
+        inline Element const& at(uint pos) const PURE {
+            return Element::element(&data_[0], pos);
+        }
+        inline void copy(uint pos, Element const& element) {
+            set(pos);
+            char const* ptr = reinterpret_cast<char const*>(&element);
+            std::copy(ptr, ptr+Element::SIZE, &data_[pos * Element::SIZE]);
+        }
+        inline void copy_to(uint pos, char* target) const {
+            char const* ptr = &data_[pos * Element::SIZE];
+            std::copy(ptr, ptr+Element::SIZE, target);
+        }
+      private:
+        array<char, GROUP_SIZE * (MAX_ARMY * sizeof(Coord) + sizeof(Element))> data_;
     };
   public:
     static void set_ELEMENT_SIZE() {
@@ -1036,11 +1112,14 @@ class ArmySetSparse {
     inline void convert_hash() { _convert_hash(true);  }
 
     inline ArmyId size() const PURE { return size_; }
-    size_t nr_groups() const PURE {
+    inline size_t nr_groups() const PURE {
         return static_cast<size_t>(mask_)+1;
     }
-    size_t allocated() const PURE {
+    inline size_t allocated() const PURE {
         return nr_groups() * GROUP_SIZE;
+    }
+    inline size_t max_overflow() const PURE {
+        return data_cache_.max_overflow();
     }
     inline ArmyId insert(Army    const& army, Statistics& stats) RESTRICT;
     inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT;
@@ -1060,7 +1139,7 @@ class ArmySetSparse {
     }
 #endif // CHECK
     inline ArmyZconst cat(ArmyId i) const { return at(i); }
-    void print(ostream& os) const;
+    void print(ostream& os, bool show_boards = true) const;
 
     // Not copyable (avoid accidents)
     ArmySetSparse(ArmySetSparse const&) = delete;
@@ -1082,9 +1161,22 @@ class ArmySetSparse {
     mutex exclude_;
     ArmyId size_;
     ArmyId left_;
-    ArmyId mask_;
+    GroupId mask_;
     int    memory_flags_;
 };
+
+void ArmySetSparse::Group::copy(DataCache& cache, GroupBuilder const& group_builder) {
+    bitmap_ = group_builder.bitmap();
+    if (bitmap_ == 0) return;
+    Bitmap b{bitmap_};
+    uint n = b.bits();
+    data_ = cache.allocate(n);
+    char* ptr = data_;
+    for (uint i=0; i < n; ++i, ptr += Element::SIZE) {
+        uint j = b.drop_one();
+        group_builder.copy_to(j, ptr);
+    }
+}
 
 inline ostream& operator<<(ostream& os, ArmySet const& set) {
     set.print(os);
@@ -2142,15 +2234,15 @@ void ArmySetSparse::Group::append(DataCache& cache, ArmyId pos, Element const& o
 ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
     // logger << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
-    ArmyId hash = army.hash();
+    uint64_t hash = army.hash();
     lock_guard<mutex> lock{exclude_};
     // logger << "left_ = " << left_ << endl;
     if (left_ == 0) resize();
-    ArmyId const mask = mask_;
+    GroupId const mask = mask_;
     Group* groups = groups_;
-    ArmyId offset = 0;
+    uint64_t offset = 0;
     while (true) {
-        ArmyId group_id = (hash >> GROUP_BITS) & mask;
+        GroupId group_id = (hash >> GROUP_BITS) & mask;
         auto& group = groups[group_id];
         uint pos = hash & GROUP_MASK;
         // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;
@@ -2176,15 +2268,15 @@ ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
 ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
     // logger << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
-    ArmyId hash = army.hash();
+    uint64_t hash = army.hash();
     lock_guard<mutex> lock{exclude_};
     // logger << "left_ = " << left_ << endl;
     if (left_ == 0) resize();
-    ArmyId const mask = mask_;
+    GroupId const mask = mask_;
     Group* groups = groups_;
-    ArmyId offset = 0;
+    uint64_t offset = 0;
     while (true) {
-        ArmyId group_id = (hash >> GROUP_BITS) & mask;
+        GroupId group_id = (hash >> GROUP_BITS) & mask;
         auto& group = groups[group_id];
         uint pos = hash & GROUP_MASK;
         // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;

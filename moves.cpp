@@ -668,6 +668,7 @@ StatisticsE ALL_NAME(
      nr_moves);
 #endif // BACKTRACK
     for (auto& result: results) stats += result.get();
+    stats.overflow(moved_armies.max_overflow());
     stats.armyset_size(moved_armies.size());
     stats.boardset_size(boards_to.size());
 #if BLUE_TO_MOVE
