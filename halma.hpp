@@ -1840,11 +1840,13 @@ class BoardSetBase {
         ++subsets_;
         demallocate(subsets_, capacity());
     }
+    // Use only before using as source of make_all_XXX_moves()
     ArmyId subsets() const PURE { return top_ - from(); }
     size_t size() const PURE { return size_; }
     bool empty() const PURE { return size() == 0; }
     ArmyId back_id() const PURE { return top_-1; }
     bool solve(ArmyId solution_id, Army const& solution) {
+        if (solution_id_) return false;
         lock_guard<mutex> lock{exclude_};
         if (solution_id_) return false;
         solution_id_ = solution_id;
@@ -1859,10 +1861,14 @@ class BoardSetBase {
   protected:
     ArmyId capacity() const PURE { return capacity_; }
     ArmyId next() {
-        lock_guard<mutex> lock{exclude_};
-        return from_ < top_ ? from_++ : 0;
+        ArmyId from = from_++;
+        return from < top_ ? from : 0;
     }
-    ArmyId from() const PURE { return keep_ ? 1 : from_; }
+    ArmyId from() const PURE {
+        if (keep_) return 1;
+        ArmyId from = from_;
+        return min(from, top_);
+    }
     NOINLINE void resize() RESTRICT;
     void down_size(ArmyId size) { size_ -= size; }
     inline void clear(ArmyId size = INITIAL_SIZE);
@@ -1872,7 +1878,7 @@ class BoardSetBase {
     Army solution_;
     ArmyId solution_id_;
     ArmyId capacity_;
-    ArmyId from_;
+    atomic<ArmyId> from_;
     ArmyId top_;
     BoardSubsetBase* subsets_;
     bool const keep_;

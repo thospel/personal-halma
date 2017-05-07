@@ -581,11 +581,7 @@ void BoardSetBase::resize() {
     capacity_ *= 2;
     subsets_ = subsets - 1;
     // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity() << "\n" << flush;
-    if (!keep_) {
-        if (from_ != 1) throw_logic("Say what?");
-        top_ -= from_ - 1;
-        from_ = 1;
-    }
+    if (!keep_ && from_ != 1) throw_logic("Resize of partial BoardSetBase");
 }
 
 void BoardSet::clear(ArmyId size) {
