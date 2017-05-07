@@ -40,12 +40,6 @@ std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 size_t PAGE_SIZE;
 size_t PAGE_SIZE1;
-size_t PAGE_MASK;
-
-inline size_t PAGE_ROUND(size_t size) FUNCTIONAL;
-size_t PAGE_ROUND(size_t size) {
-    return (size + PAGE_SIZE1) & PAGE_MASK;
-}
 
 // Linux specific
 size_t get_memory(bool set_base_mem) {
@@ -520,5 +514,4 @@ void init_system() {
         throw_errno("Could not determine PAGE SIZE");
     PAGE_SIZE  = tmp;
     PAGE_SIZE1 = PAGE_SIZE-1;
-    PAGE_MASK  = ~PAGE_SIZE1;
 }

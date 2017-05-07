@@ -180,10 +180,10 @@ ostream& operator<<(ostream& os, Army const& army) {
 }
 
 void Army::check(const char* file, int line) const {
-    // for (int i=0; i<ARMY; ++i) (*this)[i].check(file, line);
+    for (uint i=0; i<ARMY; ++i) (*this)[i].check(file, line);
     for (uint i=0; i<ARMY-1; ++i)
         if ((*this)[i] >= (*this)[i+1]) {
-            cerr << *this;
+            cerr << static_cast<void const *>(this) << "\n" << *this;
             throw_logic("Army out of order", file, line);
         }
     if (DO_ALIGN)
@@ -200,7 +200,7 @@ void ArmyPos::check(char const* file, int line) const {
     for (uint i=0; i<ARMY; ++i) at(i).check(file, line);
     for (uint i=0; i<ARMY-1; ++i)
         if (at(i) >= at(i+1)) {
-            cerr << *this;
+            cerr << static_cast<void const *>(this) << "\n" << *this;
             throw_logic("ArmyPos out of order", file, line);
         }
     if (at(-1) != Coord::MIN())
@@ -221,6 +221,23 @@ ostream& operator<<(ostream& os, ArmyPos const& army) {
     os << "pos=" << army.pos_ << "\n";
     for (int i=-1; i<=static_cast<int>(ARMY); ++i)
         os << "  " << setw(3) << i << ": " << army[i] << "\n";
+    return os;
+}
+
+void ArmyZconst::check(char const* file, int line) const {
+    Coord const* army = &base_;
+    for (uint i=0; i<ARMY; ++i) army[i].check(file, line);
+    for (uint i=0; i<ARMY-1; ++i)
+        if (army[i] >= army[i+1]) {
+            cerr << static_cast<void const *>(army) << "\n" << *this;
+            throw_logic("ArmyZ out of order", file, line);
+        }
+}
+
+ostream& operator<<(ostream& os, ArmyZconst const& armyZ) {
+    Coord const* army = &armyZ.base_;
+    for (uint i=0; i<ARMY; ++i)
+        os << army[i] << "\n";
     return os;
 }
 
@@ -694,6 +711,39 @@ void ArmySetDense::clear(size_t size) {
     _init(size);
 }
 
+ArmyId ArmySetDense::insert(Army const& army, Statistics& stats) {
+    // logger << "Insert:\n" << Image{army};
+    // Leave hash calculation out of the mutex
+    ArmyId hash = army.hash();
+    lock_guard<mutex> lock{exclude_};
+    // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
+    if (used_ >= limit_) resize();
+    ArmyId const mask = mask_;
+    ArmyId pos = hash & mask;
+    ArmyId offset = 0;
+    auto values = values_;
+    while (true) {
+        // logger << "Try " << pos << " of " << allocated() << "\n" << flush;
+        ArmyId i = values[pos];
+        if (i == 0) {
+            stats.armyset_probe(offset);
+            ArmyId id = ++used_;
+            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
+            values[pos] = id;
+            at(id).append(army);
+            return id;
+        }
+        if (army == cat(i)) {
+            stats.armyset_probe(offset);
+            stats.armyset_try();
+            // logger << "Found duplicate " << hash << "\n" << flush;
+            return i;
+        }
+        ++offset;
+        pos = (pos + offset) & mask;
+    }
+}
+
 ArmyId ArmySetDense::find(Army const& army) const {
     if (true || CHECK) {
         if (UNLIKELY(!values_)) throw_logic("dropped hash ArmySetDense::find");
@@ -789,25 +839,218 @@ void ArmySetDense::print(ostream& os) const {
     }
 }
 
-array<uint, ArmySetSparse::GROUP_SIZE> ArmySetSparse::DataCache::SizeCache::block_size_;
+void ArmySetSparse::DataCache::SizeCache::init(uint i) {
+    block_size_ = (i+1) * Element::SIZE + sizeof(GroupId);
+    if (block_size_ >= MMAP_THRESHOLD)
+        throw_logic("Block size is way too big");
 
-void ArmySetSparse::DataCache::SizeCache::free(uint i, bool zero) {
-    size_t block_size = block_size_[i];
-    while (cached_) {
-        auto& data = cache_[--cached_];
-        ::deallocate(data, block_size);
-        if (zero) data = nullptr;
+    size_ = MMAP_THRESHOLD;
+    mallocate(data_, size());
+    free_ = 0;
+    lower_bound_ = 0;
+    cached_ = 0;
+}
+
+void ArmySetSparse::DataCache::SizeCache::free() {
+    if (!data_) return;
+    demallocate(data_, size());
+    data_   = nullptr;
+    cached_ = 0;
+}
+
+void ArmySetSparse::DataCache::SizeCache::expand() {
+    size_t old_size = size();
+    size_t new_size =
+        max(MMAP_THRESHOLD_ROUND(old_size + old_size / FRACTION),
+            old_size + MMAP_THRESHOLD);
+    remallocate(data_, old_size, new_size);
+    lower_bound_ = min(MMAP_THRESHOLD_ROUND(old_size - old_size / FRACTION),
+                                            old_size - MMAP_THRESHOLD);
+    // logger << "Expand " << index() << ": " << old_size << " -> " << new_size << "[" << lower_bound_ << ", " << free_ << ", " << new_size << "]" << endl;
+    size_ = new_size;
+}
+
+void ArmySetSparse::DataCache::SizeCache::shrink() {
+    size_t old_size = size();
+    size_t new_size =
+        max(MMAP_THRESHOLD_ROUND(lower_bound_ + lower_bound_ / FRACTION),
+            lower_bound_ + MMAP_THRESHOLD);
+    remallocate(data_, old_size, new_size);
+    lower_bound_ =
+        min(MMAP_THRESHOLD_ROUND(lower_bound_ - lower_bound_ / FRACTION),
+            lower_bound_ - MMAP_THRESHOLD);
+    // logger << "Shrink " << index() << ": " << old_size << " -> " << new_size << "[" << lower_bound_ << ", " << free_ << ", " << new_size << "]" << endl;
+    size_ = new_size;
+    if (old_size <= new_size) throw_logic("This is not a shrink");
+}
+
+void ArmySetSparse::DataCache::SizeCache::post_convert() {
+    uint n = index() + 1;
+    char const* RESTRICT from = data_;
+    char const* RESTRICT end = _data(free_);
+    ArmyId *to = reinterpret_cast<ArmyId *>(data_);
+    while (from < end) {
+        from += sizeof(GroupId);
+        for (uint i=0; i<n; ++i, from+=Element::SIZE, ++to) {
+            Element const& element = Element::element(from);
+            *to = element.id();
+        }
+    }
+    end = reinterpret_cast<char const*>(to);
+    free_ = end - data_;
+    remallocate(data_, size(), free_);
+    size_ = free_;
+}
+
+auto ArmySetSparse::DataCache::SizeCache::allocate() -> CacheId {
+    // Directly use free_ without test if DATA_CACHE_SIZE is made 0
+    if (DATA_CACHE_SIZE && cached_)
+        return cache_[--cached_];
+    auto old_free = free_;
+    free_ += block_size_;
+    if (free_+ARMY_PADDING > size()) expand();
+    return old_free;
+}
+
+void ArmySetSparse::DataCache::SizeCache::deallocate(Group* groups, CacheId cache_id) {
+    if (cached_ < DATA_CACHE_SIZE) {
+        cache_[cached_++] = cache_id;
+        group_id_at(cache_id) = GROUP_ID_MAX;
+    } else {
+        free_ -= block_size_;
+        if (cache_id != free_) {
+            GroupId top_group_id = group_id_at(free_);
+            if (top_group_id == GROUP_ID_MAX) {
+                for (uint i=0; i<cached_; ++i)
+                    if (cache_[i] == free_) {
+                        cache_[i] = cache_id;
+                        goto FOUND;
+                    }
+                throw_logic("Top is free but I don't know why");
+              FOUND:
+                group_id_at(cache_id) = GROUP_ID_MAX;
+            } else {
+                groups[top_group_id].cache_id() = cache_id;
+                char const* RESTRICT from = _data(free_);
+                std::copy(from, from + block_size_, _data(cache_id));
+            }
+        }
+        if (free_ < lower_bound_) shrink();
     }
 }
 
-void ArmySetSparse::DataCache::free(bool zero) {
-    for (uint i=0; i<ArmySetSparse::GROUP_SIZE; ++i)
-        cache_[i].free(i, zero);
+size_t ArmySetSparse::DataCache::SizeCache::check(char const* file, int line) const {
+    if (UNLIKELY(!data_)) throw_logic("No data", file, line);
+    if (UNLIKELY(!size_)) throw_logic("Data without size", file, line);
+    if (UNLIKELY(size_ % MMAP_THRESHOLD))
+        throw_logic("size_ is not a multipe of MMAP_THRESHOLD", file, line);
+    if (UNLIKELY(free_ > size_)) throw_logic("Free beyond size", file, line);
+    if (UNLIKELY(!block_size_)) throw_logic("Zero block_size_", file, line);
+    size_t nr_groups = free_ / block_size_;
+    if (UNLIKELY(free_ != nr_groups * block_size_))
+        throw_logic("free_ is not a multiple of block_size_", file, line);
+    if (UNLIKELY(free_ < lower_bound_)) throw_logic("Free below lower bound", file, line);
+    if (UNLIKELY(lower_bound_ % MMAP_THRESHOLD))
+        throw_logic("lower_bound_ is not a multipe of MMAP_THRESHOLD", file, line);
+    if (UNLIKELY(cached_ > DATA_CACHE_SIZE))
+        throw_logic("Too many cached", file, line);
 
-    if (overflow_size_) {
-        demallocate(overflow_, overflow_size_);
-        if (zero) overflow_size_ = 0;
+    for (uint i=0; i<cached_; ++i) {
+        if (UNLIKELY(cache_[i] % block_size_))
+            throw_logic("Cache is not a multiple of block_size_", file, line);
+        if (UNLIKELY(cache_[i] >= free_))
+            throw_logic("Cache[" + to_string(i) + "] = " + to_string(cache_[i]) + " above free " + to_string(free_), file, line);
+        if (UNLIKELY(group_id_at(cache_[i]) != GROUP_ID_MAX))
+            throw_logic(to_string(index()) + "+1 bits: cache[" + to_string(i) + "] = " + to_string(cache_[i]) + " has valid group id " + to_string(group_id_at(cache_[i])), file, line);
     }
+    if (UNLIKELY(cached_ > nr_groups))
+        throw_logic("Too many deallocated", file, line);
+    return nr_groups - cached_;
+}
+
+void ArmySetSparse::DataCache::SizeCache::check_data(CacheId cache_id, GroupId group_id, ArmyId size, char const* file, int line) const {
+    if (UNLIKELY(cache_id >= free_))
+        throw_logic("CacheId " + to_string(cache_id) + " beyond free " + to_string(free_), file, line);
+    if (UNLIKELY(group_id_at(cache_id) != group_id))
+        throw_logic("Inconsistent Group Id backpointer", file, line);
+
+    char const* ptr = data(cache_id);
+    ptr -= sizeof(GroupId);
+    for (uint i=sizeof(GroupId); i < block_size_; i += Element::SIZE) {
+        Element const& element = Element::element(&ptr[i]);
+        if ((UNLIKELY(element.id() > size) || UNLIKELY(element.id() == 0)))
+            throw_logic("Element " + to_string(element.id()) + " is out of range [1.." + to_string(size) + "]", file, line);
+        element.armyZ().check(file, line);
+    }
+}
+
+void ArmySetSparse::DataCache::init() {
+    for (uint i=0; i<GROUP_SIZE; ++i)
+        cache_[i].init(i);
+}
+
+void ArmySetSparse::DataCache::free() {
+    for (auto& cache: cache_)
+        cache.free();
+}
+
+void ArmySetSparse::DataCache::post_convert() {
+    for (auto& cache: cache_)
+        cache.post_convert();
+}
+
+void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, Element const& old_element) {
+    // if (CHECK) old_element.armyZ().check(__FILE__, __LINE__);
+    char const* RESTRICT old_e = reinterpret_cast<char const*>(&old_element);
+    Group& group = groups[group_id];
+    CacheId new_cache_id;
+    if (group.bitmap()) {
+        uint n = group.bits();
+        new_cache_id = cache_[n].allocate();
+        cache_[n].group_id_at(new_cache_id) = group_id;
+        char* RESTRICT new_data = cache_[n].data(new_cache_id);
+        CacheId old_cache_id = group.cache_id();
+        char const* RESTRICT old_data = cache_[n-1].data(old_cache_id);
+        uint i = group.index(pos);
+        std::copy(&old_data[0], &old_data[i * Element::SIZE], &new_data[0]);
+        auto new_element = &new_data[i * Element::SIZE];
+        std::copy(old_e, old_e + Element::SIZE, new_element);
+        std::copy(&old_data[i * Element::SIZE], &old_data[n * Element::SIZE],
+                  new_element + Element::SIZE);
+        cache_[n-1].deallocate(groups, old_cache_id);
+    } else {
+        new_cache_id = cache_[0].allocate();
+        cache_[0].group_id_at(new_cache_id) = group_id;
+        char* RESTRICT new_data = cache_[0].data(new_cache_id);
+        std::copy(old_e, old_e + Element::SIZE, new_data);
+    }
+    group.cache_id() = new_cache_id;
+    group.set(pos);
+}
+
+void ArmySetSparse::DataCache::check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, char const* file, int line) const {
+    if (UNLIKELY(!groups)) throw_logic("NULL groups");
+
+    size_t nr_groups = 0;
+    for (uint i=0; i<GROUP_SIZE; ++i)
+        nr_groups += cache_[i].check(file, line);
+
+    uint n_gr = 0;
+    size_t sz = 0;
+    for (GroupId g=0; g<n; ++g) {
+        auto& group = groups[g];
+        if (group.bitmap() == 0) continue;
+        uint n = group.bits();
+        cache_[n-1].check_data(group.cache_id(), g, size, file, line);
+        ++n_gr;
+        sz += n;
+    }
+    if (UNLIKELY(n_gr != nr_groups))
+        throw_logic("Unexpected number of groups", file, line);
+    if (UNLIKELY(sz + overflowed != size))
+        throw_logic("Unexpected number of elements", file, line);
+    if (UNLIKELY(overflowed > size))
+        throw_logic("Excessive overflow", file, line);
 }
 
 void ArmySetSparse::_init(size_t size) {
@@ -819,57 +1062,81 @@ void ArmySetSparse::_init(size_t size) {
 
     cmallocate(groups_, nr_groups, memory_flags_);
     // logger << "New groups  " << static_cast<void const *>(groups_) << "\n";
-}
-
-void ArmySetSparse::free_groups() {
-    if (armies_) {
-        demallocate(indices_, size());
-        indices_ = nullptr;
-    } else {
-        size_t n = nr_groups();
-        for (size_t i=0; i<n; ++i)
-            groups_[i]._free();
-    }
+    data_cache_.init();
+    mallocate(overflow_, GROUP_SIZE * Element::SIZE);
+    overflow_size_ = GROUP_SIZE * Element::SIZE;
 }
 
 ArmySetSparse::ArmySetSparse(bool lock, size_t size):
     armies_{nullptr},
     groups_{nullptr},
-    indices_{nullptr},
+    overflow_{nullptr},
+    overflow_used_{0},
+    overflow_size_{0},
     size_{0},
     memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
         _init(size);
     }
 
 ArmySetSparse::~ArmySetSparse() {
-    // Free groups_ before armies_ because _free looks at armies_
-    if (groups_) {
-        free_groups();
+    if (groups_)
         demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
-    }
-    if (armies_) demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY));
-    else data_cache_.free(false);
-    // This can only happen if we ran out of memory during __convert_hash
-    // army list allocation after indices_ allocation succeeded
-    if (indices_) {
-        demallocate(indices_, size());
-        logger << "Unexpectedly freed indices_" << endl;
-    }
+    if (armies_)
+        demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY));
+    if (overflow_)
+        demallocate(overflow_, overflow_size_);
 }
 
 void ArmySetSparse::clear(size_t initial_size) {
-    // Free groups_ before armies_ because _free looks at armies_
     if (groups_) {
-        free_groups();
+        data_cache_.free();
         demallocate(groups_, nr_groups(), armies_ ? 0 : memory_flags_);
         groups_ = nullptr;
     }
     if (armies_) {
         demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY));
         armies_ = nullptr;
-    } else
-        data_cache_.free(true);
+    }
+    if (overflow_) {
+        if (overflow_used_) throw_logic("overflow is not empty");
+        demallocate(overflow_, overflow_size_);
+        overflow_ = nullptr;
+        overflow_size_ = 0;
+    }
     _init(initial_size);
+}
+
+ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) {
+    // Leave hash calculation out of the mutex
+    uint64_t hash = army.hash();
+    // logger << "Insert: " << hex << hash << dec << " (" << left_ << " left)\n" << Image{army};
+    lock_guard<mutex> lock{exclude_};
+    if (left_ == 0) resize();
+    GroupId const mask = mask_;
+    Group* groups = groups_;
+    uint64_t offset = 0;
+    while (true) {
+        GroupId group_id = (hash >> GROUP_BITS) & mask;
+        auto& group = groups[group_id];
+        uint pos = hash & GROUP_MASK;
+        // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;
+        if (group.bit(pos) == 0) {
+            stats.armyset_probe(offset);
+            --left_;
+            ArmyId army_id = ++size_;
+            // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
+            data_cache_.append(groups, group_id, pos, army_id, army.begin(), stats);
+            return army_id;
+        }
+        Element const& element = data_cache_.at(group, pos);
+        if (army == element.armyZ()) {
+            stats.armyset_probe(offset);
+            stats.armyset_try();
+            // logger << "Found duplicate " << hash << "\n" << flush;
+            return element.id();
+        }
+        hash += ++offset;
+    }
 }
 
 ArmyId ArmySetSparse::find(Army const& army) const {
@@ -878,8 +1145,6 @@ ArmyId ArmySetSparse::find(Army const& army) const {
             throw_logic("ArmySetSparse::find without armies");
         if (UNLIKELY(!groups_))
             throw_logic("ArmySetSparse::find without groups");
-        if (UNLIKELY(!indices_))
-            throw_logic("ArmySetSparse::find without indices");
     }
     uint64_t hash = army.hash();
     GroupId const mask = mask_;
@@ -891,7 +1156,7 @@ ArmyId ArmySetSparse::find(Army const& army) const {
         uint pos = hash & GROUP_MASK;
         // cout << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n";
         if (group.bit(pos) == 0) return 0;
-        ArmyId i = group.id(pos);
+        ArmyId i = data_cache_.converted_id(group, pos);
         if (army == cat(i)) return i;
         hash += ++offset;
     }
@@ -903,8 +1168,6 @@ ArmyId ArmySetSparse::find(ArmyPos const& army) const {
             throw_logic("ArmySetSparse::find without armies");
         if (UNLIKELY(!groups_))
             throw_logic("ArmySetSparse::find without groups");
-        if (UNLIKELY(!indices_))
-            throw_logic("ArmySetSparse::find without indices");
     }
     uint64_t hash = army.hash();
     GroupId const mask = mask_;
@@ -916,7 +1179,7 @@ ArmyId ArmySetSparse::find(ArmyPos const& army) const {
         uint pos = hash & GROUP_MASK;
         // cout << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n";
         if (group.bit(pos) == 0) return 0;
-        ArmyId i = group.id(pos);
+        ArmyId i = data_cache_.converted_id(group, pos);
         if (army == cat(i)) return i;
         hash += ++offset;
     }
@@ -926,35 +1189,45 @@ void ArmySetSparse::resize() {
     if (true || CHECK) {
         if (armies_) throw_logic("Resize with army list");
     }
+    // if (CHECK) check(__FILE__, __LINE__);
 
     if (size() >= ARMYID_HIGHBIT - 1)
         throw_logic("ArmySet has grown too large");
 
+    DataCache new_cache;
+    new_cache.init();
     array<GroupBuilder, GROUP_BUILDERS> groups_low;
     array<GroupBuilder, GROUP_BUILDERS> groups_high;
 
     GroupId old_nr_groups = nr_groups();
     GroupId new_nr_groups = old_nr_groups * 2;
-    Group* old_groups = groups_;
-    Group* new_groups = mallocate<Group>(new_nr_groups, memory_flags_);
-    // logger << "Resize ArmySetSparse: " << old_groups << " -> " << new_groups << ", new size=" << new_nr_groups * GROUP_SIZE << endl;
-    // print(logger, false);
-
+    remallocate(groups_, old_nr_groups, new_nr_groups, memory_flags_);
+    Group* groups = groups_;
     GroupId mask = new_nr_groups-1;
+    mask_ = mask;
+    left_ = min(left_
+                + FACTOR(new_nr_groups * GROUP_SIZE)
+                - FACTOR(old_nr_groups * GROUP_SIZE),
+                ARMYID_HIGHBIT - 1 - size());
+    //logger << "Resize ArmySetSparse: " << old_groups << " -> " << new_groups << ", new size=" << new_nr_groups * GROUP_SIZE << " (" << size() << " armies)" << endl;
+    //print(logger, false);
+    //logger << "Start\n" << flush;
+
     for (GroupId g_low = 0, g_high = old_nr_groups;
          g_low < old_nr_groups;
          ++g_low, ++g_high) {
         uint g = g_low % GROUP_BUILDERS;
         if (g_low >= GROUP_BUILDERS) {
-            new_groups[g_low  - GROUP_BUILDERS].copy(data_cache_, g_low  - GROUP_BUILDERS, groups_low [g]);
-            new_groups[g_high - GROUP_BUILDERS].copy(data_cache_, g_high - GROUP_BUILDERS, groups_high[g]);
+            new_cache.copy(groups, g_low  - GROUP_BUILDERS, groups_low [g]);
+            new_cache.copy(groups, g_high - GROUP_BUILDERS, groups_high[g]);
         }
         groups_low [g].clear();
         groups_high[g].clear();
-        auto& old_group = old_groups[g_low];
+        auto const& old_group = groups[g_low];
         uint n = old_group.bits();
-        if (!n) continue;
-        char const* ptr = old_group._data();
+        if (n == 0) continue;
+        CacheId old_cache_id = old_group.cache_id();
+        char const* RESTRICT ptr = data_cache_.data(n-1, old_cache_id);
         for (uint i=0; i<n; ++i, ptr += Element::SIZE) {
             auto& old_element = Element::element(ptr);
             uint64_t hash = old_element.hash();
@@ -971,7 +1244,7 @@ void ArmySetSparse::resize() {
                 // g must be an unsigned type!
                 if (g >= GROUP_BUILDERS) {
                     // logger << "Far move g=" << g << ", g_low=" << g_low << ", g_high=" << g_high << endl;
-                    data_cache_.overflow(old_element);
+                    overflow(old_element);
                     break;
                 } else {
                     uint gb = (g_low - g) % GROUP_BUILDERS;
@@ -987,34 +1260,37 @@ void ArmySetSparse::resize() {
             }
             // logger.flush();
         }
-        old_group._free_data();
+        // old_group._free_data();
     }
-
-    demallocate(old_groups, old_nr_groups, memory_flags_);
-    groups_ = new_groups;
-    mask_ = mask;
-
     for (GroupId g_low = old_nr_groups < GROUP_BUILDERS ? 0 : old_nr_groups-GROUP_BUILDERS; g_low < old_nr_groups; ++g_low) {
         uint g = g_low % GROUP_BUILDERS;
-        new_groups[g_low] .copy(data_cache_, g_low,  groups_low [g]);
         GroupId g_high = g_low + old_nr_groups;
-        new_groups[g_high].copy(data_cache_, g_high, groups_high[g]);
+
+        new_cache.copy(groups, g_low , groups_low [g]);
+        new_cache.copy(groups, g_high, groups_high[g]);
     }
 
-    // logger << "overflow " << data_cache_.overflowed() << " / " << old_nr_groups << endl;
-    while (data_cache_._overflowed()) {
-        Element const& old_element = data_cache_.overflow_pop();
+    // if (CHECK) new_cache.check(groups, new_nr_groups, size(), overflowed(), __FILE__, __LINE__);
+    data_cache_.copy(new_cache);
+
+    //print(logger, false);
+    //logger << "Resize half done\n" << flush;
+    // if (CHECK) data_cache_.check(groups_, new_nr_groups, size(), overflowed(), __FILE__, __LINE__);
+
+    // logger << "overflow " << overflowed() << " / " << old_nr_groups << endl;
+    while (_overflowed()) {
+        Element const& old_element = overflow_pop();
         ArmyId hash = old_element.hash();
         // logger << "Rehashing overflow " << old_element.id() << ", hash " << hex << hash << dec << "\n" << Image{old_element.armyZ()};
         ArmyId offset = 0;
         while (true) {
             ArmyId group_id = (hash >> GROUP_BITS) & mask;
-            auto& new_group = new_groups[group_id];
+            auto& new_group = groups[group_id];
             uint pos = hash & GROUP_MASK;
             // logger << "Try [" << group_id << "," << pos << "]\n";
             if (new_group.bit(pos) == 0) {
                 // logger << "Hit\n";
-                new_group.append(data_cache_, group_id, pos, old_element);
+                data_cache_.append(groups, group_id, pos, old_element);
                 break;
             }
             hash += ++offset;
@@ -1022,14 +1298,10 @@ void ArmySetSparse::resize() {
         }
     }
 
-    left_ = min(left_
-                + FACTOR(new_nr_groups * GROUP_SIZE)
-                - FACTOR(old_nr_groups * GROUP_SIZE),
-                ARMYID_HIGHBIT - 1 - size());
 
-    // logger << "Overflow " << overflow() << endl;
-    // print(logger, false);
-    // logger << "Resize done\n" << flush;
+    if (CHECK) check(__FILE__, __LINE__);
+    //print(logger, false);
+    //logger << "Resize done\n" << flush;
 }
 
 void ArmySetSparse::__convert_hash(bool keep) {
@@ -1038,40 +1310,35 @@ void ArmySetSparse::__convert_hash(bool keep) {
     if (true || CHECK) {
         if (armies_) throw_logic("Already converted ArmySetSparse");
     }
+    if (CHECK) check(__FILE__, __LINE__);
 
-    data_cache_.free(true);
-    ArmyId* indices;
-    if (keep) {
-        mallocate(indices_, size());
-        indices = indices_;
-    }
     mallocate(armies_, size() * static_cast<size_t>(ARMY));
     armies_ -= ARMY;
     auto armies = armies_;
-    ArmyId n_groups = nr_groups();
+    GroupId n_groups = nr_groups();
     Group* groups = groups_;
 
-    for (ArmyId g=0; g<n_groups; ++g) {
+    for (GroupId g=0; g<n_groups; ++g) {
         auto& group = groups[g];
         uint n = group.bits();
         // cout << "Converting group " << g << " with " << n << " elements\n";
         if (n == 0) continue;
-        char const* old_ptr = group._data();
-        for (uint i=0; i<n; ++i, old_ptr += Element::SIZE, ++indices) {
+        CacheId old_cache_id = group.cache_id();
+        char const* RESTRICT old_ptr = data_cache_.data(n-1, old_cache_id);
+        for (uint i=0; i<n; ++i, old_ptr += Element::SIZE) {
             auto& old_element = Element::element(old_ptr);
             auto armyZ = old_element.armyZ();
-            // cout << "Copying element " << old_element.id() << "\n";
             if (CHECK && (UNLIKELY(old_element.id() > size()) || UNLIKELY(old_element.id() == 0)))
                 throw_logic("Element " + to_string(old_element.id()) + " is out of range [1.." + to_string(size()) + "]");
-            if (keep) *indices = old_element.id();
             std::copy(armyZ.begin(), armyZ.end(), &armies[old_element.id() * static_cast<size_t>(ARMY)]);
         }
-        if (keep) group._free_data(indices - n);
-        else group._free_data();
+        if (keep) group.cache_id() = data_cache_.converted_cache_id(n, old_cache_id);
     }
     if (keep) {
         if (memory_flags_ & ALLOC_LOCK) memunlock(groups, n_groups);
+        data_cache_.post_convert();
     } else {
+        data_cache_.free();
         demallocate(groups, n_groups, memory_flags_);
         groups_ = nullptr;
     }
@@ -1083,19 +1350,23 @@ void ArmySetSparse::_convert_hash(bool keep) {
 }
 
 void ArmySetSparse::print(ostream& os, bool show_boards) const {
-    ArmyId n_groups = nr_groups();
+    GroupId n_groups = nr_groups();
     Group* groups = groups_;
-    for (ArmyId g=0; g<n_groups; ++g) {
+    for (GroupId g=0; g<n_groups; ++g) {
         os << "\n{";
         auto& group = groups[g];
-        char const* ptr = group._data();
-        for (uint i=0; i<GROUP_SIZE; ++i)
-            if (group.bit(i)) {
-                Element const& element = Element::element(ptr);
-                os << " " << element.id();
-                ptr += Element::SIZE;
-            } else
-                os << " D";
+        if (group.bitmap()) {
+            uint n = group.bits();
+            CacheId cache_id = group.cache_id();
+            char const* RESTRICT ptr = data_cache_.data(n-1, cache_id);
+            for (uint i=0; i<GROUP_SIZE; ++i)
+                if (group.bit(i)) {
+                    Element const& element = Element::element(ptr);
+                    os << " " << element.id();
+                    ptr += Element::SIZE;
+                } else
+                    os << " D";
+        }
         os << " }";
     }
     os << " (" << static_cast<void const *>(this) << ")\n";
@@ -1103,17 +1374,37 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
     if (!show_boards) return;
 
     auto mask = mask_;
-    for (ArmyId g=0; g<n_groups; ++g) {
+    for (GroupId g=0; g<n_groups; ++g) {
         auto& group = groups[g];
-        char const* ptr = group._data();
-        for (uint i=0; i<GROUP_SIZE; ++i)
-            if (group.bit(i)) {
-                Element const& element = Element::element(ptr);
-                auto h = element.hash();
-                os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
-                ptr += Element::SIZE;
-            }
+        if (group.bitmap()) {
+            uint n = group.bits();
+            CacheId cache_id = group.cache_id();
+            char const* RESTRICT ptr = data_cache_.data(n-1, cache_id);
+            for (uint i=0; i<GROUP_SIZE; ++i)
+                if (group.bit(i)) {
+                    Element const& element = Element::element(ptr);
+                    auto h = element.hash();
+                    os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
+                    ptr += Element::SIZE;
+                }
+        }
     }
+}
+
+void ArmySetSparse::check(char const* file, int line) const {
+    if (UNLIKELY(armies_))
+        throw_logic("Check after convert not implememted (yet)", file, line);
+    if (UNLIKELY(!groups_))
+        throw_logic("No groups", file, line);
+    if (UNLIKELY(!overflow_))
+        throw_logic("No overflow space", file, line);
+    if (UNLIKELY(!overflow_size_))
+        throw_logic("Empty overflow space", file, line);
+    if (UNLIKELY(overflow_size_ % Element::SIZE))
+        throw_logic("Overflow space is not a multiple of Element::SIZE", file, line);
+    if (UNLIKELY(overflow_used_ % Element::SIZE))
+        throw_logic("Overflow space used is not a multiple of Element::SIZE", file, line);
+    data_cache_.check(groups_, nr_groups(), size(), 0, file, line);
 }
 
 FullMove::FullMove(char const* str): FullMove{} {
@@ -1350,7 +1641,13 @@ void Tables::init() {
         d++;
     }
     sort(blue.begin(), blue.end());
-    sort(red.begin(),  red.end());
+    sort(red .begin(), red .end());
+    if (DO_ALIGN)
+        for (uint i=ARMY; i < ARMY+ARMY_PADDING; ++i) {
+            blue[i] = Coord::MAX();
+            red [i] = Coord::MAX();
+        }
+
     for (auto const& pos: blue)
         if (base_red_[pos]) throw_logic("Red and blue overlap");
 
@@ -2028,7 +2325,8 @@ void Svg::write(time_t start_time, time_t stop_time,
     }
 }
 
-void play(bool print_moves=false) {
+void play(bool print_moves=false) COLD;
+void play(bool print_moves) {
     auto board = tables.start();
     Board previous_board;
     if (print_moves) previous_board = board;
@@ -2178,6 +2476,8 @@ void save_largest_red(vector<ArmyId> const& largest_red) {
 }
 
 int solve(Board const& board, int nr_moves, Army& red_army,
+          StatisticsList& stats_list, Sec::rep& duration) COLD;
+int solve(Board const& board, int nr_moves, Army& red_army,
           StatisticsList& stats_list, Sec::rep& duration) {
     auto start_solve = chrono::steady_clock::now();
     cout << setw(14) << "set " << setw(2) << nr_moves << " (" << HOSTNAME;
@@ -2299,6 +2599,10 @@ int solve(Board const& board, int nr_moves, Army& red_army,
     return i;
 }
 
+void backtrack(Board const& board, int nr_moves, int solution_moves,
+               Army const& last_red_army,
+               StatisticsList& stats_list, Sec::rep& duration,
+               BoardList& boards) COLD;
 void backtrack(Board const& board, int nr_moves, int solution_moves,
                Army const& last_red_army,
                StatisticsList& stats_list, Sec::rep& duration,
@@ -2550,6 +2854,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     // cout << "Final image:\n" << image;
 }
 
+void my_main(int argc, char const* const* argv) COLD;
 void my_main(int argc, char const* const* argv) {
     GetOpt options("b:B:t:sHSjpqQeEFvR:Ax:y:r:a:T", argv);
     long long int val;
@@ -2736,6 +3041,7 @@ void my_main(int argc, char const* const* argv) {
               stats_list_backtrack, backtrack_duration);
 }
 
+int main(int argc, char const* const* argv) COLD;
 int main(int argc, char const* const* argv) {
     try {
         init_system();

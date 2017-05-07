@@ -334,8 +334,8 @@ class alignas(Align) Army {
     friend ArmyPos;
   public:
     Army() {}
-    inline Army(ArmySet const& armies, ArmyId id, ArmyId symmetry = 0);
-    explicit inline Army(ArmyZconst army, ArmyId symmetry = 0);
+    inline Army(ArmySet const& armies, ArmyId id, ArmyId symmetry = 0) ALWAYS_INLINE;
+    explicit inline Army(ArmyZconst army, ArmyId symmetry = 0) ALWAYS_INLINE;
     explicit inline Army(Army const& army, ArmyId symmetry = 0) {
         _import(army.begin(), begin(), symmetry);
     }
@@ -583,8 +583,9 @@ class ArmyZconst {
     explicit inline ArmyZconst(Coord const& base): base_{base} {}
     Coord const* begin() const PURE { return &base_; };
     Coord const* end()   const PURE { return &base_ + ARMY; };
+    inline void check(char const* file, int line) const ALWAYS_INLINE;
   private:
-    inline bool equal(Coord const* RESTRICT army) {
+    inline bool equal(Coord const* RESTRICT army) const {
         if (!DO_ALIGN) return std::equal(army, army+ARMY, &base_);
         Align const* RESTRICT left  = reinterpret_cast<Align const*>(army);
         Align const* RESTRICT right = reinterpret_cast<Align const*>(&base_);
@@ -600,6 +601,7 @@ class ArmyZconst {
     friend inline bool operator==(ArmyPos const& l, ArmyZconst r) {
         return r.equal(l.begin());
     }
+    friend ostream& operator<<(ostream& os, ArmyZconst const& army);
 
     Coord const& RESTRICT base_;
 };
@@ -898,10 +900,10 @@ class ArmySetDense {
     }
 #endif // CHECK
     inline ArmyZconst cat(ArmyId i) const { return at(i); }
-    inline ArmyId insert(Army const& army, Statistics& stats) RESTRICT;
-    inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT;
-    ArmyId find(Army    const& army) const PURE;
-    ArmyId find(ArmyPos const& army) const PURE;
+    ArmyId insert(Army const& army, Statistics& stats) COLD;
+    inline ArmyId insert(ArmyPos const& army, Statistics& stats) HOT;
+    ArmyId find(Army    const& army) const PURE COLD;
+    ArmyId find(ArmyPos const& army) const PURE COLD;
     inline Coord const* begin() const PURE { return &armies_[ARMY]; }
     inline Coord const* end()   const PURE { return &armies_[used_*static_cast<size_t>(ARMY)+ARMY]; }
 
@@ -943,125 +945,44 @@ class ArmySetDense {
 
 // This is essentially google sparse hash for variable size elements
 class ArmySetSparse {
+    // ArmySetSparse can exist in 3 modes:
+    // 1. During construction:
+    //     groups_  = non NULL, mlocked
+    //     overflow = non NULL
+    //     armies_  = NULL
+    //     data_cache_ refers to blocks of Elements
+    // 2. After drop_hash (used during solve():
+    //     groups_  = NULL
+    //     overflow = NULL
+    //     armies_  = non NULL
+    //     data_cache_ deallocated
+    // 2. After convert (used during backtrack():
+    //     groups_  = non NULL
+    //     overflow = NULL
+    //     armies_  = non NULL
+    //     data_cache_ refers to blocks of ArmyIds
   private:
+    using GroupId = ArmyId;
+
+    static GroupId const GROUP_ID_MAX = std::numeric_limits<GroupId>::max();
     static ArmyId const GROUP_SIZE = 64;
     static uint   const GROUP_BITS = LOG2(GROUP_SIZE);
     static uint   const GROUP_MASK = GROUP_SIZE - 1;
     static size_t const INITIAL_SIZE = GROUP_SIZE * 1;
     static uint   const GROUP_BUILDERS = 8;
 
-    using GroupId = ArmyId;
-
-    class Element;
-    class DataCache {
-        class SizeCache {
-            // Not copyable (avoid accidents)
-            SizeCache(SizeCache const&) = delete;
-            SizeCache& operator=(SizeCache const&) = delete;
-
-          public:
-            static uint   const DATA_CACHE_SIZE = 8;
-            static void set_ARMY_size(uint i) {
-                block_size_[i] = (i+1) * Element::SIZE;
-            }
-
-            SizeCache(): cached_{0} {}
-            inline char* allocate(GroupId id, uint i) {
-                // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
-                if (DATA_CACHE_SIZE && cached_) return cache_[--cached_];
-                return ::allocate<char>(block_size_[i]);
-            }
-            inline char* allocate(GroupId id, uint i, Statistics& stats) {
-                stats.armyset_alloc();
-                // Directly use ::allocate without test if DATA_CACHE_SIZE is made 0
-                if (DATA_CACHE_SIZE && cached_) {
-                    stats.armyset_alloc_cached();
-                    return cache_[--cached_];
-                }
-                return ::allocate<char>(block_size_[i]);
-            }
-            void deallocate(uint i, char* data) {
-                if (cached_ < DATA_CACHE_SIZE) cache_[cached_++] = data;
-                else ::deallocate(data, block_size_[i]);
-            }
-            void deallocate(uint i, char* data, Statistics& stats) {
-                stats.armyset_dealloc();
-                if (cached_ < DATA_CACHE_SIZE) {
-                    stats.armyset_dealloc_cached();
-                    cache_[cached_++] = data;
-                }
-                else ::deallocate(data, block_size_[i]);
-            }
-            inline void free(uint i, bool zero);
-          private:
-            static array<uint, GROUP_SIZE> block_size_;
-
-            array<char*, DATA_CACHE_SIZE> cache_;
-            uint cached_;
-            // uint block_size_;
-            char* data_;
-            size_t size_;
-            size_t free_;
-            size_t lower_bound_;
-            size_t upper_bound_;
-        };
-      public:
-        static void set_ARMY_size() {
-            for (uint i=0; i<GROUP_SIZE; ++i)
-                SizeCache::set_ARMY_size(i);
-        }
-
-        inline char* allocate(GroupId id, uint n) {
-            return cache_[n-1].allocate(id, n-1);
-        }
-        inline char* allocate(GroupId id, uint n, Statistics& stats) {
-            return cache_[n-1].allocate(id, n-1, stats);
-        }
-        void deallocate(uint n, char* data) {
-            cache_[n-1].deallocate(n-1, data);
-        }
-        void deallocate(uint n, char* data, Statistics& stats) {
-            cache_[n-1].deallocate(n-1, data, stats);
-        }
-        inline void free(bool zero);
-        inline size_t _overflowed() const PURE {
-            return overflow_used_;
-        }
-        inline size_t overflowed() const PURE {
-            return _overflowed() / Element::SIZE;
-        }
-        inline size_t max_overflow() const PURE {
-            return overflow_size_ / Element::SIZE;
-        }
-        inline Element const& overflow_pop() {
-            overflow_used_ -= Element::SIZE;
-            return Element::element(&overflow_[overflow_used_]);
-        }
-        inline void overflow(Element const& element) {
-            if (overflow_used_ >= overflow_size_) {
-                if (overflow_size_) {
-                    remallocate(overflow_, overflow_size_, overflow_size_ * 2);
-                    overflow_size_ *= 2;
-                } else {
-                    mallocate(overflow_, GROUP_SIZE * Element::SIZE);
-                    overflow_size_ = GROUP_SIZE * Element::SIZE;
-                }
-            }
-            char const* ptr = reinterpret_cast<char const*>(&element);
-            std::copy(ptr, ptr+Element::SIZE, &overflow_[overflow_used_]);
-            overflow_used_ += Element::SIZE;
-        }
-      private:
-        char* overflow_;
-        size_t overflow_used_;
-        size_t overflow_size_;
-        array<SizeCache, GROUP_SIZE> cache_;
-    };
+    // Offset from cache memory slab. We could use ArmyId instead but then would
+    // have to keep multiplying by block_size. It mainly appears in Group
+    // together with Bitmap which is 64-bits so it would get padded anyways
+    // (reworking Group could save 25% memory but Group is of size ArmySet
+    // divided by 64 anyways and is not a major memory user (at most 500MB for
+    // a 2**32 size army, so we could save at most 125MB)
+    using CacheId = size_t;
 
     class alignas(char) Element {
       public:
         static size_t SIZE;
-        
+
         static Element& element(char* ptr, uint i = 0) {
             return *reinterpret_cast<Element *>(&ptr[i * SIZE]);
         }
@@ -1083,6 +1004,7 @@ class ArmySetSparse {
         ArmyId id_;
         Coord  coord_[0];
     };
+
     class Bitmap {
         // Not copyable (avoid accidents)
         Bitmap(Bitmap const&) = delete;
@@ -1110,40 +1032,11 @@ class ArmySetSparse {
             bitmap_ = bitmap_ | (UINT64_C(1) << n);
         }
         inline bitmap_type bitmap() const PURE { return bitmap_; }
+        inline void bitmap(bitmap_type bitmap) { bitmap_ = bitmap; }
       protected:
         bitmap_type bitmap_;
     };
-    class GroupBuilder;
-    class Group: public Bitmap {
-      public:
-        inline void _free_data() {
-            deallocate(data_, bits() * Element::SIZE);
-        }
-        inline void _free_converted_data() {
-            deallocate(data_, bits() * sizeof(ArmyId));
-        }
-        inline void _free_data(ArmyId* new_data) {
-            deallocate(data_, bits() * Element::SIZE);
-            data_ = reinterpret_cast<char *>(new_data);
-        }
-        inline void _free() {
-            if (bitmap_) _free_data();
-        }
-        inline Element const& at(uint pos) const PURE {
-            uint i = index(pos);
-            return Element::element(data_, i);
-        }
-        inline ArmyId const& id(uint pos) const PURE {
-            uint i = index(pos);
-            return reinterpret_cast<ArmyId const*>(data_)[i];
-        }
-        inline char const* _data() const PURE { return data_; }
-        inline void append(DataCache& cache, GroupId group_id, uint pos, ArmyId army_id, Coord const* army, Statistics& stats);
-        inline void append(DataCache& cache, GroupId group_id, uint pos, Element const& old_element);
-        inline void copy(DataCache& cache, GroupId id, GroupBuilder const& group_builder);
-      protected:
-        char* data_;
-    };
+
     class GroupBuilder: public Bitmap {
       public:
         inline void clear() {
@@ -1154,21 +1047,221 @@ class ArmySetSparse {
         }
         inline void copy(uint pos, Element const& element) {
             set(pos);
-            char const* ptr = reinterpret_cast<char const*>(&element);
+            char const* RESTRICT ptr = reinterpret_cast<char const*>(&element);
             std::copy(ptr, ptr+Element::SIZE, &data_[pos * Element::SIZE]);
         }
-        inline void copy_to(uint pos, char* target) const {
-            char const* ptr = &data_[pos * Element::SIZE];
+        inline void copy_to(uint pos, char* RESTRICT target) const RESTRICT {
+            char const* RESTRICT ptr = &data_[pos * Element::SIZE];
             std::copy(ptr, ptr+Element::SIZE, target);
         }
       private:
         array<char, GROUP_SIZE * (MAX_ARMY * sizeof(Coord) + sizeof(Element))> data_;
     };
+
+    class Group: public Bitmap {
+      public:
+        CacheId& cache_id() FUNCTIONAL { return cache_id_; };
+        CacheId cache_id()  const PURE { return cache_id_; };
+      protected:
+        CacheId cache_id_;
+    };
+
+    class DataCache {
+        class SizeCache {
+            // Not copyable (avoid accidents)
+            SizeCache(SizeCache const&) = delete;
+            SizeCache& operator=(SizeCache const&) = delete;
+
+          public:
+            static uint const DATA_CACHE_SIZE = 8;
+            static uint const FRACTION = 16;
+
+            inline uint index() const PURE {
+                return (block_size_ - sizeof(GroupId)) / Element::SIZE-1;
+            }
+            inline size_t size() const PURE { return size_; }
+            SizeCache(): data_{nullptr} {}
+            ~SizeCache() { if (data_) demallocate(data_, size()); }
+            inline void copy(SizeCache& RESTRICT data_cache) RESTRICT {
+                if (CHECK) {
+                    if (UNLIKELY(block_size_ != data_cache.block_size_))
+                        throw_logic("Inconsistent block_size_");
+                    if (UNLIKELY(!data_))
+                        throw_logic("No data to destroy");
+                    if (UNLIKELY(data_cache.cached_))
+                        throw_logic("Holes in data to be copied");
+                }
+
+                demallocate(data_, size());
+
+                data_ = data_cache.data_;
+                size_ = data_cache.size_;
+                free_ = data_cache.free_;
+                lower_bound_ = data_cache.lower_bound_;
+                cached_ = 0;
+                // Don't copy block_size_ which already has the same value
+
+                data_cache.data_ = nullptr;
+            }
+            inline void init(uint i);
+            inline void free();
+            inline void post_convert();
+            inline GroupId& group_id_at(CacheId i) PURE {
+                // This is an unaligned access.
+                // We could add blocksize_ padding to make it aligned...
+                return *reinterpret_cast<GroupId*>(_data(i));
+            }
+            inline GroupId group_id_at(CacheId i) const PURE {
+                // This is an unaligned access.
+                // We could add blocksize_ padding to make it aligned...
+                return *reinterpret_cast<GroupId const*>(_data(i));
+            }
+            inline char* data(CacheId i) PURE {
+                return _data(i+sizeof(GroupId));
+            }
+            inline char const* data(CacheId i) const PURE {
+                return _data(i+sizeof(GroupId));
+            }
+            ArmyId converted_id(CacheId i, uint pos) const PURE {
+                // This is an aligned access.
+                auto ids = reinterpret_cast<ArmyId const*>(_data(i));
+                return ids[pos];
+            }
+            void expand();
+            void shrink();
+            inline CacheId fast_allocate() {
+                auto old_free = free_;
+                free_ += block_size_;
+                if (free_+ARMY_PADDING > size()) expand();
+                return old_free;
+            }
+            inline CacheId allocate();
+            inline CacheId allocate(Statistics& stats) {
+                stats.armyset_alloc();
+                // Directly use free_ without test if DATA_CACHE_SIZE is made 0
+                if (DATA_CACHE_SIZE && cached_) {
+                    stats.armyset_alloc_cached();
+                    return cache_[--cached_];
+                }
+                auto old_free = free_;
+                free_ += block_size_;
+                if (free_+ARMY_PADDING > size()) expand();
+                return old_free;
+            }
+            inline void deallocate(Group* groups, CacheId cache_id);
+            inline void deallocate(Group* groups, CacheId cache_id, Statistics& stats) {
+                stats.armyset_dealloc();
+                if (cached_ < DATA_CACHE_SIZE) {
+                    stats.armyset_dealloc_cached();
+                    cache_[cached_++] = cache_id;
+                    group_id_at(cache_id) = GROUP_ID_MAX;
+                } else {
+                    free_ -= block_size_;
+                    if (cache_id != free_) {
+                        GroupId top_group_id = group_id_at(free_);
+                        if (top_group_id == GROUP_ID_MAX) {
+                            for (uint i=0; i<cached_; ++i)
+                                if (cache_[i] == free_) {
+                                    cache_[i] = cache_id;
+                                    goto FOUND;
+                                }
+                            throw_logic("Top is free but I don't know why");
+                          FOUND:
+                            group_id_at(cache_id) = GROUP_ID_MAX;
+                        } else {
+                            groups[top_group_id].cache_id() = cache_id;
+                            char const* RESTRICT from = _data(free_);
+                            std::copy(from, from + block_size_, _data(cache_id));
+                        }
+                    }
+                    if (free_ < lower_bound_) shrink();
+                }
+            }
+            inline size_t check(char const* file, int line) const ALWAYS_INLINE;
+            inline void check_data(CacheId cache_id, GroupId group_id, ArmyId size, char const* file, int line) const ALWAYS_INLINE;
+          private:
+#if CHECK
+            char* _data(CacheId i) PURE {
+                if (!data_) throw_logic("Uninitialized data_");
+                return &data_[i];
+            }
+            char const* _data(CacheId i) const PURE {
+                if (!data_) throw_logic("Uninitialized data_");
+                return &data_[i];
+            }
+#else // CHECK
+            inline char* _data(CacheId i) PURE { return &data_[i]; }
+            inline char const* _data(CacheId i) const PURE { return &data_[i]; }
+#endif // CHECK
+
+            char* data_;
+            CacheId size_;
+            CacheId free_;
+            CacheId lower_bound_;
+            array<CacheId, DATA_CACHE_SIZE> cache_;
+            uint cached_;
+            uint block_size_;
+        };
+      public:
+        inline void copy(DataCache& data_cache) {
+            for (uint i=0; i<GROUP_SIZE; ++i)
+                cache_[i].copy(data_cache.cache_[i]);
+        }
+        inline void init();
+        inline void free();
+        inline void post_convert();
+        inline CacheId allocate(uint n, Statistics& stats) {
+            return cache_[n-1].allocate(stats);
+        }
+        void deallocate(Group* groups, uint n, CacheId cache_id, Statistics& stats) {
+            cache_[n-1].deallocate(groups, cache_id, stats);
+        }
+        inline void append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) ALWAYS_INLINE;
+        inline void append(Group* groups, GroupId group_id, uint pos, Element const& old_element) ALWAYS_INLINE;
+        inline void copy(Group* groups, GroupId group_id, GroupBuilder const& group_builder) {
+            Group& group = groups[group_id];
+            Bitmap b{group_builder.bitmap()};
+            group.bitmap(b.bitmap());
+            if (b.bitmap() == 0) return;
+            uint n = b.bits();
+            auto& cache = cache_[n-1];
+            CacheId cache_id = cache.fast_allocate();
+            cache.group_id_at(cache_id) = group_id;
+            group.cache_id() = cache_id;
+            char * RESTRICT ptr = cache.data(cache_id);
+            for (uint i=0; i < n; ++i, ptr += Element::SIZE) {
+                uint j = b.drop_one();
+                group_builder.copy_to(j, ptr);
+            }
+        }
+        // Only to be called with non empty group bitmap
+        inline Element const& at(Group const& group, uint pos) const PURE {
+            uint n = group.bits();
+            uint i = group.index(pos);
+            char const* RESTRICT data = cache_[n-1].data(group.cache_id());
+            return Element::element(data, i);
+        }
+        // Only to be called with non empty group bitmap and after convert()
+        inline ArmyId converted_id(Group const& group, uint pos) const PURE {
+            uint n = group.bits();
+            uint i = group.index(pos);
+            return cache_[n-1].converted_id(group.cache_id(), i);
+        }
+        inline CacheId converted_cache_id(uint n, CacheId cache_id) {
+            uint block_size = sizeof(GroupId) + n * Element::SIZE;
+            return cache_id / block_size * static_cast<CacheId>(sizeof(ArmyId)) * n;
+        }
+        inline char const* data(uint i, CacheId cache_id) const PURE {
+            return cache_[i].data(cache_id);
+        }
+        inline void check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, char const* file, int line) const ALWAYS_INLINE;
+      private:
+        array<SizeCache, GROUP_SIZE> cache_;
+    };
   public:
     static void set_ARMY_size() {
         Element::SIZE = ARMY * sizeof(Coord) + sizeof(Element);
         // cout << "sizeof(Element) = " << sizeof(Element) << ", Element::SIZE = " << Element::SIZE << "\n";
-        DataCache::set_ARMY_size();
     }
     ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
     ~ArmySetSparse();
@@ -1193,19 +1286,16 @@ class ArmySetSparse {
     inline void convert_hash() { _convert_hash(true);  }
 
     inline ArmyId size() const PURE { return size_; }
-    inline size_t nr_groups() const PURE {
-        return static_cast<size_t>(mask_)+1;
+    inline GroupId nr_groups() const PURE {
+        return mask_+1;
     }
     inline size_t allocated() const PURE {
-        return nr_groups() * GROUP_SIZE;
+        return nr_groups() * static_cast<size_t>(GROUP_SIZE);
     }
-    inline size_t max_overflow() const PURE {
-        return data_cache_.max_overflow();
-    }
-    inline ArmyId insert(Army    const& army, Statistics& stats) RESTRICT;
-    inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT;
-    ArmyId find(Army const& army) const PURE;
-    ArmyId find(ArmyPos const& army) const PURE;
+    ArmyId insert(Army const& army, Statistics& stats) RESTRICT COLD;
+    inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT HOT;
+    ArmyId find(Army const& army) const PURE COLD;
+    ArmyId find(ArmyPos const& army) const PURE COLD;
 
 #if CHECK
     ArmyZconst at(ArmyId i) const {
@@ -1222,6 +1312,30 @@ class ArmySetSparse {
     inline ArmyZconst cat(ArmyId i) const { return at(i); }
     void print(ostream& os, bool show_boards = true) const;
 
+    inline size_t _overflowed() const PURE {
+        return overflow_used_;
+    }
+    inline size_t overflowed() const PURE {
+        return _overflowed() / Element::SIZE;
+    }
+    inline size_t max_overflow() const PURE {
+        return overflow_size_ / Element::SIZE;
+    }
+    inline Element const& overflow_pop() {
+        overflow_used_ -= Element::SIZE;
+        return Element::element(&overflow_[overflow_used_]);
+    }
+    inline void overflow(Element const& element) {
+        if (overflow_used_ >= overflow_size_) {
+            remallocate(overflow_, overflow_size_, overflow_size_ * 2);
+            overflow_size_ *= 2;
+        }
+        char const* RESTRICT ptr = reinterpret_cast<char const*>(&element);
+        std::copy(ptr, ptr+Element::SIZE, &overflow_[overflow_used_]);
+        overflow_used_ += Element::SIZE;
+    }
+    void check(char const* file, int line) const;
+
     // Not copyable (avoid accidents)
     ArmySetSparse(ArmySetSparse const&) = delete;
     ArmySetSparse& operator=(ArmySetSparse const&) = delete;
@@ -1230,14 +1344,15 @@ class ArmySetSparse {
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
 
     inline void _init(size_t size);
-    inline void free_groups();
     NOINLINE void resize() RESTRICT;
     void _convert_hash(bool keep = false);
-    inline void __convert_hash(bool keep);
+    inline void __convert_hash(bool keep) ALWAYS_INLINE;
 
     Coord* armies_;
     Group* groups_;
-    ArmyId* indices_;
+    char* overflow_;
+    size_t overflow_used_;
+    size_t overflow_size_;
     DataCache data_cache_;
     mutex exclude_;
     ArmyId size_;
@@ -1246,17 +1361,35 @@ class ArmySetSparse {
     int    memory_flags_;
 };
 
-void ArmySetSparse::Group::copy(DataCache& cache, GroupId id, GroupBuilder const& group_builder) {
-    bitmap_ = group_builder.bitmap();
-    if (bitmap_ == 0) return;
-    Bitmap b{bitmap_};
-    uint n = b.bits();
-    data_ = cache.allocate(id, n);
-    char* ptr = data_;
-    for (uint i=0; i < n; ++i, ptr += Element::SIZE) {
-        uint j = b.drop_one();
-        group_builder.copy_to(j, ptr);
+void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) {
+    Group& group = groups[group_id];
+    CacheId new_cache_id;
+    if (group.bitmap()) {
+        uint n = group.bits();
+        new_cache_id = cache_[n].allocate(stats);
+        cache_[n].group_id_at(new_cache_id) = group_id;
+        char* RESTRICT new_data = cache_[n].data(new_cache_id);
+        CacheId old_cache_id = group.cache_id();
+        char const* RESTRICT old_data = cache_[n-1].data(old_cache_id);
+        uint i = group.index(pos);
+        std::copy(&old_data[0], &old_data[i * Element::SIZE], &new_data[0]);
+        auto new_element = &new_data[i * Element::SIZE];
+        auto& element = Element::element(new_element);
+        element.id(army_id);
+        std::copy(army, army+ARMY, element.begin());
+        std::copy(&old_data[i * Element::SIZE], &old_data[n * Element::SIZE],
+                  new_element + Element::SIZE);
+        cache_[n-1].deallocate(groups, old_cache_id, stats);
+    } else {
+        new_cache_id = cache_[0].allocate(stats);
+        cache_[0].group_id_at(new_cache_id) = group_id;
+        auto new_element = cache_[0].data(new_cache_id);
+        auto& element = Element::element(new_element);
+        element.id(army_id);
+        std::copy(army, army+ARMY, element.begin());
     }
+    group.cache_id() = new_cache_id;
+    group.set(pos);
 }
 
 inline ostream& operator<<(ostream& os, ArmySet const& set) {
@@ -1288,6 +1421,9 @@ class Board {
   public:
     Board() {}
     Board(Army const& blue, Army const& red): blue_{blue}, red_{red} {}
+    inline Board(Board const& board) ALWAYS_INLINE = default;
+    inline Board& operator=(Board const& army) ALWAYS_INLINE = default;
+
     void do_move(Move const& move_);
     void do_move(Move const& move, bool blue_to_move) {
         auto& army = blue_to_move ? blue() : red();
@@ -1303,7 +1439,7 @@ class Board {
         blue_.check(file, line);
         red_ .check(file, line);
     }
-    int min_nr_moves(bool blue_to_move) const PURE;
+    int min_nr_moves(bool blue_to_move) const PURE COLD;
     int min_nr_moves() const PURE {
         return min(min_nr_moves(true), min_nr_moves(false));
     }
@@ -1441,8 +1577,8 @@ class BoardSubSet: public BoardSubSetBase {
         }
         return find(join(red_id, symmetry < 0));
     }
-    ArmyId example(ArmyId& symmetry) const;
-    ArmyId random_example(ArmyId& symmetry) const;
+    ArmyId example(ArmyId& symmetry) const COLD;
+    ArmyId random_example(ArmyId& symmetry) const COLD;
     void print(ostream& os) const;
     void print() const { print(cout); }
 
@@ -1505,8 +1641,8 @@ class BoardSubSetRed: public BoardSubSetBase {
     ArmyId size()       const PURE { return left_; }
     bool empty() const PURE { return size() == 0; }
     ArmyId const* end() const PURE { return &armies_[size()]; }
-    ArmyId example(ArmyId& symmetry) const;
-    ArmyId random_example(ArmyId& symmetry) const;
+    ArmyId example(ArmyId& symmetry) const COLD;
+    ArmyId random_example(ArmyId& symmetry) const COLD;
     inline bool _insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (UNLIKELY(red_id <= 0))
@@ -1712,7 +1848,7 @@ class BoardSet: public BoardSetBase {
         at(blue_id) = subset;
         size_ += subset.size();
     }
-    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red);
+    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) COLD;
     bool insert(Board const& board, ArmySet& armies_to_move, ArmySet& armies_opponent, int nr_moves) {
         int blue_to_move = nr_moves & 1;
         bool result = blue_to_move ?
@@ -1730,15 +1866,15 @@ class BoardSet: public BoardSetBase {
         if (blue_id >= top_) return false;
         return cat(blue_id).find(red_id, symmetry);
     }
-    bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE;
+    bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE COLD;
     bool find(Board const& board, ArmySet& armies_to_move, ArmySet& armies_opponent, int nr_moves) const PURE {
         int blue_to_move = nr_moves & 1;
         return blue_to_move ?
             find(board, armies_to_move, armies_opponent) :
             find(board, armies_opponent, armies_to_move);
     }
-    NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
-    NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
+    NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
+    NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
     void print(ostream& os) const;
   private:
     inline BoardSubSet& at(ArmyId id) PURE {
@@ -1765,7 +1901,7 @@ class BoardSetRed: public BoardSetBase {
     inline BoardSubSetRed const& at(ArmyId id) const PURE { return cat(id); }
     inline BoardSubSetRed const* begin() const PURE { return &cat(from()); }
     inline BoardSubSetRed const* end()   const PURE { return &cat(top_); }
-    void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) {
+    void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) HOT {
         if (CHECK) {
             if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
@@ -1783,8 +1919,8 @@ class BoardSetRed: public BoardSetBase {
         at(blue_id) = subset_red;
         size_ += subset_red.size();
     }
-    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red);
-    bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE;
+    bool insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) COLD;
+    bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE COLD;
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
   private:
@@ -1919,29 +2055,31 @@ class Image {
     BoardTable<Color> image_;
 };
 
-inline ostream& operator<<(ostream& os, Image const& image) {
+inline ostream& operator<<(ostream& os, Image const& image) ALWAYS_INLINE;
+ostream& operator<<(ostream& os, Image const& image) {
     os << image.str();
     return os;
 }
 
-inline ostream& operator<<(ostream& os, Board const& board) {
-    os << Image{board};
+inline ostream& operator<<(ostream& os, Board const& board) ALWAYS_INLINE;
+ostream& operator<<(ostream& os, Board const& board) {
+    os << Image{board}.str();
     return os;
 }
 
 class FullMove: public vector<Coord> {
   public:
-    FullMove() {}
-    FullMove(char const* str);
-    FullMove(string const& str) : FullMove{str.c_str()} {}
-    FullMove(Board const& from, Board const& to, Color color=COLORS);
-    string str() const PURE;
-    Coord from() const PURE;
-    Coord to()   const PURE;
-    Move move() const PURE;
+    FullMove() COLD {}
+    FullMove(char const* str) COLD;
+    FullMove(string const& str) COLD: FullMove{str.c_str()} {}
+    FullMove(Board const& from, Board const& to, Color color=COLORS) COLD;
+    string str() const PURE COLD;
+    Coord from() const PURE COLD;
+    Coord to()   const PURE COLD;
+    Move move() const PURE COLD;
 
   private:
-    void move_expand(Board const& board_from, Board const& board_to, Move const& move);
+    void move_expand(Board const& board_from, Board const& board_to, Move const& move) COLD;
 };
 
 inline ostream& operator<<(ostream& os, FullMove const& move) {
@@ -1994,10 +2132,10 @@ class Svg {
     void write(time_t start_time, time_t stop_time,
                int solution_moves, BoardList const& boards,
                StatisticsList const& stats_list_solve, Sec::rep solve_duration,
-               StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration);
-    void parameters(time_t start_time, time_t stop_time);
-    void game(BoardList const& boards);
-    void stats(string const& cls, StatisticsList const& stats_list);
+               StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration) COLD;
+    void parameters(time_t start_time, time_t stop_time) COLD;
+    void game(BoardList const& boards) COLD;
+    void stats(string const& cls, StatisticsList const& stats_list) COLD;
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
     void html(FullMoves const& full_moves);
@@ -2045,8 +2183,8 @@ class ThreadData {
 
 class Tables {
   public:
-    Tables() {}
-    void init();
+    Tables() COLD {}
+    void init() COLD;
     // The folowing methods in Tables are really only PURE. However they should
     // only ever be applied to the constant "tables" so they access
     // global memory that never changes making them effectively FUNCTIONAL
@@ -2105,39 +2243,39 @@ class Tables {
     Nbits Ninfinity() const FUNCTIONAL { return Ninfinity_; }
     Board const& start() const FUNCTIONAL { return start_; }
 
-    void print_directions(ostream& os) const;
+    void print_directions(ostream& os) const COLD;
     void print_directions() const {
         print_directions(cout);
     }
-    void print_Ndistance_base_red(ostream& os) const;
+    void print_Ndistance_base_red(ostream& os) const COLD;
     inline void print_Ndistance_base_red() const {
         print_Ndistance_base_red(cout);
     }
-    void print_base_blue(ostream& os) const;
+    void print_base_blue(ostream& os) const COLD;
     void print_base_blue() const {
         print_base_blue(cout);
     }
-    void print_base_red(ostream& os) const;
+    void print_base_red(ostream& os) const COLD;
     void print_base_red() const {
         print_base_red(cout);
     }
-    void print_edge_red(ostream& os) const;
+    void print_edge_red(ostream& os) const COLD;
     void print_edge_red() const {
         print_edge_red(cout);
     }
-    void print_parity(ostream& os) const;
+    void print_parity(ostream& os) const COLD;
     void print_parity() const {
         print_parity(cout);
     }
-    void print_blue_parity_count(ostream& os) const;
+    void print_blue_parity_count(ostream& os) const COLD;
     void print_blue_parity_count() const {
         print_blue_parity_count(cout);
     }
-    void print_red_parity_count(ostream& os) const;
+    void print_red_parity_count(ostream& os) const COLD;
     void print_red_parity_count() const {
         print_red_parity_count(cout);
     }
-    void print_nr_slide_jumps_red(ostream& os) const;
+    void print_nr_slide_jumps_red(ostream& os) const COLD;
     void print_nr_slide_jumps_red() const {
         print_nr_slide_jumps_red(cout);
     }
@@ -2203,7 +2341,7 @@ Offsets const& Coord::slide_jumps_red() const {
     return tables.slide_jumps_red(*this);
 }
 
-ArmyId ArmySetDense::insert(Army const& army, Statistics& stats) RESTRICT {
+ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) {
     // logger << "Insert:\n" << Image{army};
     // Leave hash calculation out of the mutex
     ArmyId hash = army.hash();
@@ -2236,88 +2374,11 @@ ArmyId ArmySetDense::insert(Army const& army, Statistics& stats) RESTRICT {
     }
 }
 
-ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
-    // logger << "Insert:\n" << Image{army};
-    // Leave hash calculation out of the mutex
-    ArmyId hash = army.hash();
-    lock_guard<mutex> lock{exclude_};
-    // logger << "used_ = " << used_ << ", limit = " << limit_ << "\n" << flush;
-    if (used_ >= limit_) resize();
-    ArmyId const mask = mask_;
-    ArmyId pos = hash & mask;
-    ArmyId offset = 0;
-    auto values = values_;
-    while (true) {
-        // logger << "Try " << pos << " of " << allocated() << "\n" << flush;
-        ArmyId i = values[pos];
-        if (i == 0) {
-            stats.armyset_probe(offset);
-            ArmyId id = ++used_;
-            // logger << "Found empty, assign id " << id << "\n" << Image{army} << flush;
-            values[pos] = id;
-            at(id).append(army);
-            return id;
-        }
-        if (army == cat(i)) {
-            stats.armyset_probe(offset);
-            stats.armyset_try();
-            // logger << "Found duplicate " << hash << "\n" << flush;
-            return i;
-        }
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
-}
-
-void ArmySetSparse::Group::append(DataCache& cache, GroupId group_id, uint pos, ArmyId army_id, Coord const* army, Statistics& stats) {
-    if (bitmap_) {
-        uint i = index(pos);
-        uint n = bits();
-        auto new_data = cache.allocate(group_id, n+1, stats);
-        std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
-        auto new_element = &new_data[i * Element::SIZE];
-        auto& element = Element::element(new_element);
-        element.id(army_id);
-        std::copy(army, army+ARMY, element.begin());
-        std::copy(&data_[i * Element::SIZE], &data_[n * Element::SIZE],
-                  new_element + Element::SIZE);
-        cache.deallocate(n, data_, stats);
-        data_ = new_data;
-    } else {
-        data_ = cache.allocate(group_id, 1, stats);
-        auto& element = Element::element(data_);
-        element.id(army_id);
-        std::copy(army, army+ARMY, element.begin());
-    }
-    set(pos);
-}
-
-void ArmySetSparse::Group::append(DataCache& cache, GroupId group_id, uint pos, Element const& old_element) {
-    char const* old_e = static_cast<char const*>(static_cast<void const *>(&old_element));
-    if (bitmap_) {
-        uint i = index(pos);
-        uint n = bits();
-        auto new_data = cache.allocate(group_id, n+1);
-        std::copy(&data_[0], &data_[i * Element::SIZE], &new_data[0]);
-        auto new_element = &new_data[i * Element::SIZE];
-        std::copy(old_e, old_e + Element::SIZE, new_element);
-        std::copy(&data_[i * Element::SIZE], &data_[n * Element::SIZE],
-                  new_element + Element::SIZE);
-        cache.deallocate(n, data_);
-        data_ = new_data;
-    } else {
-        data_ = cache.allocate(group_id, 1);
-        std::copy(old_e, old_e + Element::SIZE, data_);
-    }
-    set(pos);
-}
-
-ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
-    // logger << "Insert:\n" << Image{army};
+ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) {
     // Leave hash calculation out of the mutex
     uint64_t hash = army.hash();
+    // logger << "Insert: " << hex << hash << dec << " (" << left_ << " left)\n" << Image{army};
     lock_guard<mutex> lock{exclude_};
-    // logger << "left_ = " << left_ << endl;
     if (left_ == 0) resize();
     GroupId const mask = mask_;
     Group* groups = groups_;
@@ -2327,49 +2388,15 @@ ArmyId ArmySetSparse::insert(Army const& army, Statistics& stats) RESTRICT {
         auto& group = groups[group_id];
         uint pos = hash & GROUP_MASK;
         // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;
-        if (group.bit(pos) == 0) {
+        if (UNLIKELY(group.bit(pos) == 0)) {
             stats.armyset_probe(offset);
             --left_;
             ArmyId army_id = ++size_;
             // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
-            group.append(data_cache_, group_id, pos, army_id, army.begin(), stats);
+            data_cache_.append(groups, group_id, pos, army_id, army.begin(), stats);
             return army_id;
         }
-        Element const& element = group.at(pos);
-        if (army == element.armyZ()) {
-            stats.armyset_probe(offset);
-            stats.armyset_try();
-            // logger << "Found duplicate " << hash << "\n" << flush;
-            return element.id();
-        }
-        hash += ++offset;
-    }
-}
-
-ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) RESTRICT {
-    // logger << "Insert:\n" << Image{army};
-    // Leave hash calculation out of the mutex
-    uint64_t hash = army.hash();
-    lock_guard<mutex> lock{exclude_};
-    // logger << "left_ = " << left_ << endl;
-    if (left_ == 0) resize();
-    GroupId const mask = mask_;
-    Group* groups = groups_;
-    uint64_t offset = 0;
-    while (true) {
-        GroupId group_id = (hash >> GROUP_BITS) & mask;
-        auto& group = groups[group_id];
-        uint pos = hash & GROUP_MASK;
-        // logger << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n" << flush;
-        if (group.bit(pos) == 0) {
-            stats.armyset_probe(offset);
-            --left_;
-            ArmyId army_id = ++size_;
-            // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
-            group.append(data_cache_, group_id, pos, army_id, army.begin(), stats);
-            return army_id;
-        }
-        Element const& element = group.at(pos);
+        Element const& element = data_cache_.at(group, pos);
         if (army == element.armyZ()) {
             stats.armyset_probe(offset);
             stats.armyset_try();
@@ -2410,6 +2437,13 @@ inline StatisticsE make_all_blue_moves
  ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet& moved_armies,
+ int nr_moves) ALWAYS_INLINE;
+StatisticsE make_all_blue_moves
+(BoardSetRed& boards_from,
+ BoardSet& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
  int nr_moves) {
     return verbose || statistics || hash_statistics ?
         make_all_blue_moves_slow(boards_from, boards_to,
@@ -2442,6 +2476,13 @@ inline StatisticsE make_all_red_moves
  ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet& moved_armies,
+ int nr_moves) ALWAYS_INLINE;
+StatisticsE make_all_red_moves
+(BoardSet& boards_from,
+ BoardSetRed& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
  int nr_moves) {
     return verbose || statistics || hash_statistics ?
         make_all_red_moves_slow(boards_from, boards_to,
@@ -2469,6 +2510,13 @@ StatisticsE make_all_blue_moves_backtrack_fast
  int nr_moves);
 
 inline StatisticsE make_all_blue_moves_backtrack
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int nr_moves) ALWAYS_INLINE;
+StatisticsE make_all_blue_moves_backtrack
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,
@@ -2509,6 +2557,16 @@ StatisticsE make_all_red_moves_backtrack_fast
  int nr_moves);
 
 inline StatisticsE make_all_red_moves_backtrack
+(BoardSet& boards_from,
+ BoardSet& boards_to,
+ ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet& moved_armies,
+ int solution_moves,
+ BoardTable<uint8_t> const& red_backtrack,
+ BoardTable<uint8_t> const& red_backtrack_symmetric,
+ int nr_moves) ALWAYS_INLINE;
+StatisticsE make_all_red_moves_backtrack
 (BoardSet& boards_from,
  BoardSet& boards_to,
  ArmySet const& moving_armies,

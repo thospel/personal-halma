@@ -73,7 +73,15 @@
      #include <spe.h>
 #endif
 
-size_t const MMAP_THRESHOLD = 128 * 1024;
+size_t const MMAP_THRESHOLD  = 128 * 1024;
+// size_t const MMAP_THRESHOLD  = 4096;
+size_t const MMAP_THRESHOLD1 = MMAP_THRESHOLD - 1;
+size_t const MMAP_THRESHOLD_MASK = ~MMAP_THRESHOLD1;
+inline size_t MMAP_THRESHOLD_ROUND(size_t size) FUNCTIONAL;
+size_t MMAP_THRESHOLD_ROUND(size_t size) {
+    return (size + MMAP_THRESHOLD1) & MMAP_THRESHOLD_MASK;
+}
+
 bool const CLEAR = true;
 
 int const ALLOC_LOCK     = 1;
@@ -86,6 +94,8 @@ extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
 extern thread_local ssize_t allocated_;
 
+extern size_t PAGE_SIZE;
+extern size_t PAGE_SIZE1;
 extern uint64_t PID;
 extern std::string HOSTNAME;
 extern std::string const VCS_COMMIT;
@@ -97,6 +107,11 @@ extern std::string const VCS_COMMIT_TIME;
 [[noreturn]] void throw_logic(char const*, const char* file, int line);
 [[noreturn]] void throw_logic(std::string const& text);
 [[noreturn]] void throw_logic(std::string const& text, const char* file, int line);
+
+inline size_t PAGE_ROUND(size_t size) FUNCTIONAL;
+size_t PAGE_ROUND(size_t size) {
+    return (size + PAGE_SIZE1) & ~PAGE_SIZE1;
+}
 
 void rm_file(std::string const& file);
 std::string time_string(time_t time);

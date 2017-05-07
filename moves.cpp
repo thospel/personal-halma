@@ -55,6 +55,28 @@ Statistics NAME(uint thid,
                 BoardTable<uint8_t> const& backtrack_symmetric,
                 int solution_moves,
 #endif // BACKTRACK && !BLUE_TO_MOVE
+                int available_moves) HOT;
+Statistics NAME(uint thid,
+#if BACKTRACK
+                BoardSet& boards_from,
+                BoardSet& boards_to,
+#else  // BACKTRACK
+# if BLUE_TO_MOVE
+                BoardSetRed& boards_from,
+                BoardSet& boards_to,
+# else // BLUE_TO_MOVE
+                BoardSet& boards_from,
+                BoardSetRed& boards_to,
+#endif // BLUE_TO_MOVE
+#endif // BACKTRACK
+                ArmySet const& moving_armies,
+                ArmySet const& opponent_armies,
+                ArmySet& moved_armies,
+#if BACKTRACK && !BLUE_TO_MOVE
+                BoardTable<uint8_t> const& backtrack,
+                BoardTable<uint8_t> const& backtrack_symmetric,
+                int solution_moves,
+#endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) {
     tid = thid;
     ThreadData thread_data;
