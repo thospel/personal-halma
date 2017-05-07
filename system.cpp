@@ -431,6 +431,72 @@ void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size
     return new_ptr;
 }
 
+// Only the newly added range is zerod, the old range remains
+void* _recmallocate(void* old_ptr, size_t old_size, size_t new_size) {
+    void* new_ptr;
+
+    if (use_mmap(new_size)) {
+        if (use_mmap(old_size)) {
+            new_ptr = _mremap(old_ptr, old_size, new_size, 0);
+        } else {
+            new_ptr = _mmap(new_size, 0);
+            std::memcpy(new_ptr, old_ptr, std::min(old_size, new_size));
+            delete [] static_cast<char *>(old_ptr);
+            allocated_ -= old_size;
+        }
+    } else {
+        new_ptr = new char[new_size];
+        if (new_size > old_size) {
+            std::memcpy(new_ptr, old_ptr, old_size);
+            std::memset(static_cast<char *>(new_ptr) + old_size, 0, new_size - old_size);
+        } else {
+            std::memcpy(new_ptr, old_ptr, new_size);
+        }
+        if (use_mmap(old_size)) {
+            _munmap(old_ptr, old_size, 0);
+        } else {
+            delete [] static_cast<char *>(old_ptr);
+            allocated_ -= old_size;
+        }
+        allocated_ += new_size;
+    }
+
+    return new_ptr;
+}
+
+// Only the newly added range is zerod, the old range remains
+void* _recmallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) {
+    void* new_ptr;
+
+    if (use_mmap(new_size)) {
+        if (use_mmap(old_size)) {
+            new_ptr = _mremap(old_ptr, old_size, new_size, flags);
+        } else {
+            new_ptr = _mmap(new_size, flags);
+            std::memcpy(new_ptr, old_ptr, std::min(old_size, new_size));
+            delete [] static_cast<char *>(old_ptr);
+            allocated_ -= old_size;
+        }
+    } else {
+        new_ptr = new char[new_size];
+        if (new_size > old_size) {
+            std::memcpy(new_ptr, old_ptr, old_size);
+            std::memset(static_cast<char *>(new_ptr) + old_size, 0, new_size - old_size);
+        } else {
+            std::memcpy(new_ptr, old_ptr, new_size);
+        }
+        if (use_mmap(old_size)) {
+            _munmap(old_ptr, old_size, flags);
+        } else {
+            delete [] static_cast<char *>(old_ptr);
+            allocated_ -= old_size;
+        }
+        allocated_ += new_size;
+    }
+
+    return new_ptr;
+}
+
 void _demallocate(void *old_ptr, size_t old_size) {
     if (use_mmap(old_size)) _munmap(old_ptr, old_size, 0);
     else {

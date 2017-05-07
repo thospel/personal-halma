@@ -165,6 +165,8 @@ void* _remallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC
 void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 void* _remallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _recmallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
+void* _recmallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 // void* _cremallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 void _demallocate(void *ptr, size_t old_size) NONNULL;
 void _demallocate(void *ptr, size_t old_size, int flags) NONNULL;
@@ -233,6 +235,18 @@ inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags
     old_ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
 }
 
+// Only the newly added range is zerod, the old range remains
+template<class T>
+inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size) {
+    old_ptr = static_cast<T*>(_recmallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
+}
+
+// Only the newly added range is zerod, the old range remains
+template<class T>
+inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
+    old_ptr = static_cast<T*>(_recmallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+}
+
 template<class T>
 inline T* remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
     T* new_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
@@ -247,6 +261,7 @@ inline T* remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, siz
     return new_ptr;
 }
 
+// Zero the whole new size
 template<class T>
 inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size) {
     _demallocate(old_ptr, old_size * sizeof(T));

@@ -77,6 +77,10 @@ extern Align ARMY_MASK_NOT;
 extern Align NIBBLE_LEFT;
 extern Align NIBBLE_RIGHT;
 
+extern uint ARMY_SUBSET_BITS;
+extern uint ARMY_SUBSETS;
+extern uint ARMY_SUBSETS_MASK;
+
 extern bool statistics;
 extern bool hash_statistics;
 extern bool verbose;
@@ -111,6 +115,8 @@ uint const MAX_X     = 16;
 uint const MAX_Y     = 16;
 uint const MAX_RULES = 8;
 uint const MIN_MAX_ARMY = 21;
+
+uint const MAX_ARMY_SUBSET_BITS  = 4;
 
 constexpr uint LOG2(size_t value) {
     return value <= 1 ? 0 : 1+LOG2(value / 2);
@@ -1394,11 +1400,39 @@ inline ostream& operator<<(ostream& os, ArmySetSparse const& set) {
     return os;
 }
 
+using ArmySubset = ArmySetSparse;
+class ArmySubsets {
+  public:
+    inline ArmySubset const& operator[](uint i) const FUNCTIONAL {
+        return subsets_[i];
+    }
+    inline ArmySubset      & operator[](uint i)       FUNCTIONAL {
+        return subsets_[i];
+    }
+    inline ArmySubset const* cbegin() const FUNCTIONAL {
+        return &subsets_[0];
+    }
+    inline ArmySubset const* cend  () const PURE       {
+        return &subsets_[ARMY_SUBSETS];
+    }
+    inline ArmySubset const* begin() const FUNCTIONAL  {
+        return &subsets_[0];
+    }
+    inline ArmySubset const* end  () const PURE        {
+        return &subsets_[ARMY_SUBSETS];
+    }
+    inline ArmySubset* begin() FUNCTIONAL {
+        return &subsets_[0];
+    }
+    inline ArmySubset* end  () PURE       {
+        return &subsets_[ARMY_SUBSETS];
+    }
+  private:
+    array<ArmySubset, 1 << MAX_ARMY_SUBSET_BITS> subsets_;
+};
+
 class ArmySet {
   public:
-    static uint const ARMY_SUBSET_BITS  = 3;
-    static uint const ARMY_SUBSETS      = 1 << ARMY_SUBSET_BITS;
-    static uint const ARMY_SUBSETS_MASK = ARMY_SUBSETS-1;
 
     ArmySet(bool lock = false);
     ~ArmySet();
@@ -1443,7 +1477,7 @@ class ArmySet {
     Coord* armies_;
     atomic<ArmyId> size_;
     int memory_flags_;
-    array<ArmySetSparse, ARMY_SUBSETS> subsets_;
+    ArmySubsets subsets_;
 };
 
 ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) {
@@ -1605,11 +1639,6 @@ class BoardSubset: public BoardSubsetBase {
         cmallocate(armies_, size);
         // logger << "Create BoardSubset " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
     }
-    inline void zero() {
-        armies_ = nullptr;
-        mask_ = 0;
-        left_ = 0;
-    }
     inline void destroy() {
         if (armies_) {
             demallocate(armies_, allocated());
@@ -1686,11 +1715,6 @@ class BoardSubsetRed: public BoardSubsetBase {
         armies_ = list;
         left_   = size;
         mask_   = ARMYID_MAX;
-    }
-    inline void zero() {
-        armies_ = nullptr;
-        mask_ = 0;
-        left_ = 0;
     }
     inline void destroy() {
         if (armies_) {
@@ -1843,7 +1867,7 @@ class BoardSetBase {
     void down_size(ArmyId size) { size_ -= size; }
     inline void clear(ArmyId size = INITIAL_SIZE);
 
-    size_t size_;
+    atomic<size_t> size_;
     mutex exclude_;
     Army solution_;
     ArmyId solution_id_;
@@ -1889,22 +1913,28 @@ class BoardSet: public BoardSetBase {
         size_ += result;
         return result;
     }
+    // Used for red to move while backtracking
+    void grow(ArmyId blue_id) {
+        if (blue_id >= top_) {
+            while (blue_id > capacity_) resize();
+            top_ = blue_id + 1;
+            // No need to zero the skipped sets because subsets_ is
+            // created with zeros
+        }
+    }
+    // Used for red to move while backtracking
     void insert(ArmyId blue_id, BoardSubset const& subset) {
         if (CHECK) {
             if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
         }
-        lock_guard<mutex> lock{exclude_};
+        if (UNLIKELY(blue_id >= top_))
+            throw_logic("High blue id " + to_string(blue_id) + " >= " + to_string(top_) + ". BoardSubset not properly presized");
 
-        if (blue_id >= top_) {
-            // Only in the multithreaded case blue_id can be different from top_
-            // if (blue_id != top_) throw_logic("Cannot grow more than 1");
-            while (blue_id > capacity_) resize();
-            // This is only called when doing red moves and all updates
-            // will be done as an overwrite. So use zero() instead of create()
-            while (blue_id > top_) at(top_++).zero();
-            ++top_;
-        }
+        // No locking because each thread works on one blue id and the
+        // subsets_ area is presized
+        // lock_guard<mutex> lock{exclude_};
+
         at(blue_id) = subset;
         size_ += subset.size();
     }
@@ -1947,14 +1977,16 @@ class BoardSet: public BoardSetBase {
 class BoardSetRed: public BoardSetBase {
     friend class BoardSubsetRedRef;
   public:
-    BoardSetRed(bool keep = false, ArmyId size = INITIAL_SIZE) :
-        BoardSetBase{keep, size} {}
+    BoardSetRed(ArmyId size, bool keep = false) :
+        BoardSetBase{keep, size} {
+        top_ = size + 1;
+    }
     ~BoardSetRed() {
         for (auto& subset: *this)
             subset.destroy();
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
     }
-    void clear(ArmyId size = INITIAL_SIZE);
+    void clear(ArmyId size);
     inline BoardSubsetRed const& cat(ArmyId id) const PURE {
         return static_cast<BoardSubsetRed const&>(subsets_[id]);
     }
@@ -1966,16 +1998,14 @@ class BoardSetRed: public BoardSetBase {
             if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
         }
+        if (UNLIKELY(blue_id >= top_))
+            throw_logic("High blue id " + to_string(blue_id) + " >= " + to_string(top_) + ". BoardSubsetRed not properly presized");
         BoardSubsetRed subset_red = builder.extract();
 
-        lock_guard<mutex> lock{exclude_};
-        if (blue_id >= top_) {
-            // Only in the multithreaded case can blue_id be different from top_
-            // if (blue_id != top_) throw_logic("Cannot grow more than 1");
-            while (blue_id > capacity_) resize();
-            while (blue_id > top_) at(top_++).zero();
-            ++top_;
-        }
+        // No locking because each thread works on one blue id and the
+        // subsets_ area is presized
+        // lock_guard<mutex> lock{exclude_};
+
         at(blue_id) = subset_red;
         size_ += subset_red.size();
     }

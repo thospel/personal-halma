@@ -21,6 +21,10 @@ uint ARMY_ALIGNED;
 uint ARMY_PADDING;
 uint ARMY64_DOWN;
 
+uint ARMY_SUBSET_BITS  = 4;
+uint ARMY_SUBSETS      = 1 << ARMY_SUBSET_BITS;
+uint ARMY_SUBSETS_MASK = ARMY_SUBSETS-1;
+
 int balance = -1;
 int balance_delay = 0;
 int balance_min, balance_max;
@@ -556,7 +560,7 @@ void BoardSubsetRedBuilder::resize() {
 }
 
 BoardSetBase::BoardSetBase(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
-    mallocate(subsets_, capacity());
+    cmallocate(subsets_, capacity());
     --subsets_;
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
@@ -566,23 +570,22 @@ void BoardSetBase::clear(ArmyId size) {
     size_ = 0;
     solution_id_ = keep_;
     ++subsets_;
-    remallocate(subsets_, capacity(), size);
+    cremallocate(subsets_, capacity(), size);
     --subsets_;
     capacity_ = size;
 }
 
 void BoardSetBase::resize() {
-    auto old_subsets = subsets_;
-    subsets_ = mallocate<BoardSubset>(capacity()*2) - 1;
+    auto subsets = subsets_ + 1;
+    recmallocate(subsets, capacity(), capacity()*2);
+    capacity_ *= 2;
+    subsets_ = subsets - 1;
     // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity() << "\n" << flush;
-    std::copy(&old_subsets[from()], &old_subsets[top_], &subsets_[1]);
     if (!keep_) {
+        if (from_ != 1) throw_logic("Say what?");
         top_ -= from_ - 1;
         from_ = 1;
     }
-    ++old_subsets;
-    demallocate(old_subsets, capacity());
-    capacity_ *= 2;
 }
 
 void BoardSet::clear(ArmyId size) {
@@ -605,6 +608,7 @@ void BoardSetRed::clear(ArmyId size) {
     for (auto& subset: *this)
         subset.destroy();
     BoardSetBase::clear(size);
+    top_ = size+1;
 }
 
 string Image::_str() const {
@@ -1200,7 +1204,7 @@ void ArmySetSparse::resize() {
         char const* RESTRICT ptr = data_cache_.data(n-1, old_data_id);
         for (uint i=0; i<n; ++i, ptr += Element::SIZE) {
             auto& old_element = Element::element(ptr);
-            uint64_t hash = old_element.hash() >> ArmySet::ARMY_SUBSET_BITS;
+            uint64_t hash = old_element.hash() >> ARMY_SUBSET_BITS;
             // logger << "Rehashing " << old_element.id() << ", hash " << hex << hash << dec << "\n" << Image{old_element.armyZ()};
             ArmyId offset = 0;
             while (true) {
@@ -1251,7 +1255,7 @@ void ArmySetSparse::resize() {
     // logger << "overflow " << overflowed() << " / " << old_nr_groups << endl;
     while (_overflowed()) {
         Element const& old_element = overflow_pop();
-        ArmyId hash = old_element.hash() >> ArmySet::ARMY_SUBSET_BITS;
+        ArmyId hash = old_element.hash() >> ARMY_SUBSET_BITS;
         // logger << "Rehashing overflow " << old_element.id() << ", hash " << hex << hash << dec << "\n" << Image{old_element.armyZ()};
         ArmyId offset = 0;
         while (true) {
@@ -1354,7 +1358,7 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
             for (uint i=0; i<GROUP_SIZE; ++i)
                 if (group.bit(i)) {
                     Element const& element = Element::element(ptr);
-                    auto h = element.hash() >> ArmySet::ARMY_SUBSET_BITS;
+                    auto h = element.hash() >> ARMY_SUBSET_BITS;
                     os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
                     ptr += Element::SIZE;
                 }
@@ -1946,14 +1950,14 @@ bool BoardSetRed::_insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistic
         if (UNLIKELY(blue_id <= 0))
             throw_logic("red_id <= 0");
     }
-    lock_guard<mutex> lock{exclude_};
 
-    if (blue_id >= top_) {
-        // Only in the multithreaded case blue_id can be different from top_
-        // if (blue_id != top_) throw_logic("Cannot grow more than 1");
-        while (blue_id > capacity_) resize();
-        while (blue_id >= top_) at(top_++).zero();
-    }
+    if (UNLIKELY(blue_id >= top_))
+        throw_logic("High blue id " + to_string(blue_id) + " >= " + to_string(top_) + ". BoardSubsetRed not properly presized");
+
+    // No locking because each thread works on one blue id and the
+    // subsets_ area is presized
+    // lock_guard<mutex> lock{exclude_};
+
     bool result = at(blue_id)._insert(red_id, symmetry, stats);
     size_ += result;
     return result;
@@ -2465,14 +2469,14 @@ void play(bool print_moves) {
         // cout << board.symmetric();
 
         ArmySet  army_set[3];
-        BoardSet    blue_boards;
-        BoardSetRed red_boards;
         bool blue_to_move = nr_moves & 1;
         if (blue_to_move) {
+            BoardSetRed red_boards{2};
             red_boards.insert(board, army_set[0], army_set[1]);
             army_set[0].drop_hash();
             army_set[1].convert_hash();
 
+            BoardSet    blue_boards;
             auto stats = make_all_blue_moves
                 (red_boards, blue_boards,
                  army_set[0], army_set[1], army_set[2],
@@ -2487,10 +2491,12 @@ void play(bool print_moves) {
                 cout << "Bad\n";
             }
         } else {
+            BoardSet    blue_boards;
             blue_boards.insert(board, army_set[0], army_set[1], nr_moves);
             army_set[0].drop_hash();
             army_set[1].convert_hash();
 
+            BoardSetRed red_boards{blue_boards.back_id()};
             auto stats = make_all_red_moves
                 (blue_boards, red_boards,
                  army_set[0], army_set[1], army_set[2],
@@ -2570,7 +2576,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
 
     vector<ArmyId> largest_red;
     BoardSet    boards_blue;
-    BoardSetRed boards_red;
+    BoardSetRed boards_red{2};
     array<ArmySet, 3>  army_set;
     bool blue_to_move = nr_moves & 1;
     if (blue_to_move)
@@ -2595,7 +2601,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
                  (boards_red, boards_blue,
                   moving_armies, opponent_armies, moved_armies,
                   nr_moves));
-            boards_red.clear();
+            boards_red.clear(boards_blue.back_id());
         } else {
 #if ARMYSET_SPARSE
             lock_guard<ArmySet> lock{moved_armies};
@@ -2733,6 +2739,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
                   moving_armies, opponent_armies, moved_armies,
                   nr_moves));
         } else {
+            boards_to.grow(boards_from.back_id());
 #if ARMYSET_SPARSE
             lock_guard<ArmySet> lock{moved_armies};
 #endif // ARMYSET_SPARSE
@@ -2777,9 +2784,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
         // There should be only 1 blue army completely on the red base
         if (final_army_set.size() != 1)
             throw_logic("More than 1 final blue army");
-        blue_id = final_board_set.back_id();
-        if (blue_id != 1)
-            throw_logic("Unexpected blue army id " + to_string(blue_id));
+        blue_id = 1;
         // There should be only 1 final board
         if (final_board_set.size() != 1)
             throw_logic("More than 1 solution while backtracking");
