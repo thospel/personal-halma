@@ -321,11 +321,12 @@ class ArmyPos;
 class ArmySetDense;
 class ArmySetSparse;
 #if ARMYSET_SPARSE
-using ArmySet = ArmySetSparse;
+// using ArmySet = ArmySetSparse;
 #else // ARMYSET_SPARSE
 using ArmySet = ArmySetDense;
 #endif // ARMYSET_SPARSE
 class ArmyZconst;
+class ArmySet;
 // Army as a set of Coord
 class alignas(Align) Army {
     // Allow tables to build red and blue armies
@@ -707,7 +708,7 @@ class Statistics {
         late_prunes_ = 0;
         edge_count_  = 0;
         largest_subset_ = 0;
-        max_overflow_ = 0;
+        overflow_max_ = 0;
 
         armyset_size_ = 0;
         armyset_tries_ = 0;
@@ -737,7 +738,7 @@ class Statistics {
     }
     inline void overflow(size_t size) {
         if (!STATISTICS) return;
-        if (size > max_overflow_) max_overflow_ = size;
+        if (size > overflow_max_) overflow_max_ = size;
     }
     inline void largest_subset_size(BoardSet const& boards) {
         if (!STATISTICS) return;
@@ -792,7 +793,7 @@ class Statistics {
     Counter late_prunes() const PURE { return late_prunes_; }
     Counter edges() const PURE { return edge_count_; }
     size_t  largest_subset() const PURE { return largest_subset_; }
-    size_t  max_overflow() const PURE { return max_overflow_; }
+    size_t  overflow_max() const PURE { return overflow_max_; }
     Counter armyset_size() const PURE { return armyset_size_; }
     Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
@@ -811,8 +812,8 @@ class Statistics {
         edge_count_	  += stats.edges();
         auto largest_subset = stats.largest_subset();
         if (largest_subset > largest_subset_) largest_subset_ = largest_subset;
-        auto max_overflow   = stats.max_overflow();
-        if (max_overflow > max_overflow_) max_overflow_ = max_overflow;
+        auto overflow_max   = stats.overflow_max();
+        if (overflow_max > overflow_max_) overflow_max_ = overflow_max;
 
         armyset_immediate_  += stats.armyset_immediate_;
         armyset_probes_	  += stats.armyset_probes_;
@@ -846,7 +847,7 @@ class Statistics {
     Counter boardset_probes_;
     Counter boardset_immediate_;
     size_t  largest_subset_;
-    size_t  max_overflow_;
+    size_t  overflow_max_;
 };
 
 STATIC const int ARMYID_BITS = std::numeric_limits<ArmyId>::digits;
@@ -977,7 +978,7 @@ class ArmySetSparse {
     // (reworking Group could save 25% memory but Group is of size ArmySet
     // divided by 64 anyways and is not a major memory user (at most 500MB for
     // a 2**32 size army, so we could save at most 125MB)
-    using CacheId = size_t;
+    using DataId = size_t;
 
     class alignas(char) Element {
       public:
@@ -1060,10 +1061,10 @@ class ArmySetSparse {
 
     class Group: public Bitmap {
       public:
-        CacheId& cache_id() FUNCTIONAL { return cache_id_; };
-        CacheId cache_id()  const PURE { return cache_id_; };
+        DataId& data_id() FUNCTIONAL { return data_id_; };
+        DataId data_id()  const PURE { return data_id_; };
       protected:
-        CacheId cache_id_;
+        DataId data_id_;
     };
 
     class DataCache {
@@ -1074,8 +1075,19 @@ class ArmySetSparse {
 
           public:
             static uint const DATA_CACHE_SIZE = 8;
+            // static uint const DATA_CACHE_SIZE = 0;
             static uint const FRACTION = 16;
 
+            // Use this instead of comparing to GROUP_ID_MAX directly
+            // It will eliminate useless code if DATA_CACHE_SIZE is 0
+            static inline bool is_cached(GroupId group_id) {
+                return DATA_CACHE_SIZE ? group_id == GROUP_ID_MAX : false;
+            }
+            // Use this instead of using cached_ directly.
+            // It will eliminate useless code if DATA_CACHE_SIZE is 0
+            inline uint cached() const PURE {
+                return DATA_CACHE_SIZE ? cached_ : 0;
+            }
             inline uint index() const PURE {
                 return (block_size_ - sizeof(GroupId)) / Element::SIZE-1;
             }
@@ -1088,7 +1100,7 @@ class ArmySetSparse {
                         throw_logic("Inconsistent block_size_");
                     if (UNLIKELY(!data_))
                         throw_logic("No data to destroy");
-                    if (UNLIKELY(data_cache.cached_))
+                    if (UNLIKELY(data_cache.cached()))
                         throw_logic("Holes in data to be copied");
                 }
 
@@ -1106,99 +1118,98 @@ class ArmySetSparse {
             inline void init(uint i);
             inline void free();
             inline void post_convert();
-            inline GroupId& group_id_at(CacheId i) PURE {
+            inline GroupId& group_id_at(DataId i) PURE {
                 // This is an unaligned access.
                 // We could add blocksize_ padding to make it aligned...
                 return *reinterpret_cast<GroupId*>(_data(i));
             }
-            inline GroupId group_id_at(CacheId i) const PURE {
+            inline GroupId group_id_at(DataId i) const PURE {
                 // This is an unaligned access.
                 // We could add blocksize_ padding to make it aligned...
                 return *reinterpret_cast<GroupId const*>(_data(i));
             }
-            inline char* data(CacheId i) PURE {
+            inline char* data(DataId i) PURE {
                 return _data(i+sizeof(GroupId));
             }
-            inline char const* data(CacheId i) const PURE {
+            inline char const* data(DataId i) const PURE {
                 return _data(i+sizeof(GroupId));
             }
-            ArmyId converted_id(CacheId i, uint pos) const PURE {
+            ArmyId converted_id(DataId i, uint pos) const PURE {
                 // This is an aligned access.
                 auto ids = reinterpret_cast<ArmyId const*>(_data(i));
                 return ids[pos];
             }
             void expand();
             void shrink();
-            inline CacheId fast_allocate() {
+            inline DataId fast_allocate() {
                 auto old_free = free_;
                 free_ += block_size_;
                 if (free_+ARMY_PADDING > size()) expand();
                 return old_free;
             }
-            inline CacheId allocate();
-            inline CacheId allocate(Statistics& stats) {
+            inline DataId allocate();
+            inline DataId allocate(Statistics& stats) {
                 stats.armyset_alloc();
-                // Directly use free_ without test if DATA_CACHE_SIZE is made 0
-                if (DATA_CACHE_SIZE && cached_) {
+                if (cached()) {
                     stats.armyset_alloc_cached();
                     return cache_[--cached_];
                 }
                 auto old_free = free_;
                 free_ += block_size_;
-                if (free_+ARMY_PADDING > size()) expand();
+                if (free_+ ARMY_PADDING > size()) expand();
                 return old_free;
             }
-            inline void deallocate(Group* groups, CacheId cache_id);
-            inline void deallocate(Group* groups, CacheId cache_id, Statistics& stats) {
+            inline void deallocate(Group* groups, DataId data_id);
+            inline void deallocate(Group* groups, DataId data_id, Statistics& stats) {
                 stats.armyset_dealloc();
-                if (cached_ < DATA_CACHE_SIZE) {
+                if (cached() < DATA_CACHE_SIZE) {
                     stats.armyset_dealloc_cached();
-                    cache_[cached_++] = cache_id;
-                    group_id_at(cache_id) = GROUP_ID_MAX;
+                    cache_[cached_++] = data_id;
+                    group_id_at(data_id) = GROUP_ID_MAX;
                 } else {
                     free_ -= block_size_;
-                    if (cache_id != free_) {
+                    if (data_id != free_) {
                         GroupId top_group_id = group_id_at(free_);
-                        if (top_group_id == GROUP_ID_MAX) {
-                            for (uint i=0; i<cached_; ++i)
+                        if (is_cached(top_group_id)) {
+                            for (uint i=0; i<cached(); ++i)
                                 if (cache_[i] == free_) {
-                                    cache_[i] = cache_id;
+                                    cache_[i] = data_id;
                                     goto FOUND;
                                 }
                             throw_logic("Top is free but I don't know why");
                           FOUND:
-                            group_id_at(cache_id) = GROUP_ID_MAX;
+                            group_id_at(data_id) = GROUP_ID_MAX;
                         } else {
-                            groups[top_group_id].cache_id() = cache_id;
+                            groups[top_group_id].data_id() = data_id;
                             char const* RESTRICT from = _data(free_);
-                            std::copy(from, from + block_size_, _data(cache_id));
+                            std::copy(from, from + block_size_, _data(data_id));
                         }
                     }
                     if (free_ < lower_bound_) shrink();
                 }
             }
             inline size_t check(char const* file, int line) const ALWAYS_INLINE;
-            inline void check_data(CacheId cache_id, GroupId group_id, ArmyId size, char const* file, int line) const ALWAYS_INLINE;
+            inline void check_data(DataId data_id, GroupId group_id, ArmyId size, char const* file, int line) const ALWAYS_INLINE;
           private:
 #if CHECK
-            char* _data(CacheId i) PURE {
+            char* _data(DataId i) PURE {
                 if (!data_) throw_logic("Uninitialized data_");
                 return &data_[i];
             }
-            char const* _data(CacheId i) const PURE {
+            char const* _data(DataId i) const PURE {
                 if (!data_) throw_logic("Uninitialized data_");
                 return &data_[i];
             }
 #else // CHECK
-            inline char* _data(CacheId i) PURE { return &data_[i]; }
-            inline char const* _data(CacheId i) const PURE { return &data_[i]; }
+            inline char* _data(DataId i) PURE { return &data_[i]; }
+            inline char const* _data(DataId i) const PURE { return &data_[i]; }
 #endif // CHECK
 
             char* data_;
-            CacheId size_;
-            CacheId free_;
-            CacheId lower_bound_;
-            array<CacheId, DATA_CACHE_SIZE> cache_;
+            DataId size_;
+            DataId free_;
+            DataId lower_bound_;
+            array<DataId, DATA_CACHE_SIZE> cache_;
             uint cached_;
             uint block_size_;
         };
@@ -1210,11 +1221,11 @@ class ArmySetSparse {
         inline void init();
         inline void free();
         inline void post_convert();
-        inline CacheId allocate(uint n, Statistics& stats) {
+        inline DataId allocate(uint n, Statistics& stats) {
             return cache_[n-1].allocate(stats);
         }
-        void deallocate(Group* groups, uint n, CacheId cache_id, Statistics& stats) {
-            cache_[n-1].deallocate(groups, cache_id, stats);
+        void deallocate(Group* groups, uint n, DataId data_id, Statistics& stats) {
+            cache_[n-1].deallocate(groups, data_id, stats);
         }
         inline void append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) ALWAYS_INLINE;
         inline void append(Group* groups, GroupId group_id, uint pos, Element const& old_element) ALWAYS_INLINE;
@@ -1225,10 +1236,10 @@ class ArmySetSparse {
             if (b.bitmap() == 0) return;
             uint n = b.bits();
             auto& cache = cache_[n-1];
-            CacheId cache_id = cache.fast_allocate();
-            cache.group_id_at(cache_id) = group_id;
-            group.cache_id() = cache_id;
-            char * RESTRICT ptr = cache.data(cache_id);
+            DataId data_id = cache.fast_allocate();
+            cache.group_id_at(data_id) = group_id;
+            group.data_id() = data_id;
+            char * RESTRICT ptr = cache.data(data_id);
             for (uint i=0; i < n; ++i, ptr += Element::SIZE) {
                 uint j = b.drop_one();
                 group_builder.copy_to(j, ptr);
@@ -1238,21 +1249,21 @@ class ArmySetSparse {
         inline Element const& at(Group const& group, uint pos) const PURE {
             uint n = group.bits();
             uint i = group.index(pos);
-            char const* RESTRICT data = cache_[n-1].data(group.cache_id());
+            char const* RESTRICT data = cache_[n-1].data(group.data_id());
             return Element::element(data, i);
         }
         // Only to be called with non empty group bitmap and after convert()
         inline ArmyId converted_id(Group const& group, uint pos) const PURE {
             uint n = group.bits();
             uint i = group.index(pos);
-            return cache_[n-1].converted_id(group.cache_id(), i);
+            return cache_[n-1].converted_id(group.data_id(), i);
         }
-        inline CacheId converted_cache_id(uint n, CacheId cache_id) {
+        inline DataId converted_data_id(uint n, DataId data_id) {
             uint block_size = sizeof(GroupId) + n * Element::SIZE;
-            return cache_id / block_size * static_cast<CacheId>(sizeof(ArmyId)) * n;
+            return data_id / block_size * static_cast<DataId>(sizeof(ArmyId)) * n;
         }
-        inline char const* data(uint i, CacheId cache_id) const PURE {
-            return cache_[i].data(cache_id);
+        inline char const* data(uint i, DataId data_id) const PURE {
+            return cache_[i].data(data_id);
         }
         inline void check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, char const* file, int line) const ALWAYS_INLINE;
       private:
@@ -1263,39 +1274,140 @@ class ArmySetSparse {
         Element::SIZE = ARMY * sizeof(Coord) + sizeof(Element);
         // cout << "sizeof(Element) = " << sizeof(Element) << ", Element::SIZE = " << Element::SIZE << "\n";
     }
-    ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
-    ~ArmySetSparse();
-    void lock() {
+    inline ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
+    inline ~ArmySetSparse();
+    inline void _init(size_t size = INITIAL_SIZE);
+    inline void lock() {
         // Only lock the groups_ spine (if it is actively being built)
-        if (!MLOCK) return;
-        if (memory_flags_ & ALLOC_LOCK) throw_logic("Already locked");
+        if (memory_flags_ & ALLOC_LOCK) return;
+        if (groups_) memlock(groups_, nr_groups());
         memory_flags_ |= ALLOC_LOCK;
-        // logger << "Would lock " << groups_ << " " << armies_ << " g=" << nr_groups() << endl;
-        if (groups_ && !armies_) memlock(groups_, nr_groups());
     }
-    void unlock() {
+    inline void unlock() {
         // Only unlock the groups_ spine (if it is actively being built)
-        if (!MLOCK) return;
-        if (!(memory_flags_ & ALLOC_LOCK)) throw_logic("Already unlocked");
+        if (!(memory_flags_ & ALLOC_LOCK)) return;
+        if (groups_) memunlock(groups_, nr_groups());
         memory_flags_ &= ~ALLOC_LOCK;
-        // logger << "Would unlock " << groups_ << " " << armies_ << " g=" << nr_groups() << endl;
-        if (groups_ && !armies_) memunlock(groups_, nr_groups());
     }
     void clear(size_t size = INITIAL_SIZE);
-    inline void drop_hash()    { _convert_hash(false); }
-    inline void convert_hash() { _convert_hash(true);  }
 
-    inline ArmyId size() const PURE { return size_; }
+    // inline ArmyId size() const PURE { return size_; }
     inline GroupId nr_groups() const PURE {
         return mask_+1;
     }
     inline size_t allocated() const PURE {
         return nr_groups() * static_cast<size_t>(GROUP_SIZE);
     }
-    ArmyId insert(Army const& army, Statistics& stats) RESTRICT COLD;
-    inline ArmyId insert(ArmyPos const& army, Statistics& stats) RESTRICT HOT;
-    ArmyId find(Army const& army) const PURE COLD;
-    ArmyId find(ArmyPos const& army) const PURE COLD;
+    inline size_t size() const PURE {
+        return allocated() - left_;
+    }
+    inline ArmyId insert(Army const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) COLD ALWAYS_INLINE;
+    inline ArmyId insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) HOT;
+    inline ArmyId find(ArmySet const& army_set, Army const& army, uint64_t hash) const PURE COLD;
+    inline ArmyId find(ArmySet const& army_set, ArmyPos const& army, uint64_t hash) const PURE COLD;
+
+    void print(ostream& os, bool show_boards = true) const;
+
+    inline size_t _overflowed() const PURE {
+        return overflow_used_;
+    }
+    inline size_t overflowed() const PURE {
+        return _overflowed() / Element::SIZE;
+    }
+    inline size_t overflow_max() const PURE;
+    inline Element const& overflow_pop() {
+        overflow_used_ -= Element::SIZE;
+        return Element::element(&overflow_[overflow_used_]);
+    }
+    inline void overflow(Element const& element) {
+        if (overflow_used_ >= overflow_size_) {
+            remallocate(overflow_, overflow_size_, overflow_size_ * 2);
+            overflow_size_ *= 2;
+        }
+        char const* RESTRICT ptr = reinterpret_cast<char const*>(&element);
+        std::copy(ptr, ptr+Element::SIZE, &overflow_[overflow_used_]);
+        overflow_used_ += Element::SIZE;
+    }
+    inline void overflow_mark() {
+        if (overflow_used_ > overflow_max_) overflow_max_ = overflow_used_;
+    }
+    void check(char const* file, int line) const;
+
+    // Not copyable (avoid accidents)
+    ArmySetSparse(ArmySetSparse const&) = delete;
+    ArmySetSparse& operator=(ArmySetSparse const&) = delete;
+
+    void _convert_hash(Coord* armies, ArmyId nr_elements, bool keep = false);
+
+  private:
+    static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
+
+    NOINLINE void resize() RESTRICT;
+    inline void __convert_hash(Coord* armies, ArmyId nr_elements, bool keep) ALWAYS_INLINE;
+
+    Group* groups_;
+    char* overflow_;
+    size_t overflow_used_;
+    size_t overflow_size_;
+    size_t overflow_max_;
+    DataCache data_cache_;
+    mutex exclude_;
+    // ArmyId size_;
+    ArmyId left_;
+    GroupId mask_;
+    int    memory_flags_;
+};
+
+void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) {
+    Group& group = groups[group_id];
+    DataId new_data_id;
+    if (group.bitmap()) {
+        uint n = group.bits();
+        new_data_id = cache_[n].allocate(stats);
+        cache_[n].group_id_at(new_data_id) = group_id;
+        char* RESTRICT new_data = cache_[n].data(new_data_id);
+        DataId old_data_id = group.data_id();
+        char const* RESTRICT old_data = cache_[n-1].data(old_data_id);
+        uint i = group.index(pos);
+        std::copy(&old_data[0], &old_data[i * Element::SIZE], &new_data[0]);
+        auto new_element = &new_data[i * Element::SIZE];
+        auto& element = Element::element(new_element);
+        element.id(army_id);
+        std::copy(army, army+ARMY, element.begin());
+        std::copy(&old_data[i * Element::SIZE], &old_data[n * Element::SIZE],
+                  new_element + Element::SIZE);
+        cache_[n-1].deallocate(groups, old_data_id, stats);
+    } else {
+        new_data_id = cache_[0].allocate(stats);
+        cache_[0].group_id_at(new_data_id) = group_id;
+        auto new_element = cache_[0].data(new_data_id);
+        auto& element = Element::element(new_element);
+        element.id(army_id);
+        std::copy(army, army+ARMY, element.begin());
+    }
+    group.data_id() = new_data_id;
+    group.set(pos);
+}
+
+inline ostream& operator<<(ostream& os, ArmySetSparse const& set) {
+    set.print(os);
+    return os;
+}
+
+class ArmySet {
+  public:
+    static uint const ARMY_SUBSET_BITS  = 3;
+    static uint const ARMY_SUBSETS      = 1 << ARMY_SUBSET_BITS;
+    static uint const ARMY_SUBSETS_MASK = ARMY_SUBSETS-1;
+
+    ArmySet(bool lock = false);
+    ~ArmySet();
+    inline void init();
+    void clear();
+
+    void lock();
+    void unlock();
+    ArmyId size() const PURE { return size_; }
 
 #if CHECK
     ArmyZconst at(ArmyId i) const {
@@ -1310,86 +1422,34 @@ class ArmySetSparse {
     }
 #endif // CHECK
     inline ArmyZconst cat(ArmyId i) const { return at(i); }
-    void print(ostream& os, bool show_boards = true) const;
 
-    inline size_t _overflowed() const PURE {
-        return overflow_used_;
-    }
-    inline size_t overflowed() const PURE {
-        return _overflowed() / Element::SIZE;
-    }
-    inline size_t max_overflow() const PURE {
-        return overflow_size_ / Element::SIZE;
-    }
-    inline Element const& overflow_pop() {
-        overflow_used_ -= Element::SIZE;
-        return Element::element(&overflow_[overflow_used_]);
-    }
-    inline void overflow(Element const& element) {
-        if (overflow_used_ >= overflow_size_) {
-            remallocate(overflow_, overflow_size_, overflow_size_ * 2);
-            overflow_size_ *= 2;
-        }
-        char const* RESTRICT ptr = reinterpret_cast<char const*>(&element);
-        std::copy(ptr, ptr+Element::SIZE, &overflow_[overflow_used_]);
-        overflow_used_ += Element::SIZE;
-    }
+    ArmyId insert(Army const& army, Statistics& stats) COLD;
+    inline ArmyId insert(ArmyPos const& army, Statistics& stats) HOT;
+    ArmyId find(Army    const& army) const PURE COLD;
+    ArmyId find(ArmyPos const& army) const PURE COLD;
+
+    void drop_hash();
+    void convert_hash();
+
+    size_t overflow_max() const PURE;
     void check(char const* file, int line) const;
-
-    // Not copyable (avoid accidents)
-    ArmySetSparse(ArmySetSparse const&) = delete;
-    ArmySetSparse& operator=(ArmySetSparse const&) = delete;
+    inline void print(ostream& os, bool show_boards = true) const {
+        for (auto& subset: subsets_) subset.print(os, show_boards);
+    }
 
   private:
-    static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
-
-    inline void _init(size_t size);
-    NOINLINE void resize() RESTRICT;
-    void _convert_hash(bool keep = false);
-    inline void __convert_hash(bool keep) ALWAYS_INLINE;
+    inline void _convert_hash(bool keep) ALWAYS_INLINE;
 
     Coord* armies_;
-    Group* groups_;
-    char* overflow_;
-    size_t overflow_used_;
-    size_t overflow_size_;
-    DataCache data_cache_;
-    mutex exclude_;
-    ArmyId size_;
-    ArmyId left_;
-    GroupId mask_;
-    int    memory_flags_;
+    atomic<ArmyId> size_;
+    int memory_flags_;
+    array<ArmySetSparse, ARMY_SUBSETS> subsets_;
 };
 
-void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) {
-    Group& group = groups[group_id];
-    CacheId new_cache_id;
-    if (group.bitmap()) {
-        uint n = group.bits();
-        new_cache_id = cache_[n].allocate(stats);
-        cache_[n].group_id_at(new_cache_id) = group_id;
-        char* RESTRICT new_data = cache_[n].data(new_cache_id);
-        CacheId old_cache_id = group.cache_id();
-        char const* RESTRICT old_data = cache_[n-1].data(old_cache_id);
-        uint i = group.index(pos);
-        std::copy(&old_data[0], &old_data[i * Element::SIZE], &new_data[0]);
-        auto new_element = &new_data[i * Element::SIZE];
-        auto& element = Element::element(new_element);
-        element.id(army_id);
-        std::copy(army, army+ARMY, element.begin());
-        std::copy(&old_data[i * Element::SIZE], &old_data[n * Element::SIZE],
-                  new_element + Element::SIZE);
-        cache_[n-1].deallocate(groups, old_cache_id, stats);
-    } else {
-        new_cache_id = cache_[0].allocate(stats);
-        cache_[0].group_id_at(new_cache_id) = group_id;
-        auto new_element = cache_[0].data(new_cache_id);
-        auto& element = Element::element(new_element);
-        element.id(army_id);
-        std::copy(army, army+ARMY, element.begin());
-    }
-    group.cache_id() = new_cache_id;
-    group.set(pos);
+ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) {
+    // logger << "Insert: " << hex << hash << dec << "\n" << Image{army};
+    ArmyId hash = army.hash();
+    return subsets_[hash & ARMY_SUBSETS_MASK].insert(army, hash >> ARMY_SUBSET_BITS, size_, stats);
 }
 
 inline ostream& operator<<(ostream& os, ArmySet const& set) {
@@ -1512,7 +1572,7 @@ inline ostream& operator<<(ostream& os, StatisticsE const& stats) {
 
 using StatisticsList = vector<StatisticsE>;
 
-class BoardSubSetBase {
+class BoardSubsetBase {
   public:
     static ArmyId split(ArmyId value, ArmyId& red_id) {
         red_id = value & ARMYID_MASK;
@@ -1531,7 +1591,7 @@ class BoardSubSetBase {
     ArmyId left_;
 };
 
-class BoardSubSet: public BoardSubSetBase {
+class BoardSubset: public BoardSubsetBase {
   public:
     static ArmyId const INITIAL_SIZE = 4;
 
@@ -1543,7 +1603,7 @@ class BoardSubSet: public BoardSubSetBase {
         mask_ = size-1;
         left_ = FACTOR(size);
         cmallocate(armies_, size);
-        // logger << "Create BoardSubSet " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
+        // logger << "Create BoardSubset " << static_cast<void const*>(armies_) << ": size " << size << ", " << left_ << " left\n" << flush;
     }
     inline void zero() {
         armies_ = nullptr;
@@ -1553,7 +1613,7 @@ class BoardSubSet: public BoardSubSetBase {
     inline void destroy() {
         if (armies_) {
             demallocate(armies_, allocated());
-            // logger << "Destroy BoardSubSet " << static_cast<void const*>(armies_) << ": size " << allocated() << "\n" << flush;
+            // logger << "Destroy BoardSubset " << static_cast<void const*>(armies_) << ": size " << allocated() << "\n" << flush;
         }
     }
     ArmyId const* end()   const PURE { return &armies_[allocated()]; }
@@ -1592,7 +1652,7 @@ class BoardSubSet: public BoardSubSetBase {
     ArmyId* end()   PURE { return &armies_[allocated()]; }
 };
 
-bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
+bool BoardSubset::insert(ArmyId red_value, Statistics& stats) {
     // logger << "Insert " << red_value << "\n";
     if (left_ == 0) resize();
     auto mask = mask_;
@@ -1620,9 +1680,9 @@ bool BoardSubSet::insert(ArmyId red_value, Statistics& stats) {
     }
 }
 
-class BoardSubSetRed: public BoardSubSetBase {
+class BoardSubsetRed: public BoardSubsetBase {
   public:
-    inline BoardSubSetRed(ArmyId* list, ArmyId size) {
+    inline BoardSubsetRed(ArmyId* list, ArmyId size) {
         armies_ = list;
         left_   = size;
         mask_   = ARMYID_MAX;
@@ -1635,7 +1695,7 @@ class BoardSubSetRed: public BoardSubSetBase {
     inline void destroy() {
         if (armies_) {
             demallocate(armies_, size());
-            // logger << "Destroy BoardSubSetRed " << static_cast<void const*>(armies_) << ": size " << size() << "\n" << flush;
+            // logger << "Destroy BoardSubsetRed " << static_cast<void const*>(armies_) << ": size " << size() << "\n" << flush;
         }
     }
     ArmyId size()       const PURE { return left_; }
@@ -1667,16 +1727,16 @@ class BoardSubSetRed: public BoardSubSetBase {
     bool _find(ArmyId red_value) const PURE;
 };
 
-class BoardSubSetRedBuilder: public BoardSubSetBase {
+class BoardSubsetRedBuilder: public BoardSubsetBase {
   public:
     static ArmyId const INITIAL_SIZE = 32;
 
-    BoardSubSetRedBuilder(ArmyId allocate = INITIAL_SIZE);
-    ~BoardSubSetRedBuilder() {
+    BoardSubsetRedBuilder(ArmyId allocate = INITIAL_SIZE);
+    ~BoardSubsetRedBuilder() {
         demallocate(armies_, real_allocated_, ALLOC_LOCK);
         army_list_ -= size();
         demallocate(army_list_, FACTOR(real_allocated_), ALLOC_LOCK);
-        // logger << "Destroy BoardSubSetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
+        // logger << "Destroy BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
     }
     ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
@@ -1691,10 +1751,10 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
         ArmyId value = join(red_id, symmetry < 0);
         return insert(value, stats);
     }
-    inline BoardSubSetRed extract(ArmyId allocated = INITIAL_SIZE) {
+    inline BoardSubsetRed extract(ArmyId allocated = INITIAL_SIZE) {
         ArmyId sz = size();
         ArmyId* new_list = mallocate<ArmyId>(sz);
-        // logger << "Extract BoardSubSetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
+        // logger << "Extract BoardSubsetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
         ArmyId* old_list = army_list_ - sz;
         std::copy(&old_list[0], &old_list[sz], new_list);
 
@@ -1703,7 +1763,7 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
         left_ = capacity();
         std::fill(begin(), end(), 0);
 
-        return BoardSubSetRed{new_list, sz};
+        return BoardSubsetRed{new_list, sz};
     }
 
   private:
@@ -1718,8 +1778,8 @@ class BoardSubSetRedBuilder: public BoardSubSetBase {
     ArmyId real_allocated_;
 };
 
-bool BoardSubSetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
-    // logger << "Insert " << red_value << " into BoardSubSetRedBuilder\n";
+bool BoardSubsetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
+    // logger << "Insert " << red_value << " into BoardSubsetRedBuilder\n";
     if (left_ == 0) resize();
     auto mask = mask_;
     ArmyId pos = hash64(red_value) & mask;
@@ -1748,7 +1808,7 @@ bool BoardSubSetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
 }
 
 class BoardSetBase {
-    friend class BoardSubSetRefBase;
+    friend class BoardSubsetRefBase;
   public:
     static ArmyId const INITIAL_SIZE = 32;
     BoardSetBase(bool keep = false, ArmyId size = INITIAL_SIZE);
@@ -1790,12 +1850,12 @@ class BoardSetBase {
     ArmyId capacity_;
     ArmyId from_;
     ArmyId top_;
-    BoardSubSetBase* subsets_;
+    BoardSubsetBase* subsets_;
     bool const keep_;
 };
 
 class BoardSet: public BoardSetBase {
-    friend class BoardSubSetRef;
+    friend class BoardSubsetRef;
   public:
     BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE) :
         BoardSetBase{keep, size} {}
@@ -1805,12 +1865,12 @@ class BoardSet: public BoardSetBase {
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
     }
     void clear(ArmyId size = INITIAL_SIZE);
-    inline BoardSubSet const& cat(ArmyId id) const PURE {
-        return static_cast<BoardSubSet const&>(subsets_[id]);
+    inline BoardSubset const& cat(ArmyId id) const PURE {
+        return static_cast<BoardSubset const&>(subsets_[id]);
     }
-    inline BoardSubSet const& at(ArmyId id) const PURE { return cat(id); }
-    inline BoardSubSet const* begin() const PURE { return &cat(from()); }
-    inline BoardSubSet const* end()   const PURE { return &cat(top_); }
+    inline BoardSubset const& at(ArmyId id) const PURE { return cat(id); }
+    inline BoardSubset const* begin() const PURE { return &cat(from()); }
+    inline BoardSubset const* end()   const PURE { return &cat(top_); }
 
     inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
@@ -1829,7 +1889,7 @@ class BoardSet: public BoardSetBase {
         size_ += result;
         return result;
     }
-    void insert(ArmyId blue_id, BoardSubSet const& subset) {
+    void insert(ArmyId blue_id, BoardSubset const& subset) {
         if (CHECK) {
             if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
@@ -1877,15 +1937,15 @@ class BoardSet: public BoardSetBase {
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
     void print(ostream& os) const;
   private:
-    inline BoardSubSet& at(ArmyId id) PURE {
-        return static_cast<BoardSubSet&>(subsets_[id]);
+    inline BoardSubset& at(ArmyId id) PURE {
+        return static_cast<BoardSubset&>(subsets_[id]);
     }
-    BoardSubSet* begin() PURE { return &at(from()); }
-    BoardSubSet* end()   PURE { return &at(top_); }
+    BoardSubset* begin() PURE { return &at(from()); }
+    BoardSubset* end()   PURE { return &at(top_); }
 };
 
 class BoardSetRed: public BoardSetBase {
-    friend class BoardSubSetRedRef;
+    friend class BoardSubsetRedRef;
   public:
     BoardSetRed(bool keep = false, ArmyId size = INITIAL_SIZE) :
         BoardSetBase{keep, size} {}
@@ -1895,18 +1955,18 @@ class BoardSetRed: public BoardSetBase {
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
     }
     void clear(ArmyId size = INITIAL_SIZE);
-    inline BoardSubSetRed const& cat(ArmyId id) const PURE {
-        return static_cast<BoardSubSetRed const&>(subsets_[id]);
+    inline BoardSubsetRed const& cat(ArmyId id) const PURE {
+        return static_cast<BoardSubsetRed const&>(subsets_[id]);
     }
-    inline BoardSubSetRed const& at(ArmyId id) const PURE { return cat(id); }
-    inline BoardSubSetRed const* begin() const PURE { return &cat(from()); }
-    inline BoardSubSetRed const* end()   const PURE { return &cat(top_); }
-    void insert(ArmyId blue_id, BoardSubSetRedBuilder& builder) HOT {
+    inline BoardSubsetRed const& at(ArmyId id) const PURE { return cat(id); }
+    inline BoardSubsetRed const* begin() const PURE { return &cat(from()); }
+    inline BoardSubsetRed const* end()   const PURE { return &cat(top_); }
+    void insert(ArmyId blue_id, BoardSubsetRedBuilder& builder) HOT {
         if (CHECK) {
             if (UNLIKELY(blue_id <= 0))
                 throw_logic("red_id <= 0");
         }
-        BoardSubSetRed subset_red = builder.extract();
+        BoardSubsetRed subset_red = builder.extract();
 
         lock_guard<mutex> lock{exclude_};
         if (blue_id >= top_) {
@@ -1936,11 +1996,11 @@ class BoardSetRed: public BoardSetBase {
         if (blue_id >= top_) return false;
         return cat(blue_id)._find(red_id, symmetry);
     }
-    inline BoardSubSetRed& at(ArmyId id) PURE {
-        return static_cast<BoardSubSetRed&>(subsets_[id]);
+    inline BoardSubsetRed& at(ArmyId id) PURE {
+        return static_cast<BoardSubsetRed&>(subsets_[id]);
     }
-    BoardSubSetRed* begin() PURE { return &at(from()); }
-    BoardSubSetRed* end()   PURE { return &at(top_); }
+    BoardSubsetRed* begin() PURE { return &at(from()); }
+    BoardSubsetRed* end()   PURE { return &at(top_); }
 };
 
 inline ostream& operator<<(ostream& os, BoardSet const& set) {
@@ -1948,51 +2008,51 @@ inline ostream& operator<<(ostream& os, BoardSet const& set) {
     return os;
 }
 
-class BoardSubSetRefBase {
+class BoardSubsetRefBase {
   public:
     ArmyId id() const PURE { return id_; }
 
-    BoardSubSetRefBase(BoardSubSetRefBase const&) = delete;
-    BoardSubSetRefBase& operator=(BoardSubSetRefBase const&) = delete;
+    BoardSubsetRefBase(BoardSubsetRefBase const&) = delete;
+    BoardSubsetRefBase& operator=(BoardSubsetRefBase const&) = delete;
     void keep() { id_ = 0; }
   protected:
     static void down_size(BoardSetBase& set, ArmyId size) { set.down_size(size); }
 
-    BoardSubSetRefBase(BoardSubSetBase& subset, ArmyId id, bool keep): subset_{subset}, id_{id}, keep_{keep} {}
-    BoardSubSetBase& subset_;
+    BoardSubsetRefBase(BoardSubsetBase& subset, ArmyId id, bool keep): subset_{subset}, id_{id}, keep_{keep} {}
+    BoardSubsetBase& subset_;
     ArmyId id_;
     bool const keep_;
 };
 
-class BoardSubSetRef: public BoardSubSetRefBase {
+class BoardSubsetRef: public BoardSubsetRefBase {
   public:
-    ~BoardSubSetRef() { if (id_ && !keep_) _armies().destroy(); }
-    BoardSubSetRef(BoardSet& set, ArmyId id): BoardSubSetRefBase{set.at(id), id, set.keep_} {
+    ~BoardSubsetRef() { if (id_ && !keep_) _armies().destroy(); }
+    BoardSubsetRef(BoardSet& set, ArmyId id): BoardSubsetRefBase{set.at(id), id, set.keep_} {
     if (id) down_size(set, armies().size());
 }
-    BoardSubSetRef(BoardSet& set): BoardSubSetRef{set, set.next()} {}
-    BoardSubSet const& armies() const PURE {
-        return static_cast<BoardSubSet const&>(subset_);
+    BoardSubsetRef(BoardSet& set): BoardSubsetRef{set, set.next()} {}
+    BoardSubset const& armies() const PURE {
+        return static_cast<BoardSubset const&>(subset_);
     }
   private:
-    BoardSubSet& _armies() PURE {
-        return static_cast<BoardSubSet&>(subset_);
+    BoardSubset& _armies() PURE {
+        return static_cast<BoardSubset&>(subset_);
     }
 };
 
-class BoardSubSetRedRef: public BoardSubSetRefBase {
+class BoardSubsetRedRef: public BoardSubsetRefBase {
   public:
-    ~BoardSubSetRedRef() { if (id_ && !keep_) _armies().destroy(); }
-    BoardSubSetRedRef(BoardSetRed& set, ArmyId id): BoardSubSetRefBase{set.at(id), id, set.keep_} {
+    ~BoardSubsetRedRef() { if (id_ && !keep_) _armies().destroy(); }
+    BoardSubsetRedRef(BoardSetRed& set, ArmyId id): BoardSubsetRefBase{set.at(id), id, set.keep_} {
     if (id) down_size(set, armies().size());
 }
-    BoardSubSetRedRef(BoardSetRed& set): BoardSubSetRedRef{set, set.next()} { }
-    BoardSubSetRed const& armies() const PURE {
-        return static_cast<BoardSubSetRed const&>(subset_);
+    BoardSubsetRedRef(BoardSetRed& set): BoardSubsetRedRef{set, set.next()} { }
+    BoardSubsetRed const& armies() const PURE {
+        return static_cast<BoardSubsetRed const&>(subset_);
     }
   private:
-    BoardSubSetRed& _armies() PURE {
-        return static_cast<BoardSubSetRed&>(subset_);
+    BoardSubsetRed& _armies() PURE {
+        return static_cast<BoardSubsetRed&>(subset_);
     }
 };
 
@@ -2374,9 +2434,7 @@ ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) {
     }
 }
 
-ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) {
-    // Leave hash calculation out of the mutex
-    uint64_t hash = army.hash();
+ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) {
     // logger << "Insert: " << hex << hash << dec << " (" << left_ << " left)\n" << Image{army};
     lock_guard<mutex> lock{exclude_};
     if (left_ == 0) resize();
@@ -2391,8 +2449,10 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, Statistics& stats) {
         if (UNLIKELY(group.bit(pos) == 0)) {
             stats.armyset_probe(offset);
             --left_;
-            ArmyId army_id = ++size_;
+            ArmyId army_id = ++last_id;
             // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
+            if (army_id >= ARMYID_HIGHBIT)
+                throw(overflow_error("ArmyId too large"));
             data_cache_.append(groups, group_id, pos, army_id, army.begin(), stats);
             return army_id;
         }

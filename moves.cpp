@@ -94,13 +94,13 @@ Statistics NAME(uint thid,
 
     Statistics stats;
 #if RED_NORMAL
-    BoardSubSetRedBuilder subset_to;
+    BoardSubsetRedBuilder subset_to;
 #endif // RED_NORMAL
     while (true) {
 #if BLUE_NORMAL
-        BoardSubSetRedRef subset_from{boards_from};
+        BoardSubsetRedRef subset_from{boards_from};
 #else // BLUE_NORMAL
-        BoardSubSetRef subset_from{boards_from};
+        BoardSubsetRef subset_from{boards_from};
 #endif // BLUE_NORMAL
 
         ArmyId const blue_id = subset_from.id();
@@ -157,7 +157,7 @@ Statistics NAME(uint thid,
         bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
 #if !BLUE_TO_MOVE && !RED_NORMAL
-        BoardSubSet subset_to;
+        BoardSubset subset_to;
         subset_to.create();
 #endif // !BLUE_TO_MOVE && !RED_NORMAL
 
@@ -165,7 +165,7 @@ Statistics NAME(uint thid,
         for (auto const& red_value: red_armies) {
             if (!BLUE_NORMAL && red_value == 0) continue;
             ArmyId red_id;
-            auto const symmetry = BoardSubSet::split(red_value, red_id);
+            auto const symmetry = BoardSubset::split(red_value, red_id);
             if (VERBOSE) logger << " Sub Processing red " << red_id << "," << symmetry << "\n" << flush;
             Army const& blue =
                 symmetry ? bZ_symmetric : bZ;
@@ -690,7 +690,7 @@ StatisticsE ALL_NAME(
      nr_moves);
 #endif // BACKTRACK
     for (auto& result: results) stats += result.get();
-    stats.overflow(moved_armies.max_overflow());
+    stats.overflow(moved_armies.overflow_max());
     stats.armyset_size(moved_armies.size());
     stats.boardset_size(boards_to.size());
 #if BLUE_TO_MOVE
