@@ -30,6 +30,7 @@
 # define NONNULL         __attribute__((nonnull))
 # define RETURNS_NONNULL __attribute__((returns_nonnull))
 # define WARN_UNUSED     __attribute__((warn_unused_result))
+# define UNUSED          __attribute__((unused))
 #else // __GNUC__
 # define RESTRICT
 # define NOINLINE
@@ -45,6 +46,7 @@
 # define NONNULL
 # define RETURNS_NONNULL
 # define WARN_UNUSED
+# define UNUSED
 #endif // __GNUC__
 
 #define CAT(x, y) _CAT(x,y)

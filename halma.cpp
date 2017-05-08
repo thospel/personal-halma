@@ -1084,7 +1084,7 @@ void ArmySetSparse::_init(size_t size) {
     overflow_size_ = GROUP_SIZE * Element::SIZE;
 }
 
-ArmySetSparse::ArmySetSparse(bool lock, size_t size):
+ArmySetSparse::ArmySetSparse():
     groups_{nullptr},
     overflow_{nullptr},
     overflow_used_{0},
@@ -1097,7 +1097,7 @@ ArmySetSparse::~ArmySetSparse() {
     if (overflow_) demallocate(overflow_, overflow_size_);
 }
 
-void ArmySetSparse::clear(size_t initial_size) {
+void ArmySetSparse::clear() {
     if (groups_) {
         data_cache_.free();
         demallocate(groups_, nr_groups(), memory_flags_);
@@ -1536,7 +1536,7 @@ Move FullMove::move() const {
     return Move{(*this)[0], (*this)[size()-1]};
 }
 
-void FullMove::move_expand(Board const& board_from, Board const& board_to, Move const& move) {
+void FullMove::move_expand(Board const& board, Move const& move) {
     emplace_back(move.from);
     if (move.from.parity() != move.to.parity()) {
         // Must be a slide. Check though
@@ -1548,7 +1548,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     }
 
     // Must be a jump
-    Image image{board_from};
+    Image image{board};
     if (CLOSED_LOOP) image.set(move.from, EMPTY);
     array<Coord, MAX_X*MAX_Y/4+1> reachable;
     array<int,    MAX_X*MAX_Y/4+1> previous;
@@ -1580,7 +1580,7 @@ void FullMove::move_expand(Board const& board_from, Board const& board_to, Move 
     throw_logic("Move is a not a jump but has the same parity");
 }
 
-FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) : FullMove{} {
+FullMove::FullMove(Board const& board_from, Board const& board_to) : FullMove{} {
     //bool blue_diff = board_from.blue() !=  board_to.blue();
     //bool red_diff  = board_from.red()  !=  board_to.red();
     // Temporary workaround until C++17 will support overallocated classes
@@ -1590,12 +1590,12 @@ FullMove::FullMove(Board const& board_from, Board const& board_to, Color color) 
 
     if (blue_diff) {
         Move move{board_from.blue(), board_to.blue()};
-        move_expand(board_from, board_to, move);
+        move_expand(board_from, move);
         return;
     }
     if (red_diff) {
         Move move{board_from.red(), board_to.red()};
-        move_expand(board_from, board_to, move);
+        move_expand(board_from, move);
         return;
     }
     if (PASS) return;
@@ -1959,6 +1959,7 @@ Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& mo
 bool BoardSubsetRed::_insert(ArmyId red_value, Statistics& stats) {
     // cout << "Insert " << red_value << "\n";
     if (armies_) throw_logic("Multiple single insert in BoardSubsetRed");
+    stats.boardset_probe(0);
     ArmyId* new_list = mallocate<ArmyId>(1);
     new_list[0] = red_value;
     *this = BoardSubsetRed{new_list, 1};
@@ -1980,6 +1981,7 @@ bool BoardSetRed::_insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistic
 
     bool result = at(blue_id)._insert(red_id, symmetry, stats);
     size_ += result;
+    stats.boardset_size(size_);
     return result;
 }
 
@@ -2956,7 +2958,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 }
 
 void my_main(int argc, char const* const* argv) COLD;
-void my_main(int argc, char const* const* argv) {
+void my_main(int UNUSED argc, char const* const* argv) {
     GetOpt options("b:B:t:sHSjpqQ:eEFvR:Ax:y:r:a:T", argv);
     long long int val;
     bool replay = false;

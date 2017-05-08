@@ -117,11 +117,11 @@ public:
 
         // at least 8 bytes left ? => eat 8 bytes per step
         for (; data + 8 <= stop; data += 8)
-            result = rotateLeft(result ^ processSingle(0, *(uint64_t*)data), 27) * Prime1 + Prime4;
+            result = rotateLeft(result ^ processSingle(0, *reinterpret_cast<uint64_t const*>(data)), 27) * Prime1 + Prime4;
 
         // 4 bytes left ? => eat those
         if (data + 4 <= stop) {
-            result = rotateLeft(result ^ (*(uint32_t*)data) * Prime1,   23) * Prime2 + Prime3;
+            result = rotateLeft(result ^ (*reinterpret_cast<uint32_t const*>(data)) * Prime1,   23) * Prime2 + Prime3;
             data  += 4;
         }
 

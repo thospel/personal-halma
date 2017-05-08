@@ -1258,7 +1258,7 @@ class ArmySetSparse {
         Element::SIZE = ARMY * sizeof(Coord) + sizeof(Element);
         // cout << "sizeof(Element) = " << sizeof(Element) << ", Element::SIZE = " << Element::SIZE << "\n";
     }
-    inline ArmySetSparse(bool lock = false, size_t size = INITIAL_SIZE);
+    inline ArmySetSparse();
     inline ~ArmySetSparse();
     inline void _init(size_t size = INITIAL_SIZE);
     inline void lock() {
@@ -1273,7 +1273,7 @@ class ArmySetSparse {
         if (groups_) memunlock(groups_, nr_groups());
         memory_flags_ &= ~ALLOC_LOCK;
     }
-    void clear(size_t size = INITIAL_SIZE);
+    void clear();
 
     // inline ArmyId size() const PURE { return size_; }
     inline GroupId nr_groups() const PURE {
@@ -1541,12 +1541,12 @@ class StatisticsE: public Statistics {
         mlocked_ = total_mlocked();
         mlocks_ = total_mlocks();
     }
-    size_t const memory()    const PURE { return memory_; }
-    size_t const allocated() const PURE { return allocated_; }
-    size_t const mmapped() const PURE { return mmapped_; }
-    size_t const mmaps() const PURE { return mmaps_; }
-    size_t const mlocked() const PURE { return mlocked_; }
-    size_t const mlocks() const PURE { return mlocks_; }
+    size_t memory()    const PURE { return memory_; }
+    size_t allocated() const PURE { return allocated_; }
+    size_t mmapped() const PURE { return mmapped_; }
+    size_t mmaps() const PURE { return mmaps_; }
+    size_t mlocked() const PURE { return mlocked_; }
+    size_t mlocks() const PURE { return mlocks_; }
     Sec::rep duration() const PURE {
         return chrono::duration_cast<Sec>(stop_-start_).count();
     }
@@ -1562,7 +1562,7 @@ class StatisticsE: public Statistics {
         example_ = true;
     }
     Board const& example_board() const FUNCTIONAL { return example_board_; }
-    bool const example() const FUNCTIONAL { return example_; }
+    bool example() const FUNCTIONAL { return example_; }
   private:
     size_t memory_;
     ssize_t allocated_;
@@ -2146,14 +2146,14 @@ class FullMove: public vector<Coord> {
     FullMove() COLD {}
     FullMove(char const* str) COLD;
     FullMove(string const& str) COLD: FullMove{str.c_str()} {}
-    FullMove(Board const& from, Board const& to, Color color=COLORS) COLD;
+    FullMove(Board const& from, Board const& to) COLD;
     string str() const PURE COLD;
     Coord from() const PURE COLD;
     Coord to()   const PURE COLD;
     Move move() const PURE COLD;
 
   private:
-    void move_expand(Board const& board_from, Board const& board_to, Move const& move) COLD;
+    void move_expand(Board const& board, Move const& move) COLD;
 };
 
 inline ostream& operator<<(ostream& os, FullMove const& move) {
