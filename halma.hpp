@@ -611,6 +611,7 @@ class BoardTable {
     inline const_iterator end()  const { return data_.begin() + Y * MAX_X; }
     inline const_iterator cend() const { return data_.begin() + Y * MAX_X; }
     void fill(T value) { std::fill(begin(), end(), value); }
+    void zero() { std::memset(begin(), 0, MAX_X * sizeof(T) * Y); }
     void set(Army const& army, T value) {
         for (auto const& pos: army) (*this)[pos] = value;
     }
@@ -658,11 +659,6 @@ class Pair {
     }
     inline T const& symmetric() const FUNCTIONAL {
         return symmetric_;
-    }
-    template<class X>
-    void fill(X const& value) {
-        std::fill(normal_.begin(), normal_.end(), value);
-        std::fill(symmetric_.begin(), symmetric_.end(), value);
     }
     inline T& _normal() FUNCTIONAL {
         return normal_;
@@ -1767,7 +1763,7 @@ class BoardSubsetRedBuilder: public BoardSubsetBase {
         army_list_ = old_list;
         mask_ = allocated-1;
         left_ = capacity();
-        std::fill(begin(), end(), 0);
+        std::memset(begin(), 0, allocated * sizeof(armies_[0]));
 
         return BoardSubsetRed{new_list, sz};
     }

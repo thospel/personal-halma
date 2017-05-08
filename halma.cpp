@@ -558,7 +558,7 @@ void BoardSubsetRedBuilder::resize() {
         armies = armies_;
         army_list = army_list_ - nr_elems;
         mask_ = mask;
-        fill(begin(), end(), 0);
+        std::memset(begin(), 0, new_allocated * sizeof(armies_[0]));
     }
     left_ += FACTOR(new_allocated) - FACTOR(old_allocated);
 
@@ -1706,8 +1706,8 @@ void Tables::init() {
     }
 
     // Fill base
-    base_blue_.fill(0);
-    base_red_ .fill(0);
+    base_blue_.zero();
+    base_red_ .zero();
     auto& blue = start_.blue();
     auto& red  = start_.red();
     int d = 0;
@@ -1738,8 +1738,12 @@ void Tables::init() {
             red [i] = Coord::MAX();
         }
 
-    for (auto const& pos: blue)
-        if (base_red_[pos]) throw_logic("Red and blue overlap");
+    for (auto const& pos: blue) {
+        if (base_red_[pos])
+            throw_logic("Red and blue overlap");
+        if (!base_blue_[pos.symmetric()])
+            throw_logic("Asymmetric bases not supported (yet)");
+    }
 
     // Set up edge, distance and parity tables
     for (uint y=0; y < Y; ++y) {
@@ -1772,7 +1776,7 @@ void Tables::init() {
         ++parity_count_[parity(r)];
 
     BoardTable<uint8_t> seen;
-    seen.fill(0);
+    seen.zero();
     for (uint y=0; y < Y; ++y) {
         for (uint x=0; x < X; ++x) {
             Coord const pos{x, y};
@@ -2721,10 +2725,10 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     army_set[1]->convert_hash();
 
     BoardTable<uint8_t> red_backtrack{};
-    red_backtrack.fill(0);
+    red_backtrack.zero();
     red_backtrack.set(last_red_army, 2);
     BoardTable<uint8_t> red_backtrack_symmetric{};
-    red_backtrack_symmetric.fill(0);
+    red_backtrack_symmetric.zero();
     red_backtrack_symmetric.set(Army{last_red_army, SYMMETRIC}, 2);
     if (verbose) {
         cout << "red_backtrack:\n";

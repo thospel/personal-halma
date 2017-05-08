@@ -242,7 +242,7 @@ Statistics NAME(uint thid,
 #endif // BACKTRACK
 
             if (BALANCE && balance_mask) {
-                fill(balance_count_from.begin(), balance_count_from.end(), 0);
+                std::memset(&balance_count_from[0], 0, sizeof(balance_count_from));
                 for (auto const&pos: red)
                     ++balance_count_from[pos.parity()];
             }
