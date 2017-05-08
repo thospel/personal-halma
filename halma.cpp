@@ -1382,7 +1382,6 @@ void ArmySetSparse::check(char const* file, int line) const {
 
 ArmySet::ArmySet(bool lock):
     armies_{nullptr},
-    size_{0},
     memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
         init();
     }
@@ -1393,6 +1392,7 @@ ArmySet::~ArmySet() {
 }
 
 void ArmySet::init() {
+    size_ = 0;
     if (memory_flags_ & ALLOC_LOCK)
         for (auto& subset: subsets_) subset.lock();
     for (auto& subset: subsets_) subset._init();
@@ -2585,6 +2585,11 @@ int solve(Board const& board, int nr_moves, Army& red_army,
     ArmyId red_id = 0;
     int i;
     for (i=0; nr_moves>0; --nr_moves, ++i) {
+        if (nr_moves == testQ) {
+            cout << "User abort\n";
+            return -1;
+        }
+
         auto& moving_armies         = army_set[ i    % 3];
         auto const& opponent_armies = army_set[(i+1) % 3];
         auto& moved_armies          = army_set[(i+2) % 3];
@@ -2609,6 +2614,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
                   nr_moves));
             boards_blue.clear();
         }
+        if (testQ) cout << moved_armies;
         moving_armies.clear();
         moved_armies.drop_hash();
 
@@ -2927,7 +2933,7 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpqQeEFvR:Ax:y:r:a:T", argv);
+    GetOpt options("b:B:t:sHSjpqQ:eEFvR:Ax:y:r:a:T", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
