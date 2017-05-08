@@ -200,6 +200,24 @@ void Army::sort(Coord* RESTRICT base) {
     std::sort(base, base+ARMY);
 }
 
+void Army::_import_symmetric(Coord const* RESTRICT from, Coord* RESTRICT to) {
+    // logger << "Before:\n" << ArmyZconst{*from};
+    std::array<uint8_t,MAX_Y> count;
+    std::array<std::array<Coord, MAX_ARMY>, MAX_Y> work;
+    std::memset(count.begin(), 0, sizeof(count));
+
+    for (uint i=0; i<ARMY; ++i, ++from) {
+        Coord symmetric = from->symmetric();
+        work[symmetric.y()][count[symmetric.y()]++] = symmetric;
+        // logger << "Assign " << symmetric << " to " << symmetric.y() << " count " << count[symmetric.y()] << "\n";
+    }
+    auto y = Y;
+    for (uint i=0; i<y; ++i)
+        for (uint j=0; j<count[i]; ++j)
+            *to++ = work[i][j];
+    // logger << "After:\n" << ArmyZconst{*(to-ARMY)} << flush;
+}
+
 void ArmyPos::check(char const* file, int line) const {
     for (uint i=0; i<ARMY; ++i) at(i).check(file, line);
     for (uint i=0; i<ARMY-1; ++i)
@@ -967,7 +985,7 @@ size_t ArmySetSparse::DataCache::SizeCache::check(char const* file, int line) co
     return nr_groups - cached();
 }
 
-void ArmySetSparse::DataCache::SizeCache::check_data(DataId data_id, GroupId group_id, ArmyId size, char const* file, int line) const {
+void ArmySetSparse::DataCache::SizeCache::check_data(DataId data_id, GroupId group_id, ArmyId nr_elements, char const* file, int line) const {
     if (UNLIKELY(data_id >= free_))
         throw_logic("DataId " + to_string(data_id) + " beyond free " + to_string(free_), file, line);
     if (UNLIKELY(group_id_at(data_id) != group_id))
@@ -977,8 +995,9 @@ void ArmySetSparse::DataCache::SizeCache::check_data(DataId data_id, GroupId gro
     ptr -= sizeof(GroupId);
     for (uint i=sizeof(GroupId); i < block_size_; i += Element::SIZE) {
         Element const& element = Element::element(&ptr[i]);
-        if ((UNLIKELY(element.id() > size) || UNLIKELY(element.id() == 0)))
-            throw_logic("Element " + to_string(element.id()) + " is out of range [1.." + to_string(size) + "]", file, line);
+        if ((UNLIKELY(element.id() > nr_elements && nr_elements) ||
+             UNLIKELY(element.id() == 0)))
+            throw_logic("Element " + to_string(element.id()) + " is out of range [1.." + to_string(nr_elements) + "]", file, line);
         element.armyZ().check(file, line);
     }
 }
@@ -1027,7 +1046,7 @@ void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos,
     group.set(pos);
 }
 
-void ArmySetSparse::DataCache::check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, char const* file, int line) const {
+void ArmySetSparse::DataCache::check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, ArmyId nr_elements, char const* file, int line) const {
     if (UNLIKELY(!groups)) throw_logic("NULL groups");
 
     size_t nr_groups = 0;
@@ -1040,14 +1059,14 @@ void ArmySetSparse::DataCache::check(Group const* groups, GroupId n, ArmyId size
         auto& group = groups[g];
         if (group.bitmap() == 0) continue;
         uint n = group.bits();
-        cache_[n-1].check_data(group.data_id(), g, size, file, line);
+        cache_[n-1].check_data(group.data_id(), g, nr_elements, file, line);
         ++n_gr;
         sz += n;
     }
     if (UNLIKELY(n_gr != nr_groups))
         throw_logic("Unexpected number of groups", file, line);
     if (UNLIKELY(sz + overflowed != size))
-        throw_logic("Unexpected number of elements", file, line);
+        throw_logic("Unexpected number of elements: " + to_string(sz) + " + " + to_string(overflowed) += " != " + to_string(size), file, line);
     if (UNLIKELY(overflowed > size))
         throw_logic("Excessive overflow", file, line);
 }
@@ -1270,7 +1289,7 @@ void ArmySetSparse::resize() {
     }
 
 
-    if (CHECK) check(__FILE__, __LINE__);
+    if (CHECK) check(0, __FILE__, __LINE__);
     //print(logger, false);
     //logger << "Resize done\n" << flush;
 }
@@ -1278,7 +1297,7 @@ void ArmySetSparse::resize() {
 void ArmySetSparse::__convert_hash(Coord* armies, ArmyId nr_elements, bool keep) {
     // cout << *this;
 
-    if (CHECK) check(__FILE__, __LINE__);
+    if (CHECK) check(nr_elements, __FILE__, __LINE__);
 
     GroupId n_groups = nr_groups();
     Group* groups = groups_;
@@ -1362,7 +1381,7 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
     }
 }
 
-void ArmySetSparse::check(char const* file, int line) const {
+void ArmySetSparse::check(ArmyId nr_elements, char const* file, int line) const {
     if (UNLIKELY(!groups_))
         throw_logic("No groups", file, line);
     if (UNLIKELY(!overflow_))
@@ -1373,11 +1392,11 @@ void ArmySetSparse::check(char const* file, int line) const {
         throw_logic("Overflow space is not a multiple of Element::SIZE", file, line);
     if (UNLIKELY(overflow_used_ % Element::SIZE))
         throw_logic("Overflow space used is not a multiple of Element::SIZE", file, line);
-    if (UNLIKELY(!overflow_max_))
-        throw_logic("Empty overflow space", file, line);
+    if (UNLIKELY(overflow_max_ > overflow_size_))
+        throw_logic("Excessive max overflow", file, line);
     if (UNLIKELY(overflow_max_ % Element::SIZE))
         throw_logic("Max Overflow is not a multiple of Element::SIZE", file, line);
-    data_cache_.check(groups_, nr_groups(), size(), 0, file, line);
+    data_cache_.check(groups_, nr_groups(), size(), 0, nr_elements, file, line);
 }
 
 ArmySet::ArmySet(bool lock):
@@ -1474,7 +1493,8 @@ void ArmySet::check(char const* file, int line) const {
     if (UNLIKELY(armies_))
         throw_logic("Check after convert not implememted (yet)", file, line);
 
-    for (auto& subset: subsets_) subset.check(file, line);
+    ArmyId nr_elements = size();
+    for (auto& subset: subsets_) subset.check(nr_elements, file, line);
 }
 
 FullMove::FullMove(char const* str): FullMove{} {
@@ -2467,7 +2487,7 @@ void play(bool print_moves) {
         ArmySet  army_set[3];
         bool blue_to_move = nr_moves & 1;
         if (blue_to_move) {
-            BoardSetRed red_boards{2};
+            BoardSetRed red_boards{1};
             red_boards.insert(board, army_set[0], army_set[1]);
             army_set[0].drop_hash();
             army_set[1].convert_hash();
@@ -2572,7 +2592,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
 
     vector<ArmyId> largest_red;
     BoardSet    boards_blue;
-    BoardSetRed boards_red{2};
+    BoardSetRed boards_red{1};
     array<ArmySet, 3>  army_set;
     bool blue_to_move = nr_moves & 1;
     if (blue_to_move)

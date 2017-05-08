@@ -399,52 +399,34 @@ class alignas(Align) Army {
   private:
     // Really only PURE but the value never changes
     static NOINLINE void sort(Coord* RESTRICT base);
+    static NOINLINE void _import_symmetric(Coord const* RESTRICT from, Coord* RESTRICT to);
     static inline void _import(Coord const* RESTRICT from, Coord* RESTRICT to, ArmyId symmetry = 0, bool terminate=false) {
-        if (DO_ALIGN) {
-            Align const* RESTRICT afrom = reinterpret_cast<Align const*>(from);
-            Align      * RESTRICT ato   = reinterpret_cast<Align      *>(to);
-            uint n = ALIGNEDS();
-            if (terminate) {
-                --n;
-                if (symmetry) {
-                    for (uint i=0; i<n; ++i) {
-                        Align tmp = ULOAD(afrom[i]);
-                        Align left  = tmp & NIBBLE_LEFT;
-                        Align right = tmp & NIBBLE_RIGHT;
-                        ato[i] = SHIFT_RIGHT(left, 4) | right << 4;
-                    }
-                    Align tmp = ARMY_MASK | ULOAD(afrom[n]);
-                    Align left  = tmp & NIBBLE_LEFT;
-                    Align right = tmp & NIBBLE_RIGHT;
-                    ato[n] = SHIFT_RIGHT(left, 4) | right << 4;
-                    sort(to);
-                } else {
+        if (symmetry) {
+            if (DO_ALIGN) {
+                uint n = ALIGNEDS();
+                Align* ato = reinterpret_cast<Align *>(to);
+                ato[n-1] = ARMY_MASK;
+            } else if (terminate)
+                to[ARMY] = Coord::MAX();
+            _import_symmetric(from, to);
+        } else
+            if (DO_ALIGN) {
+                uint n = ALIGNEDS();
+                Align      * RESTRICT ato   = reinterpret_cast<Align      *>(to);
+                Align const* RESTRICT afrom = reinterpret_cast<Align const*>(from);
+                if (terminate) {
+                    --n;
                     for (uint i=0; i<n; ++i)
                         ato[i] = ULOAD(afrom[i]);
                     ato[n] = ARMY_MASK | ULOAD(afrom[n]);
-                }
-            } else {
-                if (symmetry) {
-                    for (uint i=0; i<n; ++i) {
-                        Align tmp = ALOAD(afrom[i]);
-                        Align left  = tmp & NIBBLE_LEFT;
-                        Align right = tmp & NIBBLE_RIGHT;
-                        ato[i] = SHIFT_RIGHT(left, 4) | right << 4;
-                    }
-                    sort(to);
-                } else
+                } else {
                     for (uint i=0; i<n; ++i)
                         ASTORE(ato[i], ALOAD(afrom[i]));
-            }
-        } else {
-            if (symmetry) {
-                transform(from, from+ARMY, to,
-                          [](Coord const& pos) ALWAYS_INLINE { return pos.symmetric(); });
-                sort(to);
-            } else
+                }
+            } else {
                 std::copy(from, from+ARMY, to);
-            if (terminate) to[ARMY] = Coord::MAX();
-        }
+                if (terminate) to[ARMY] = Coord::MAX();
+            }
     }
 
     inline Coord& operator[](ssize_t i) PURE { return army_[i];}
@@ -1195,7 +1177,7 @@ class ArmySetSparse {
                 }
             }
             inline size_t check(char const* file, int line) const ALWAYS_INLINE;
-            inline void check_data(DataId data_id, GroupId group_id, ArmyId size, char const* file, int line) const ALWAYS_INLINE;
+            inline void check_data(DataId data_id, GroupId group_id, ArmyId nr_elements, char const* file, int line) const ALWAYS_INLINE;
           private:
 #if CHECK
             char* _data(DataId i) PURE {
@@ -1271,7 +1253,7 @@ class ArmySetSparse {
         inline char const* data(uint i, DataId data_id) const PURE {
             return cache_[i].data(data_id);
         }
-        inline void check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, char const* file, int line) const ALWAYS_INLINE;
+        inline void check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, ArmyId nr_elements, char const* file, int line) const ALWAYS_INLINE;
       private:
         array<SizeCache, GROUP_SIZE> cache_;
     };
@@ -1305,7 +1287,7 @@ class ArmySetSparse {
         return nr_groups() * static_cast<size_t>(GROUP_SIZE);
     }
     inline size_t size() const PURE {
-        return allocated() - left_;
+        return FACTOR(allocated()) - left_;
     }
     inline ArmyId insert(Army const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) COLD ALWAYS_INLINE;
     inline ArmyId insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) HOT;
@@ -1337,7 +1319,7 @@ class ArmySetSparse {
     inline void overflow_mark() {
         if (overflow_used_ > overflow_max_) overflow_max_ = overflow_used_;
     }
-    void check(char const* file, int line) const;
+    void check(ArmyId nr_elements, char const* file, int line) const;
 
     // Not copyable (avoid accidents)
     ArmySetSparse(ArmySetSparse const&) = delete;
@@ -1446,7 +1428,7 @@ class ArmySet {
 #if CHECK
     ArmyZconst at(ArmyId i) const {
         if (UNLIKELY(i > size_))
-            throw_logic("Army id " + to_string(i) + " out of range of set");
+            throw_logic("Army id " + to_string(i) + " out of range of [1.." + to_string(size_) + "]");
         if (UNLIKELY(!armies_)) throw_logic("No army list allocated");
         return ArmyZconst{armies_[i * static_cast<size_t>(ARMY)]};
     }
