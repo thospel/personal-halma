@@ -31,6 +31,7 @@
 # define RETURNS_NONNULL __attribute__((returns_nonnull))
 # define WARN_UNUSED     __attribute__((warn_unused_result))
 # define UNUSED          __attribute__((unused))
+# define BUILTIN_CONSTANT(x) __builtin_constant_p(x)
 #else // __GNUC__
 # define RESTRICT
 # define NOINLINE
@@ -47,6 +48,7 @@
 # define RETURNS_NONNULL
 # define WARN_UNUSED
 # define UNUSED
+# define BUILTIN_CONSTANT(x) true
 #endif // __GNUC__
 
 #define CAT(x, y) _CAT(x,y)
@@ -129,6 +131,11 @@ ssize_t total_mlocked() PURE;
 ssize_t total_mlocks() PURE;
 void update_allocated();
 void init_system();
+
+inline bool main_thread() PURE;
+bool main_thread() {
+    return tid == 0;
+}
 
 inline uint popcount64(uint64_t value) FUNCTIONAL;
 uint popcount64(uint64_t value) {

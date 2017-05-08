@@ -1,0 +1,400 @@
+<html>
+  <head>
+    <style>
+      span.blue { color: blue; }
+      span.red  { color: red; }
+      .blue .available_moves { color: blue; }
+      .red  .available_moves { color: red; }
+      table,tr,td,th { border: 1px solid black; }
+      .red  td { border: 1px solid red; }
+      .blue td { border: 1px solid blue; }
+      .stats td { text-align: right; }
+      .parameters th { text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>26 / 30 moves</h1>
+    <table class='parameters'>
+      <tr class='x'><th>X</th><td>9</td></tr>
+      <tr class='y'><th>Y</th><td>9</td></tr>
+      <tr class='army'><th>Army</th><td>11</td></tr>
+      <tr class='rule'><th>Rule</th><td>6-move</td></tr>
+      <tr class='lower_bound'><th>Bound</th><td> &ge; 27 moves</td></tr>
+      <tr class='heuristics'><th>Heuristics</th><td>None
+</td>
+      <tr class='host'><th>Host</th><td>hp</td></tr>
+      <tr class='threads'><th>Threads</th><td>4</td></tr>
+      <tr class='start_time'><th>Start</th><td>2017-05-08 21:17:43 +0200</td></tr>
+      <tr class='stop_time'><th>Stop</th><td>2017-05-08 21:19:17 +0200</td></tr>
+      <tr class='commit_id'><th>Commit id</th><td>002a58c34bf8e9958823b4ec49aac0c7cedbebbf</td></tr>
+      <tr class='commit_time'><th>Commit time</th><td>2017-05-08 17:54:13 +0200</td></tr>
+    </table>
+<h3>Solve (94 seconds)</h3>
+    <table class='stats Solve'>
+      <tr>
+        <th>Moves<br/>left</th>
+        <th>Seconds</th>
+        <th>Boards</th>
+        <th>Armies</th>
+        <th>Memory<br/>(MB)</th>
+        <th>Allocated<br/>(MB)</th>
+        <th>Mmapped<br/>(MB)</th>
+        <th>Mmaps</th>
+        <th>Mlocked<br/>(MB)</th>
+        <th>Mlocks</th>
+        <th>Boards per<br/>blue army</th>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>30</td>
+        <td class='duration'>0</td>
+        <td class='boards'>8</td>
+        <td class='armies'>8</td>
+        <td class='memory'>376</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>8</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>29</td>
+        <td class='duration'>0</td>
+        <td class='boards'>128</td>
+        <td class='armies'>8</td>
+        <td class='memory'>376</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>16</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>28</td>
+        <td class='duration'>0</td>
+        <td class='boards'>1712</td>
+        <td class='armies'>111</td>
+        <td class='memory'>376</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>214</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>27</td>
+        <td class='duration'>0</td>
+        <td class='boards'>18908</td>
+        <td class='armies'>111</td>
+        <td class='memory'>376</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>170</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>26</td>
+        <td class='duration'>0</td>
+        <td class='boards'>139220</td>
+        <td class='armies'>1073</td>
+        <td class='memory'>377</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>1254</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>25</td>
+        <td class='duration'>0</td>
+        <td class='boards'>671602</td>
+        <td class='armies'>837</td>
+        <td class='memory'>378</td>
+        <td class='allocated'>6</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>802</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>24</td>
+        <td class='duration'>0</td>
+        <td class='boards'>2917569</td>
+        <td class='armies'>8888</td>
+        <td class='memory'>380</td>
+        <td class='allocated'>11</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>3485</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>23</td>
+        <td class='duration'>1</td>
+        <td class='boards'>1562933</td>
+        <td class='armies'>2279</td>
+        <td class='memory'>383</td>
+        <td class='allocated'>13</td>
+        <td class='mmapped'>135</td>
+        <td class='mmaps'>1035</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>685</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>22</td>
+        <td class='duration'>1</td>
+        <td class='boards'>818287</td>
+        <td class='armies'>32185</td>
+        <td class='memory'>381</td>
+        <td class='allocated'>3</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>359</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>21</td>
+        <td class='duration'>0</td>
+        <td class='boards'>972761</td>
+        <td class='armies'>10059</td>
+        <td class='memory'>382</td>
+        <td class='allocated'>8</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1026</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>96</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>20</td>
+        <td class='duration'>2</td>
+        <td class='boards'>4324529</td>
+        <td class='armies'>150279</td>
+        <td class='memory'>382</td>
+        <td class='allocated'>17</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1027</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>429</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>19</td>
+        <td class='duration'>2</td>
+        <td class='boards'>3982294</td>
+        <td class='armies'>21042</td>
+        <td class='memory'>392</td>
+        <td class='allocated'>28</td>
+        <td class='mmapped'>141</td>
+        <td class='mmaps'>1065</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>189</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>18</td>
+        <td class='duration'>8</td>
+        <td class='boards'>16329274</td>
+        <td class='armies'>750894</td>
+        <td class='memory'>404</td>
+        <td class='allocated'>55</td>
+        <td class='mmapped'>147</td>
+        <td class='mmaps'>1072</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>776</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>17</td>
+        <td class='duration'>7</td>
+        <td class='boards'>9993228</td>
+        <td class='armies'>25228</td>
+        <td class='memory'>431</td>
+        <td class='allocated'>54</td>
+        <td class='mmapped'>172</td>
+        <td class='mmaps'>1172</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>396</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>16</td>
+        <td class='duration'>20</td>
+        <td class='boards'>28084709</td>
+        <td class='armies'>2413815</td>
+        <td class='memory'>476</td>
+        <td class='allocated'>78</td>
+        <td class='mmapped'>213</td>
+        <td class='mmaps'>1122</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>1113</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>15</td>
+        <td class='duration'>12</td>
+        <td class='boards'>11231872</td>
+        <td class='armies'>17920</td>
+        <td class='memory'>466</td>
+        <td class='allocated'>52</td>
+        <td class='mmapped'>203</td>
+        <td class='mmaps'>1136</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>626</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>14</td>
+        <td class='duration'>19</td>
+        <td class='boards'>17538882</td>
+        <td class='armies'>2373758</td>
+        <td class='memory'>478</td>
+        <td class='allocated'>51</td>
+        <td class='mmapped'>215</td>
+        <td class='mmaps'>1108</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>978</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>13</td>
+        <td class='duration'>6</td>
+        <td class='boards'>4940694</td>
+        <td class='armies'>8121</td>
+        <td class='memory'>439</td>
+        <td class='allocated'>21</td>
+        <td class='mmapped'>181</td>
+        <td class='mmaps'>1102</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>608</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>12</td>
+        <td class='duration'>7</td>
+        <td class='boards'>3660171</td>
+        <td class='armies'>1054088</td>
+        <td class='memory'>422</td>
+        <td class='allocated'>10</td>
+        <td class='mmapped'>165</td>
+        <td class='mmaps'>1048</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>450</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>11</td>
+        <td class='duration'>1</td>
+        <td class='boards'>829566</td>
+        <td class='armies'>2493</td>
+        <td class='memory'>406</td>
+        <td class='allocated'>4</td>
+        <td class='mmapped'>148</td>
+        <td class='mmaps'>1042</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>332</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>10</td>
+        <td class='duration'>1</td>
+        <td class='boards'>391763</td>
+        <td class='armies'>219510</td>
+        <td class='memory'>403</td>
+        <td class='allocated'>1</td>
+        <td class='mmapped'>146</td>
+        <td class='mmaps'>1026</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>157</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>9</td>
+        <td class='duration'>0</td>
+        <td class='boards'>74783</td>
+        <td class='armies'>599</td>
+        <td class='memory'>385</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>136</td>
+        <td class='mmaps'>1026</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>124</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>8</td>
+        <td class='duration'>0</td>
+        <td class='boards'>11876</td>
+        <td class='armies'>8637</td>
+        <td class='memory'>385</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>136</td>
+        <td class='mmaps'>1025</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>19</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>7</td>
+        <td class='duration'>0</td>
+        <td class='boards'>1165</td>
+        <td class='armies'>99</td>
+        <td class='memory'>379</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>11</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>6</td>
+        <td class='duration'>0</td>
+        <td class='boards'>925</td>
+        <td class='armies'>655</td>
+        <td class='memory'>379</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>9</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>5</td>
+        <td class='duration'>0</td>
+        <td class='boards'>21</td>
+        <td class='armies'>2</td>
+        <td class='memory'>379</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>10</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>4</td>
+        <td class='duration'>0</td>
+        <td class='boards'>0</td>
+        <td class='armies'>0</td>
+        <td class='memory'>379</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>0</td>
+      </tr>
+    </table>
+  </body>
+</html>

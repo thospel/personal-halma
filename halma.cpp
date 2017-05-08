@@ -1295,6 +1295,7 @@ void ArmySetSparse::resize() {
 }
 
 void ArmySetSparse::__convert_hash(Coord* armies, ArmyId nr_elements, bool keep) {
+    if (!BUILTIN_CONSTANT(keep)) throw_logic("keep must be a constant");
     // cout << *this;
 
     if (CHECK) check(nr_elements, __FILE__, __LINE__);
@@ -1464,6 +1465,8 @@ ArmyId ArmySet::find(ArmyPos const& army) const {
 }
 
 void ArmySet::_convert_hash(bool keep) {
+    if (!main_thread())
+        throw_logic("_convert_hash should not be called from a subthread");
     if (armies_) throw_logic("Already converted ArmySetSparse");
 
     mallocate(armies_, size() * static_cast<size_t>(ARMY));
@@ -1958,7 +1961,10 @@ Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& mo
 
 bool BoardSubsetRed::_insert(ArmyId red_value, Statistics& stats) {
     // cout << "Insert " << red_value << "\n";
+    if (!main_thread())
+        throw_logic("BoardSubsetRed::_insert should not be called from a subthread");
     if (armies_) throw_logic("Multiple single insert in BoardSubsetRed");
+
     stats.boardset_probe(0);
     ArmyId* new_list = mallocate<ArmyId>(1);
     new_list[0] = red_value;
@@ -2151,7 +2157,7 @@ void Svg::header() {
     uint w = scale_ * 0.15;
     out_ <<
         "      <defs>\n"
-        "        <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "' \n"
+        "        <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "'\n"
         "                refX='" << w << "' refY='" << h << "' orient='auto'>\n"
         "          <polygon points='0 0, " << w << " " << h << ", 0 " << 2*h << "' />\n"
         "        </marker>\n"

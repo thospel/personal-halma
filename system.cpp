@@ -90,8 +90,8 @@ std::string time_string() {
     return _time_string(_now());
 }
 
-thread_local uint tid;
-inline uint thread_id();
+thread_local uint tid = -1;
+inline uint thread_id() PURE;
 uint thread_id() {
     return tid;
 }

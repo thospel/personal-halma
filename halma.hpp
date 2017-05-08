@@ -99,7 +99,9 @@ bool const BALANCE  = true;
 
 bool const MLOCK = true;
 
-#define CHECK   0
+#ifndef CHECK
+# define CHECK   0
+#endif // CHECK
 #define RED_BUILDER 1
 #define ARMYSET_SPARSE 1
 

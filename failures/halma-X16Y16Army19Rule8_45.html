@@ -6,6 +6,8 @@
       .blue .available_moves { color: blue; }
       .red  .available_moves { color: red; }
       table,tr,td,th { border: 1px solid black; }
+      .red  td { border: 1px solid red; }
+      .blue td { border: 1px solid blue; }
       .stats td { text-align: right; }
       .parameters th { text-align: left; }
     </style>
@@ -22,10 +24,10 @@
 </td>
       <tr class='host'><th>Host</th><td>hp</td></tr>
       <tr class='threads'><th>Threads</th><td>4</td></tr>
-      <tr class='start_time'><th>Start</th><td>2017-04-21 22:36:26 +0200</td></tr>
-      <tr class='stop_time'><th>Stop</th><td>2017-04-21 22:36:26 +0200</td></tr>
-      <tr class='commit_id'><th>Commit id</th><td>11d4ffc0b184109f473a6da6137576075a4f119f</td></tr>
-      <tr class='commit_time'><th>Commit time</th><td>2017-04-21 21:45:14 +0200</td></tr>
+      <tr class='start_time'><th>Start</th><td>2017-05-08 16:22:08 +0200</td></tr>
+      <tr class='stop_time'><th>Stop</th><td>2017-05-08 16:22:08 +0200</td></tr>
+      <tr class='commit_id'><th>Commit id</th><td>c96c30e59d7e74443361ae4660f8bedbcf811528</td></tr>
+      <tr class='commit_time'><th>Commit time</th><td>2017-05-08 14:47:09 +0200</td></tr>
     </table>
 <h3>Solve (0 seconds)</h3>
     <table class='stats Solve'>
@@ -35,9 +37,16 @@
         <th>Boards</th>
         <th>Armies</th>
         <th>Memory<br/>(MB)</th>
+        <th>Allocated<br/>(MB)</th>
+        <th>Mmapped<br/>(MB)</th>
+        <th>Mmaps</th>
+        <th>Mlocked<br/>(MB)</th>
+        <th>Mlocks</th>
         <th>Boards per<br/>blue army</th>
+        <th>Largest<br/>subset</th>
         <th>Late<br/>prunes</th>
         <th>Late<br/>prune<br/>ratio</th>
+        <th>Army<br/>resize<br/>overflow</th>
         <th>Army inserts</th>
         <th>Army<br/>ratio</th>
         <th>Board inserts</th>
@@ -54,12 +63,19 @@
       <tr class='blue'>
         <td class='available_moves'>45</td>
         <td class='duration'>0</td>
-        <td>2</td>
-        <td>2</td>
-        <td>41</td>
+        <td class='boards'>2</td>
+        <td class='armies'>2</td>
+        <td class='memory'>242</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>1</td>
         <td>1</td>
         <td>0</td>
         <td>0%</td>
+        <td>0</td>
         <td>2 / 4</td>
         <td>50%</td>
         <td>2 / 4</td>
@@ -77,12 +93,19 @@
       <tr class='red'>
         <td class='available_moves'>44</td>
         <td class='duration'>0</td>
-        <td>4</td>
-        <td>4</td>
-        <td>108</td>
+        <td class='boards'>4</td>
+        <td class='armies'>4</td>
+        <td class='memory'>309</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>2</td>
         <td>2</td>
         <td>0</td>
         <td>0%</td>
+        <td>0</td>
         <td>4 / 4</td>
         <td>100%</td>
         <td>4 / 4</td>
@@ -90,9 +113,9 @@
 </td>
         <td>0 / 4</td>
         <td>0%</td>
-        <td>3 / 4</td>
-        <td>75%</td>
-        <td>1.25</td>
+        <td>4 / 4</td>
+        <td>100%</td>
+        <td>1.00</td>
         <td>4 / 4</td>
         <td>100%</td>
         <td>1.00</td>
@@ -100,12 +123,19 @@
       <tr class='blue'>
         <td class='available_moves'>43</td>
         <td class='duration'>0</td>
+        <td class='boards'>0</td>
+        <td class='armies'>0</td>
+        <td class='memory'>309</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
         <td>0</td>
-        <td>0</td>
-        <td>108</td>
         <td>0</td>
         <td>0</td>
         <td>0%</td>
+        <td>0</td>
         <td>0 / 0</td>
         <td></td>
         <td>0 / 0</td>
@@ -182,20 +212,20 @@
       <circle cx='20' cy='20' r='7' fill='turquoise' />
       <circle cx='40' cy='20' r='7' fill='turquoise' />
       <circle cx='60' cy='20' r='7' fill='turquoise' />
-      <circle cx='80' cy='20' r='7' fill='turquoise' />
       <circle cx='100' cy='20' r='7' fill='turquoise' />
       <circle cx='20' cy='40' r='7' fill='turquoise' />
       <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
       <circle cx='80' cy='40' r='7' fill='turquoise' />
       <circle cx='100' cy='40' r='7' fill='turquoise' />
       <circle cx='20' cy='60' r='7' fill='turquoise' />
       <circle cx='40' cy='60' r='7' fill='turquoise' />
       <circle cx='60' cy='60' r='7' fill='turquoise' />
       <circle cx='80' cy='60' r='7' fill='turquoise' />
+      <circle cx='120' cy='60' r='7' fill='turquoise' />
       <circle cx='20' cy='80' r='7' fill='turquoise' />
       <circle cx='40' cy='80' r='7' fill='turquoise' />
       <circle cx='60' cy='80' r='7' fill='turquoise' />
-      <circle cx='100' cy='80' r='7' fill='turquoise' />
       <circle cx='20' cy='100' r='7' fill='turquoise' />
       <circle cx='40' cy='100' r='7' fill='turquoise' />
       <circle cx='300' cy='240' r='7' fill='red' />
