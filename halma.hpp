@@ -55,14 +55,12 @@ Align ULOAD(Align const& pos) { return _mm256_lddqu_si256(&pos); }
 void USTORE(Align& pos, Align val) { _mm256_storeu_si256(&pos, val); }
 bool IS_ZERO(Align val) { return _mm256_testz_si256(val, val); }
 // Using a >> imm shifts in sign bits. We want zeros
-Align SHIFT_RIGHT(Align val, int imm8) { return _mm256_srli_epi64(val, imm8); }
 #elif M128
 Align ALOAD(Align const& pos) { return pos; }
 void ASTORE(Align& pos, Align val) { pos = val; }
 Align ULOAD(Align const& pos) { return _mm_lddqu_si128(&pos); }
 void USTORE(Align& pos, Align val) { _mm_storeu_si128(&pos, val); }
 bool IS_ZERO(Align val) { return _mm_testz_si128(val, val); }
-Align SHIFT_RIGHT(Align val, int imm8) { return _mm_srli_epi64(val, imm8); }
 #else
 Align ALOAD(Align const& pos) { return pos; }
 void ASTORE(Align& pos, Align val) { pos = val; }
@@ -70,7 +68,6 @@ void ASTORE(Align& pos, Align val) { pos = val; }
 Align ULOAD(Align const& pos) { return pos; }
 void USTORE(Align& pos, Align val) { pos = val; }
 bool IS_ZERO(Align val) { return !val; }
-Align SHIFT_RIGHT(Align val, int imm8) { return val >> imm8; }
 #endif
 
 extern Align ARMY_MASK;
@@ -931,6 +928,39 @@ class ArmySetDense {
     int    memory_flags_;
 };
 
+class alignas(char) Element {
+  public:
+    static size_t SIZE;
+
+    // Avoid accidents
+    Element(Element const&) = delete;
+
+    static Element& element(char* ptr, uint i = 0) {
+        return *reinterpret_cast<Element *>(&ptr[i * SIZE]);
+    }
+    static Element const& element(char const* ptr, uint i = 0) {
+        return *reinterpret_cast<Element const*>(&ptr[i * SIZE]);
+    }
+    inline ArmyId id() const PURE { return id_; }
+    inline void id(ArmyId army_id) { id_ = army_id; }
+    inline ArmyZconst armyZ() const PURE { return ArmyZconst{coord_[0]}; }
+    inline uint64_t hash() const PURE {
+        return army_hash(&coord_[0]);
+    }
+    inline Element& operator=(Element const& element) {
+        std::memcpy(&id_, &element.id_, SIZE);
+        return *this;
+    }
+
+    Coord*       begin()       PURE { return &coord_[0]; }
+    Coord const* begin() const PURE { return &coord_[0]; }
+    Coord*       end()         PURE { return &coord_[ARMY]; }
+    Coord const* end()   const PURE { return &coord_[ARMY]; }
+  private:
+    ArmyId id_;
+    Coord  coord_[0];
+};
+
 // This is essentially google sparse hash for variable size elements
 class ArmySetSparse {
     // ArmySetSparse can exist in 3 modes:
@@ -966,32 +996,6 @@ class ArmySetSparse {
     // divided by 64 anyways and is not a major memory user (at most 500MB for
     // a 2**32 size army, so we could save at most 125MB)
     using DataId = size_t;
-
-    class alignas(char) Element {
-      public:
-        static size_t SIZE;
-
-        static Element& element(char* ptr, uint i = 0) {
-            return *reinterpret_cast<Element *>(&ptr[i * SIZE]);
-        }
-        static Element const& element(char const* ptr, uint i = 0) {
-            return *reinterpret_cast<Element const*>(&ptr[i * SIZE]);
-        }
-        inline ArmyId id() const PURE { return id_; }
-        inline void id(ArmyId army_id) { id_ = army_id; }
-        inline ArmyZconst armyZ() const PURE { return ArmyZconst{coord_[0]}; }
-        inline uint64_t hash() const PURE {
-            return army_hash(&coord_[0]);
-        }
-
-        Coord*       begin()       PURE { return &coord_[0]; }
-        Coord const* begin() const PURE { return &coord_[0]; }
-        Coord*       end()         PURE { return &coord_[ARMY]; }
-        Coord const* end()   const PURE { return &coord_[ARMY]; }
-      private:
-        ArmyId id_;
-        Coord  coord_[0];
-    };
 
     class Bitmap {
         // Not copyable (avoid accidents)
@@ -1214,7 +1218,7 @@ class ArmySetSparse {
         void deallocate(Group* groups, uint n, DataId data_id, Statistics& stats) {
             cache_[n-1].deallocate(groups, data_id, stats);
         }
-        inline void append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) ALWAYS_INLINE;
+        inline Element const& append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) ALWAYS_INLINE HOT;
         inline void append(Group* groups, GroupId group_id, uint pos, Element const& old_element) ALWAYS_INLINE;
         inline void copy(Group* groups, GroupId group_id, GroupBuilder const& group_builder) {
             Group& group = groups[group_id];
@@ -1294,7 +1298,7 @@ class ArmySetSparse {
         return 1;
     }
     inline ArmyId insert(Army const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) COLD ALWAYS_INLINE;
-    inline ArmyId insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) HOT;
+    inline Element const& insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) HOT;
     inline ArmyId find(ArmySet const& army_set, Army const& army, uint64_t hash) const PURE COLD;
     inline ArmyId find(ArmySet const& army_set, ArmyPos const& army, uint64_t hash) const PURE COLD;
 
@@ -1349,7 +1353,7 @@ class ArmySetSparse {
     int    memory_flags_;
 };
 
-void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) {
+Element const& ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, ArmyId army_id, Coord const* RESTRICT army, Statistics& stats) {
     Group& group = groups[group_id];
     DataId new_data_id;
     if (group.bitmap()) {
@@ -1368,6 +1372,9 @@ void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos,
         std::copy(&old_data[i * Element::SIZE], &old_data[n * Element::SIZE],
                   new_element + Element::SIZE);
         cache_[n-1].deallocate(groups, old_data_id, stats);
+        group.data_id() = new_data_id;
+        group.set(pos);
+        return element;
     } else {
         new_data_id = cache_[0].allocate(stats);
         cache_[0].group_id_at(new_data_id) = group_id;
@@ -1375,9 +1382,10 @@ void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos,
         auto& element = Element::element(new_element);
         element.id(army_id);
         std::copy(army, army+ARMY, element.begin());
+        group.data_id() = new_data_id;
+        group.set(pos);
+        return element;
     }
-    group.data_id() = new_data_id;
-    group.set(pos);
 }
 
 inline ostream& operator<<(ostream& os, ArmySetSparse const& set) {
@@ -1448,7 +1456,7 @@ class ArmySet {
     inline ArmyZconst cat(ArmyId i) const { return at(i); }
 
     ArmyId insert(Army const& army, Statistics& stats) COLD;
-    inline ArmyId insert(ArmyPos const& army, Statistics& stats) HOT;
+    inline Element const& insert(ArmyPos const& army, ArmyId hash, Statistics& stats) HOT;
     ArmyId find(Army    const& army) const PURE COLD;
     ArmyId find(ArmyPos const& army) const PURE COLD;
 
@@ -1472,9 +1480,8 @@ class ArmySet {
     ArmySubsets subsets_;
 };
 
-ArmyId ArmySet::insert(ArmyPos const& army, Statistics& stats) {
+Element const& ArmySet::insert(ArmyPos const& army, ArmyId hash, Statistics& stats) {
     // logger << "Insert: " << hex << hash << dec << "\n" << Image{army};
-    ArmyId hash = army.hash();
     return subsets_[hash & ARMY_SUBSETS_MASK].insert(army, hash >> ARMY_SUBSET_BITS, size_, stats);
 }
 
@@ -1482,6 +1489,23 @@ inline ostream& operator<<(ostream& os, ArmySet const& set) {
     set.print(os);
     return os;
 }
+
+class ArmySetCache {
+  public:
+    static ArmyId const INITIAL_SIZE = 32;
+    static ArmyId const FACTOR = 128;
+
+    ArmySetCache(ArmyId size = INITIAL_SIZE);
+    ~ArmySetCache();
+    ArmyId allocated() const PURE { return mask_ + 1; }
+    NOINLINE ArmyId insert(ArmySet& set, ArmyPos const& army, Statistics& stats) HOT;
+    NOINLINE void resize() RESTRICT;
+  private:
+    char* cache_;
+    ArmyId mask_;
+    uint64_t hit  = 0;
+    uint64_t miss = 0;
+};
 
 Army::Army(ArmyZconst army, ArmyId symmetry) {
     _import(army.begin(), begin(), symmetry, true);
@@ -2463,7 +2487,7 @@ ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) {
     }
 }
 
-ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) {
+Element const& ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) {
     // logger << "Insert: " << hex << hash << dec << " (" << left_ << " left)\n" << Image{army};
     lock_guard<mutex> lock{exclude_};
     if (left_ == 0) resize();
@@ -2482,15 +2506,14 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>&
             // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
             if (army_id >= ARMYID_HIGHBIT)
                 throw(overflow_error("ArmyId too large"));
-            data_cache_.append(groups, group_id, pos, army_id, army.begin(), stats);
-            return army_id;
+            return data_cache_.append(groups, group_id, pos, army_id, army.begin(), stats);
         }
         Element const& element = data_cache_.at(group, pos);
         if (army == element.armyZ()) {
             stats.armyset_probe(offset);
             stats.armyset_try();
             // logger << "Found duplicate " << hash << "\n" << flush;
-            return element.id();
+            return element;
         }
         hash += ++offset;
     }

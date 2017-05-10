@@ -11,7 +11,7 @@ uint Y = 0;
 uint RULES = 6;
 uint ARMY = 10;
 
-size_t ArmySetSparse::Element::SIZE;
+size_t Element::SIZE;
 
 Align ARMY_MASK;
 Align ARMY_MASK_NOT;
@@ -1543,6 +1543,46 @@ void ArmySet::check(char const* file, int line) const {
 
     ArmyId nr_elements = size();
     for (auto& subset: subsets_) subset.check(nr_elements, file, line);
+}
+
+ArmySetCache::ArmySetCache(ArmyId size) {
+    cmallocate(cache_, size * static_cast<size_t>(Element::SIZE)+ARMY_PADDING, ALLOC_LOCK);
+    mask_ = size - 1;
+}
+
+ArmySetCache::~ArmySetCache() {
+    demallocate(cache_, allocated() * static_cast<size_t>(Element::SIZE)+ARMY_PADDING, ALLOC_LOCK);
+    logger << "Hit " << hit << ", miss " << miss;
+    auto sum = hit + miss;
+    if (sum) logger << ", ratio: " << hit * 100 / sum << "%";
+    logger << endl;
+}
+
+void ArmySetCache::resize() {
+    size_t element_size = Element::SIZE;
+    ArmyId size = allocated();
+    size_t old_allocated = size * element_size;
+    size_t new_allocated = old_allocated * 2;
+    remallocate(cache_, old_allocated+ARMY_PADDING, new_allocated+ARMY_PADDING, ALLOC_LOCK);
+    std::memcpy(cache_+old_allocated, cache_, old_allocated);
+    mask_ = 2*size-1;
+}
+
+ArmyId ArmySetCache::insert(ArmySet& set, ArmyPos const& army, Statistics& stats) {
+    ArmyId hash = army.hash();
+    Element& element = Element::element(cache_, hash & mask_);
+    // logger << "Lookup:\n" << Image{army};
+    if (army == element.armyZ()) {
+        // logger << "Hit " << element.id() << endl;
+        ++hit;
+        return element.id();
+    }
+    ++miss;
+    element = set.insert(army, hash, stats);
+    ArmyId army_id = element.id();
+    // logger << "Miss " << army_id << endl;
+    if (set.size() > allocated() * FACTOR) resize();
+    return army_id;
 }
 
 FullMove::FullMove(char const* str): FullMove{} {
