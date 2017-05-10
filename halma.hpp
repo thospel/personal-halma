@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <iomanip>
+#include <future>
 #include <limits>
 #include <mutex>
 #include <sstream>
@@ -1287,6 +1288,11 @@ class ArmySetSparse {
     inline size_t size() const PURE {
         return FACTOR(allocated()) - left_;
     }
+    static inline constexpr uint work_units() {
+        // If you set this different from 1 then ArmySetSparse::_convert_hash
+        // must be rewritten since it has parts that should execute only once
+        return 1;
+    }
     inline ArmyId insert(Army const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) COLD ALWAYS_INLINE;
     inline ArmyId insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) HOT;
     inline ArmyId find(ArmySet const& army_set, Army const& army, uint64_t hash) const PURE COLD;
@@ -1323,13 +1329,12 @@ class ArmySetSparse {
     ArmySetSparse(ArmySetSparse const&) = delete;
     ArmySetSparse& operator=(ArmySetSparse const&) = delete;
 
-    void _convert_hash(Coord* armies, ArmyId nr_elements, bool keep = false);
+    inline void _convert_hash(uint unit, Coord* armies, ArmyId nr_elements, bool keep = false) ALWAYS_INLINE;
 
   private:
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
 
     NOINLINE void resize() RESTRICT;
-    inline void __convert_hash(Coord* armies, ArmyId nr_elements, bool keep) ALWAYS_INLINE;
 
     Group* groups_;
     char* overflow_;
@@ -1407,13 +1412,15 @@ class ArmySubsets {
     inline ArmySubset* end  () PURE       {
         return &subsets_[ARMY_SUBSETS];
     }
+    static inline uint work_units() PURE {
+        return ARMY_SUBSETS * ArmySubset::work_units();
+    }
   private:
     array<ArmySubset, 1 << MAX_ARMY_SUBSET_BITS> subsets_;
 };
 
 class ArmySet {
   public:
-
     ArmySet(bool lock = false);
     ~ArmySet();
     inline void init();
@@ -1422,6 +1429,9 @@ class ArmySet {
     void lock();
     void unlock();
     ArmyId size() const PURE { return size_; }
+    static inline uint work_units() PURE {
+        return ArmySubsets::work_units();
+    }
 
 #if CHECK
     ArmyZconst at(ArmyId i) const {
@@ -1453,6 +1463,8 @@ class ArmySet {
 
   private:
     inline void _convert_hash(bool keep) ALWAYS_INLINE;
+    NOINLINE void __convert_hash(uint thid, atomic<uint>* todo, bool keep);
+    inline void _convert_hash(atomic<uint>& todo, bool keep) ALWAYS_INLINE;
 
     Coord* armies_;
     atomic<ArmyId> size_;
@@ -1816,10 +1828,6 @@ class BoardSetBase {
   public:
     static ArmyId const INITIAL_SIZE = 32;
     BoardSetBase(bool keep = false, ArmyId size = INITIAL_SIZE);
-    ~BoardSetBase() {
-        ++subsets_;
-        demallocate(subsets_, capacity());
-    }
     // Use only before using as source of make_all_XXX_moves()
     ArmyId subsets() const PURE { return top_ - from(); }
     size_t size() const PURE { return size_; }
@@ -1839,6 +1847,7 @@ class BoardSetBase {
     BoardSetBase(BoardSetBase const&) = delete;
     BoardSetBase& operator=(BoardSetBase const&) = delete;
   protected:
+    ~BoardSetBase() {}
     ArmyId capacity() const PURE { return capacity_; }
     ArmyId next() {
         ArmyId from = from_++;
@@ -1849,9 +1858,8 @@ class BoardSetBase {
         ArmyId from = from_;
         return min(from, top_);
     }
-    NOINLINE void resize() RESTRICT;
     void down_size(ArmyId size) { size_ -= size; }
-    inline void clear(ArmyId size = INITIAL_SIZE);
+    inline void clear();
 
     atomic<size_t> size_;
     mutex exclude_;
@@ -1860,19 +1868,19 @@ class BoardSetBase {
     ArmyId capacity_;
     atomic<ArmyId> from_;
     ArmyId top_;
-    BoardSubsetBase* subsets_;
     bool const keep_;
 };
 
 class BoardSet: public BoardSetBase {
     friend class BoardSubsetRef;
   public:
-    BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE) :
-        BoardSetBase{keep, size} {}
+    BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE);
     ~BoardSet() {
         for (auto& subset: *this)
             subset.destroy();
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+        ++subsets_;
+        demallocate(subsets_, capacity());
     }
     void clear(ArmyId size = INITIAL_SIZE);
     inline BoardSubset const& cat(ArmyId id) const PURE {
@@ -1953,24 +1961,26 @@ class BoardSet: public BoardSetBase {
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
     void print(ostream& os) const;
   private:
+    NOINLINE void resize() RESTRICT;
     inline BoardSubset& at(ArmyId id) PURE {
         return static_cast<BoardSubset&>(subsets_[id]);
     }
     BoardSubset* begin() PURE { return &at(from()); }
     BoardSubset* end()   PURE { return &at(top_); }
+
+    BoardSubset* subsets_;
 };
 
 class BoardSetRed: public BoardSetBase {
     friend class BoardSubsetRedRef;
   public:
-    BoardSetRed(ArmyId size, bool keep = false) :
-        BoardSetBase{keep, size} {
-        top_ = size + 1;
-    }
+    BoardSetRed(ArmyId size, bool keep = false);
     ~BoardSetRed() {
         for (auto& subset: *this)
             subset.destroy();
         // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+        ++subsets_;
+        demallocate(subsets_, capacity());
     }
     void clear(ArmyId size);
     inline BoardSubsetRed const& cat(ArmyId id) const PURE {
@@ -2000,6 +2010,7 @@ class BoardSetRed: public BoardSetBase {
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
   private:
+    NOINLINE void resize() RESTRICT;
     // Inefficient for core use, only meant for simple initialization
     bool _insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats);
     bool _find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {
@@ -2017,6 +2028,8 @@ class BoardSetRed: public BoardSetBase {
     }
     BoardSubsetRed* begin() PURE { return &at(from()); }
     BoardSubsetRed* end()   PURE { return &at(top_); }
+
+    BoardSubsetRed* subsets_;
 };
 
 inline ostream& operator<<(ostream& os, BoardSet const& set) {

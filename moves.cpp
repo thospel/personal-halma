@@ -1,5 +1,3 @@
-#include <future>
-
 #if BLUE_TO_MOVE
 # define COLOR_TO_MOVE	blue
 #else  // BLUE_TO_MOVE

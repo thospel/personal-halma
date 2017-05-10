@@ -578,22 +578,22 @@ void BoardSubsetRedBuilder::resize() {
 }
 
 BoardSetBase::BoardSetBase(bool keep, ArmyId size): size_{0}, solution_id_{keep}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
+}
+
+void BoardSetBase::clear() {
+    from_ = top_ = 1;
+    size_ = 0;
+    solution_id_ = keep_;
+}
+
+BoardSet::BoardSet(bool keep, ArmyId size) :
+    BoardSetBase{keep, size} {
     cmallocate(subsets_, capacity());
     --subsets_;
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
 }
 
-void BoardSetBase::clear(ArmyId size) {
-    from_ = top_ = 1;
-    size_ = 0;
-    solution_id_ = keep_;
-    ++subsets_;
-    cremallocate(subsets_, capacity(), size);
-    --subsets_;
-    capacity_ = size;
-}
-
-void BoardSetBase::resize() {
+void BoardSet::resize() {
     auto subsets = subsets_ + 1;
     recmallocate(subsets, capacity(), capacity()*2);
     capacity_ *= 2;
@@ -605,7 +605,11 @@ void BoardSetBase::resize() {
 void BoardSet::clear(ArmyId size) {
     for (auto& subset: *this)
         subset.destroy();
-    BoardSetBase::clear(size);
+    BoardSetBase::clear();
+    ++subsets_;
+    cremallocate(subsets_, capacity(), size);
+    --subsets_;
+    capacity_ = size;
 }
 
 void BoardSet::print(ostream& os) const {
@@ -618,10 +622,31 @@ void BoardSet::print(ostream& os) const {
     os << "-----\n";
 }
 
+BoardSetRed::BoardSetRed(ArmyId size, bool keep) :
+    BoardSetBase{keep, size} {
+    cmallocate(subsets_, capacity());
+    --subsets_;
+    // cout << "Create BoardSetRed " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
+    top_ = size + 1;
+}
+
+void BoardSetRed::resize() {
+    auto subsets = subsets_ + 1;
+    recmallocate(subsets, capacity(), capacity()*2);
+    capacity_ *= 2;
+    subsets_ = subsets - 1;
+    // logger << "Resize BoardSet " << static_cast<void const *>(old_subsets) << " -> " << static_cast<void const *>(subsets_) << ": " << capacity() << "\n" << flush;
+    if (!keep_ && from_ != 1) throw_logic("Resize of partial BoardSetBase");
+}
+
 void BoardSetRed::clear(ArmyId size) {
     for (auto& subset: *this)
         subset.destroy();
-    BoardSetBase::clear(size);
+    BoardSetBase::clear();
+    ++subsets_;
+    cremallocate(subsets_, capacity(), size);
+    --subsets_;
+    capacity_ = size;
     top_ = size+1;
 }
 
@@ -1294,7 +1319,7 @@ void ArmySetSparse::resize() {
     //logger << "Resize done\n" << flush;
 }
 
-void ArmySetSparse::__convert_hash(Coord* armies, ArmyId nr_elements, bool keep) {
+void ArmySetSparse::_convert_hash(uint unit, Coord* armies, ArmyId nr_elements, bool keep) {
     if (!BUILTIN_CONSTANT(keep)) throw_logic("keep must be a constant");
     // cout << *this;
 
@@ -1303,7 +1328,7 @@ void ArmySetSparse::__convert_hash(Coord* armies, ArmyId nr_elements, bool keep)
     GroupId n_groups = nr_groups();
     Group* groups = groups_;
 
-    for (GroupId g=0; g<n_groups; ++g) {
+    for (GroupId g=unit; g<n_groups; g += work_units()) {
         auto& group = groups[g];
         uint n = group.bits();
         // cout << "Converting group " << g << " with " << n << " elements\n";
@@ -1329,11 +1354,6 @@ void ArmySetSparse::__convert_hash(Coord* armies, ArmyId nr_elements, bool keep)
         unlock();
         data_cache_.free();
     }
-}
-
-void ArmySetSparse::_convert_hash(Coord* armies, ArmyId nr_elements, bool keep) {
-    if (keep) __convert_hash(armies, nr_elements, true);
-    else      __convert_hash(armies, nr_elements, false);
 }
 
 size_t ArmySetSparse::overflow_max() const {
@@ -1464,6 +1484,25 @@ ArmyId ArmySet::find(ArmyPos const& army) const {
     return subsets_[hash & ARMY_SUBSETS_MASK].find(*this, army, hash >> ARMY_SUBSET_BITS);
 }
 
+void ArmySet::_convert_hash(atomic<uint>& todo, bool keep) {
+    auto armies = armies_;
+    auto nr_elements = size();
+    while (true) {
+        uint work = --todo;
+        if (static_cast<int>(work) < 0) break;
+        uint subset = work / ArmySubset::work_units();
+        uint unit   = work % ArmySubset::work_units();
+        subsets_[subset]._convert_hash(unit, armies, nr_elements, keep);
+    }
+    update_allocated();
+}
+
+void ArmySet::__convert_hash(uint thid, atomic<uint>* todo, bool keep) {
+    tid = thid;
+    if (keep) _convert_hash(*todo, true);
+    else      _convert_hash(*todo, false);
+}
+
 void ArmySet::_convert_hash(bool keep) {
     if (!main_thread())
         throw_logic("_convert_hash should not be called from a subthread");
@@ -1471,10 +1510,16 @@ void ArmySet::_convert_hash(bool keep) {
 
     mallocate(armies_, size() * static_cast<size_t>(ARMY));
     armies_ -= ARMY;
-    ArmyId nr_elements = size();
-    auto armies = armies_;
-    for (auto& subset: subsets_)
-        subset._convert_hash(armies, nr_elements, keep);
+
+    uint n = work_units();
+    atomic<uint> todo{n};
+    vector<future<void>> results;
+    if (nr_threads < n) n = nr_threads;
+    for (uint t=1; t < n; ++t)
+        results.emplace_back(async(launch::async, &ArmySet::__convert_hash, this, t, &todo, keep));
+    __convert_hash(0, &todo, keep);
+
+    for (auto& result: results) result.get();
 }
 
 void ArmySet::drop_hash() {
