@@ -77,6 +77,8 @@
      #include <spe.h>
 #endif
 
+using Offset = size_t;
+
 size_t const MMAP_THRESHOLD  = 128 * 1024;
 // size_t const MMAP_THRESHOLD  = 4096;
 size_t const MMAP_THRESHOLD1 = MMAP_THRESHOLD - 1;
@@ -257,17 +259,13 @@ inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size, int flag
 }
 
 template<class T>
-inline T* remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
-    T* new_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
-    old_ptr = nullptr;
-    return new_ptr;
+void remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
+    old_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
 }
 
 template<class T>
-inline T* remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
-    T* new_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T), flags));
-    old_ptr = nullptr;
-    return new_ptr;
+void remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
+    old_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T), flags));
 }
 
 // Zero the whole new size

@@ -527,41 +527,45 @@ bool BoardSubsetRed::_find(ArmyId red_value) const {
                [red_value](ArmyId value) { return value == red_value; });
 }
 
-BoardSubsetRedBuilder::BoardSubsetRedBuilder(ArmyId size): army_list_{nullptr} {
-    real_allocated_ = size;
+BoardSubsetRedBuilder::BoardSubsetRedBuilder(ArmyId size):
+    army_list_{nullptr},
+    army_list_size_{FACTOR(size)},
+    free_{0},
+    prefix_{0},
+    real_allocated_{size} {
     mask_ = size-1;
-    left_ = capacity();
+    left_ = army_list_size_;
     cmallocate(armies_, size, ALLOC_LOCK);
-    mallocate(army_list_, left_, ALLOC_LOCK);
+    mallocate(army_list_, army_list_size_, ALLOC_LOCK);
     // logger << "Create BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << size << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ")\n" << flush;
+}
+
+BoardSubsetRedBuilder::~BoardSubsetRedBuilder() {
+    demallocate(armies_, real_allocated_, ALLOC_LOCK);
+    demallocate(army_list_, army_list_size_, ALLOC_LOCK);
+    // logger << "Destroy BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
 }
 
 void BoardSubsetRedBuilder::resize() {
     auto old_allocated = allocated();
     ArmyId new_allocated = old_allocated*2;
-    ArmyId mask = new_allocated-1;
-    ArmyId *armies, *army_list;
+    left_ = FACTOR(new_allocated);
+    mask_ = new_allocated-1;
     ArmyId nr_elems = size();
     if (new_allocated > real_allocated_) {
         cremallocate(armies_, real_allocated_, new_allocated, ALLOC_LOCK);
         // logger << "Resize BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies) << " (size " << new_allocated << ")\n" << flush;
-        armies = armies_;
-
-        ArmyId new_left = FACTOR(new_allocated);
-        army_list_ -= nr_elems;
-        army_list = remallocate_partial(army_list_, FACTOR(real_allocated_), new_left, nr_elems, ALLOC_LOCK);
-        // logger << "Resize BoardSubsetRedBuilder list " << static_cast<void const *>(army_list_) << " (size " << FACTOR(real_allocated_) << ") -> " << static_cast<void const *>(army_list) << " (size " << new_left << ")\n" << flush;
-        army_list_ = army_list + nr_elems;
         real_allocated_ = new_allocated;
-        mask_ = mask;
-    } else {
-        armies = armies_;
-        army_list = army_list_ - nr_elems;
-        mask_ = mask;
-        std::memset(begin(), 0, new_allocated * sizeof(armies_[0]));
-    }
-    left_ += FACTOR(new_allocated) - FACTOR(old_allocated);
 
+        remallocate_partial(army_list_, army_list_size_, left_, nr_elems, ALLOC_LOCK);
+        army_list_size_ = left_;
+        // logger << "Resize BoardSubsetRedBuilder list " << static_cast<void const *>(army_list_) << " (size " << FACTOR(real_allocated_) << ") -> " << static_cast<void const *>(army_list) << " (size " << new_left << ")\n" << flush;
+    } else
+        std::memset(begin(), 0, new_allocated * sizeof(armies_[0]));
+
+    ArmyId mask = mask_;
+    ArmyId* armies = armies_;
+    ArmyId* army_list = army_list_;
     for (ArmyId i = 0; i < nr_elems; ++i) {
         auto value = army_list[i];
         // cout << "Insert " << value << "\n";

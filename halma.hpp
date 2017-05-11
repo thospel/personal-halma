@@ -1737,7 +1737,6 @@ class BoardSubsetRed: public BoardSubsetBase {
     inline BoardSubsetRed(ArmyId* list, ArmyId size) {
         armies_ = list;
         left_   = size;
-        mask_   = ARMYID_MAX;
     }
     inline void destroy() {
         if (armies_) {
@@ -1772,22 +1771,20 @@ class BoardSubsetRed: public BoardSubsetBase {
   private:
     bool _insert(ArmyId red_value, Statistics& stats);
     bool _find(ArmyId red_value) const PURE;
+
+    Offset offset_;
 };
 
 class BoardSubsetRedBuilder: public BoardSubsetBase {
   public:
     static ArmyId const INITIAL_SIZE = 32;
+    static size_t const BLOCK = 1 << 20;
 
-    BoardSubsetRedBuilder(ArmyId allocate = INITIAL_SIZE);
-    ~BoardSubsetRedBuilder() {
-        demallocate(armies_, real_allocated_, ALLOC_LOCK);
-        army_list_ -= size();
-        demallocate(army_list_, FACTOR(real_allocated_), ALLOC_LOCK);
-        // logger << "Destroy BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
-    }
+    NOINLINE BoardSubsetRedBuilder(ArmyId allocate = INITIAL_SIZE);
+    NOINLINE ~BoardSubsetRedBuilder();
     ArmyId allocated() const PURE { return mask_+1; }
     ArmyId capacity()  const PURE { return FACTOR(allocated()); }
-    ArmyId size()      const PURE { return capacity() - left_; }
+    ArmyId size()      const PURE { return prefix_ + free_; }
     inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (UNLIKELY(red_id <= 0))
@@ -1802,10 +1799,9 @@ class BoardSubsetRedBuilder: public BoardSubsetBase {
         ArmyId sz = size();
         ArmyId* new_list = mallocate<ArmyId>(sz);
         // logger << "Extract BoardSubsetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
-        ArmyId* old_list = army_list_ - sz;
-        std::copy(&old_list[0], &old_list[sz], new_list);
+        std::copy(&army_list_[0], &army_list_[sz], new_list);
 
-        army_list_ = old_list;
+        free_ = 0;
         mask_ = allocated-1;
         left_ = capacity();
         std::memset(begin(), 0, allocated * sizeof(armies_[0]));
@@ -1822,12 +1818,15 @@ class BoardSubsetRedBuilder: public BoardSubsetBase {
     NOINLINE void resize() RESTRICT;
 
     ArmyId* army_list_;
+    ArmyId  army_list_size_;
+    ArmyId  free_;
+    ArmyId  prefix_;
     ArmyId real_allocated_;
 };
 
 bool BoardSubsetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
     // logger << "Insert " << red_value << " into BoardSubsetRedBuilder\n";
-    if (left_ == 0) resize();
+    if (free_ == left_) resize();
     auto mask = mask_;
     ArmyId pos = hash64(red_value) & mask;
     ArmyId offset = 0;
@@ -1838,8 +1837,7 @@ bool BoardSubsetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
         if (rv == 0) {
             stats.boardset_probe(offset);
             rv = red_value;
-            *army_list_++ = red_value;
-            --left_;
+            army_list_[free_++] = red_value;
             // cout << "Found empty\n";
             return true;
         }
