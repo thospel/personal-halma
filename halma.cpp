@@ -1554,10 +1554,10 @@ ArmySetCache::ArmySetCache(ArmyId size) {
 
 ArmySetCache::~ArmySetCache() {
     demallocate(cache_, allocated() * static_cast<size_t>(Element::SIZE)+ARMY_PADDING, ALLOC_LOCK);
-    logger << "Hit " << hit << ", miss " << miss;
-    auto sum = hit + miss;
-    if (sum) logger << ", ratio: " << hit * 100 / sum << "%";
-    logger << endl;
+    //logger << "Hit " << hit << ", miss " << miss;
+    //auto sum = hit + miss;
+    //if (sum) logger << ", ratio: " << hit * 100 / sum << "%";
+    //logger << endl;
 }
 
 void ArmySetCache::resize() {
@@ -1570,7 +1570,7 @@ void ArmySetCache::resize() {
     size *= 2;
     mask_ = size-1;
     limit_ = size * factor_;
-    logger << "Resize to " << allocated() << endl;
+    //logger << "Resize to " << allocated() << endl;
 }
 
 FullMove::FullMove(char const* str): FullMove{} {

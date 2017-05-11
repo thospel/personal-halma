@@ -79,9 +79,7 @@ Statistics NAME(uint thid,
     tid = thid;
     ThreadData thread_data;
     // logger << "Started (Set " << available_moves << ")\n" << flush;
-#if BLUE_TO_MOVE
-    ArmySetCache moved_armies_cache;
-#else // BLUE_TO_MOVE
+#if !BLUE_TO_MOVE
     BalanceMask balance_mask;
     if (balance >= 0) {
         int balance_moves = max(available_moves/2 + balance_delay - static_cast<int>(ARMY), 0);
@@ -585,11 +583,7 @@ Statistics NAME(uint thid,
                     armyESymmetric.store(val.symmetric());
                     if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
                     int result_symmetry = cmp(armyE, armyESymmetric);
-#if BLUE_TO_MOVE
-                    auto moved_id = moved_armies_cache.insert(moved_armies, result_symmetry >= 0 ? armyE : armyESymmetric, stats);
-#else // BLUE_TO_MOVE
                     auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric, stats);
-#endif // BLUE_TO_MOVE
                     if (CHECK && UNLIKELY(moved_id == 0))
                         throw_logic("Army Insert returns 0", __FILE__, __LINE__);
 #if BLUE_TO_MOVE
