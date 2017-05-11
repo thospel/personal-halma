@@ -882,7 +882,7 @@ void ArmySetDense::print(ostream& os) const {
     }
 }
 
-void ArmySetSparse::DataCache::SizeCache::init(uint i) {
+void ArmySetSparse::DataArena::SizeArena::init(uint i) {
     block_size_ = (i+1) * Element::SIZE + sizeof(GroupId);
     if (block_size_ >= MMAP_THRESHOLD)
         throw_logic("Block size is way too big");
@@ -894,14 +894,14 @@ void ArmySetSparse::DataCache::SizeCache::init(uint i) {
     cached_ = 0;
 }
 
-void ArmySetSparse::DataCache::SizeCache::free() {
+void ArmySetSparse::DataArena::SizeArena::free() {
     if (!data_) return;
     demallocate(data_, size());
     data_   = nullptr;
     cached_ = 0;
 }
 
-void ArmySetSparse::DataCache::SizeCache::expand() {
+void ArmySetSparse::DataArena::SizeArena::expand() {
     size_t old_size = size();
     size_t new_size =
         max(MMAP_THRESHOLD_ROUND(old_size + old_size / FRACTION),
@@ -913,7 +913,7 @@ void ArmySetSparse::DataCache::SizeCache::expand() {
     size_ = new_size;
 }
 
-void ArmySetSparse::DataCache::SizeCache::shrink() {
+void ArmySetSparse::DataArena::SizeArena::shrink() {
     size_t old_size = size();
     size_t new_size =
         max(MMAP_THRESHOLD_ROUND(lower_bound_ + lower_bound_ / FRACTION),
@@ -927,7 +927,7 @@ void ArmySetSparse::DataCache::SizeCache::shrink() {
     if (old_size <= new_size) throw_logic("This is not a shrink");
 }
 
-void ArmySetSparse::DataCache::SizeCache::post_convert() {
+void ArmySetSparse::DataArena::SizeArena::post_convert() {
     uint n = index() + 1;
     char const* RESTRICT from = data_;
     char const* RESTRICT end = _data(free_);
@@ -945,8 +945,8 @@ void ArmySetSparse::DataCache::SizeCache::post_convert() {
     size_ = free_;
 }
 
-auto ArmySetSparse::DataCache::SizeCache::allocate() -> DataId {
-    // Directly use free_ without test if DATA_CACHE_SIZE is made 0
+auto ArmySetSparse::DataArena::SizeArena::allocate() -> DataId {
+    // Directly use free_ without test if DATA_ARENA_SIZE is made 0
     if (cached()) return cache_[--cached_];
     auto old_free = free_;
     free_ += block_size_;
@@ -954,8 +954,8 @@ auto ArmySetSparse::DataCache::SizeCache::allocate() -> DataId {
     return old_free;
 }
 
-void ArmySetSparse::DataCache::SizeCache::deallocate(Group* groups, DataId data_id) {
-    if (cached() < DATA_CACHE_SIZE) {
+void ArmySetSparse::DataArena::SizeArena::deallocate(Group* groups, DataId data_id) {
+    if (cached() < DATA_ARENA_SIZE) {
         cache_[cached_++] = data_id;
         group_id_at(data_id) = GROUP_ID_MAX;
     } else {
@@ -981,7 +981,7 @@ void ArmySetSparse::DataCache::SizeCache::deallocate(Group* groups, DataId data_
     }
 }
 
-size_t ArmySetSparse::DataCache::SizeCache::check(char const* file, int line) const {
+size_t ArmySetSparse::DataArena::SizeArena::check(char const* file, int line) const {
     if (UNLIKELY(!data_)) throw_logic("No data", file, line);
     if (UNLIKELY(!size_)) throw_logic("Data without size", file, line);
     if (UNLIKELY(size_ % MMAP_THRESHOLD))
@@ -994,7 +994,7 @@ size_t ArmySetSparse::DataCache::SizeCache::check(char const* file, int line) co
     if (UNLIKELY(free_ < lower_bound_)) throw_logic("Free below lower bound", file, line);
     if (UNLIKELY(lower_bound_ % MMAP_THRESHOLD))
         throw_logic("lower_bound_ is not a multipe of MMAP_THRESHOLD", file, line);
-    if (UNLIKELY(cached() > DATA_CACHE_SIZE))
+    if (UNLIKELY(cached() > DATA_ARENA_SIZE))
         throw_logic("Too many cached", file, line);
 
     for (uint i=0; i<cached(); ++i) {
@@ -1010,7 +1010,7 @@ size_t ArmySetSparse::DataCache::SizeCache::check(char const* file, int line) co
     return nr_groups - cached();
 }
 
-void ArmySetSparse::DataCache::SizeCache::check_data(DataId data_id, GroupId group_id, ArmyId nr_elements, char const* file, int line) const {
+void ArmySetSparse::DataArena::SizeArena::check_data(DataId data_id, GroupId group_id, ArmyId nr_elements, char const* file, int line) const {
     if (UNLIKELY(data_id >= free_))
         throw_logic("DataId " + to_string(data_id) + " beyond free " + to_string(free_), file, line);
     if (UNLIKELY(group_id_at(data_id) != group_id))
@@ -1027,22 +1027,22 @@ void ArmySetSparse::DataCache::SizeCache::check_data(DataId data_id, GroupId gro
     }
 }
 
-void ArmySetSparse::DataCache::init() {
+void ArmySetSparse::DataArena::init() {
     for (uint i=0; i<GROUP_SIZE; ++i)
         cache_[i].init(i);
 }
 
-void ArmySetSparse::DataCache::free() {
+void ArmySetSparse::DataArena::free() {
     for (auto& cache: cache_)
         cache.free();
 }
 
-void ArmySetSparse::DataCache::post_convert() {
+void ArmySetSparse::DataArena::post_convert() {
     for (auto& cache: cache_)
         cache.post_convert();
 }
 
-void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos, Element const& old_element) {
+void ArmySetSparse::DataArena::append(Group* groups, GroupId group_id, uint pos, Element const& old_element) {
     // if (CHECK) old_element.armyZ().check(__FILE__, __LINE__);
     char const* RESTRICT old_e = reinterpret_cast<char const*>(&old_element);
     Group& group = groups[group_id];
@@ -1071,7 +1071,7 @@ void ArmySetSparse::DataCache::append(Group* groups, GroupId group_id, uint pos,
     group.set(pos);
 }
 
-void ArmySetSparse::DataCache::check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, ArmyId nr_elements, char const* file, int line) const {
+void ArmySetSparse::DataArena::check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, ArmyId nr_elements, char const* file, int line) const {
     if (UNLIKELY(!groups)) throw_logic("NULL groups");
 
     size_t nr_groups = 0;
@@ -1104,7 +1104,7 @@ void ArmySetSparse::_init(size_t size) {
 
     cmallocate(groups_, nr_groups, memory_flags_);
     // logger << "New groups  " << static_cast<void const *>(groups_) << "\n";
-    data_cache_.init();
+    data_arena_.init();
     mallocate(overflow_, GROUP_SIZE * Element::SIZE);
     overflow_size_ = GROUP_SIZE * Element::SIZE;
 }
@@ -1124,7 +1124,7 @@ ArmySetSparse::~ArmySetSparse() {
 
 void ArmySetSparse::clear() {
     if (groups_) {
-        data_cache_.free();
+        data_arena_.free();
         demallocate(groups_, nr_groups(), memory_flags_);
         groups_ = nullptr;
     }
@@ -1156,10 +1156,10 @@ ArmyId ArmySetSparse::insert(Army const& army, uint64_t hash, atomic<ArmyId>& la
             // logger << "Found empty, assign id " << army_id << "\n" << Image{army} << flush;
             if (army_id >= ARMYID_HIGHBIT)
                 throw(overflow_error("ArmyId too large"));
-            data_cache_.append(groups, group_id, pos, army_id, army.begin(), stats);
+            data_arena_.append(groups, group_id, pos, army_id, army.begin(), stats);
             return army_id;
         }
-        Element const& element = data_cache_.at(group, pos);
+        Element const& element = data_arena_.at(group, pos);
         if (army == element.armyZ()) {
             stats.armyset_probe(offset);
             stats.armyset_try();
@@ -1182,7 +1182,7 @@ ArmyId ArmySetSparse::find(ArmySet const& army_set, Army const& army, uint64_t h
         uint pos = hash & GROUP_MASK;
         // cout << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n";
         if (group.bit(pos) == 0) return 0;
-        ArmyId i = data_cache_.converted_id(group, pos);
+        ArmyId i = data_arena_.converted_id(group, pos);
         if (army == army_set.cat(i)) return i;
         hash += ++offset;
     }
@@ -1200,7 +1200,7 @@ ArmyId ArmySetSparse::find(ArmySet const& army_set, ArmyPos const& army, uint64_
         uint pos = hash & GROUP_MASK;
         // cout << "Try [" << group_id << "," << pos<< "] of " << allocated() << "\n";
         if (group.bit(pos) == 0) return 0;
-        ArmyId i = data_cache_.converted_id(group, pos);
+        ArmyId i = data_arena_.converted_id(group, pos);
         if (army == army_set.cat(i)) return i;
         hash += ++offset;
     }
@@ -1209,8 +1209,8 @@ ArmyId ArmySetSparse::find(ArmySet const& army_set, ArmyPos const& army, uint64_
 void ArmySetSparse::resize() {
     // if (CHECK) check(__FILE__, __LINE__);
 
-    DataCache new_cache;
-    new_cache.init();
+    DataArena new_arena;
+    new_arena.init();
     array<GroupBuilder, GROUP_BUILDERS> groups_low;
     array<GroupBuilder, GROUP_BUILDERS> groups_high;
 
@@ -1232,8 +1232,8 @@ void ArmySetSparse::resize() {
          ++g_low, ++g_high) {
         uint g = g_low % GROUP_BUILDERS;
         if (g_low >= GROUP_BUILDERS) {
-            new_cache.copy(groups, g_low  - GROUP_BUILDERS, groups_low [g]);
-            new_cache.copy(groups, g_high - GROUP_BUILDERS, groups_high[g]);
+            new_arena.copy(groups, g_low  - GROUP_BUILDERS, groups_low [g]);
+            new_arena.copy(groups, g_high - GROUP_BUILDERS, groups_high[g]);
         }
         groups_low [g].clear();
         groups_high[g].clear();
@@ -1241,7 +1241,7 @@ void ArmySetSparse::resize() {
         uint n = old_group.bits();
         if (n == 0) continue;
         DataId old_data_id = old_group.data_id();
-        char const* RESTRICT ptr = data_cache_.data(n-1, old_data_id);
+        char const* RESTRICT ptr = data_arena_.data(n-1, old_data_id);
         for (uint i=0; i<n; ++i, ptr += Element::SIZE) {
             auto& old_element = Element::element(ptr);
             uint64_t hash = old_element.hash() >> ARMY_SUBSET_BITS;
@@ -1281,16 +1281,16 @@ void ArmySetSparse::resize() {
         uint g = g_low % GROUP_BUILDERS;
         GroupId g_high = g_low + old_nr_groups;
 
-        new_cache.copy(groups, g_low , groups_low [g]);
-        new_cache.copy(groups, g_high, groups_high[g]);
+        new_arena.copy(groups, g_low , groups_low [g]);
+        new_arena.copy(groups, g_high, groups_high[g]);
     }
 
-    // if (CHECK) new_cache.check(groups, new_nr_groups, size(), overflowed(), __FILE__, __LINE__);
-    data_cache_.copy(new_cache);
+    // if (CHECK) new_arena.check(groups, new_nr_groups, size(), overflowed(), __FILE__, __LINE__);
+    data_arena_.copy(new_arena);
 
     //print(logger, false);
     //logger << "Resize half done\n" << flush;
-    // if (CHECK) data_cache_.check(groups_, new_nr_groups, size(), overflowed(), __FILE__, __LINE__);
+    // if (CHECK) data_arena_.check(groups_, new_nr_groups, size(), overflowed(), __FILE__, __LINE__);
 
     // logger << "overflow " << overflowed() << " / " << old_nr_groups << endl;
     while (_overflowed()) {
@@ -1305,7 +1305,7 @@ void ArmySetSparse::resize() {
             // logger << "Try [" << group_id << "," << pos << "]\n";
             if (new_group.bit(pos) == 0) {
                 // logger << "Hit\n";
-                data_cache_.append(groups, group_id, pos, old_element);
+                data_arena_.append(groups, group_id, pos, old_element);
                 break;
             }
             hash += ++offset;
@@ -1334,7 +1334,7 @@ void ArmySetSparse::_convert_hash(uint unit, Coord* armies, ArmyId nr_elements, 
         // cout << "Converting group " << g << " with " << n << " elements\n";
         if (n == 0) continue;
         DataId old_data_id = group.data_id();
-        char const* RESTRICT old_ptr = data_cache_.data(n-1, old_data_id);
+        char const* RESTRICT old_ptr = data_arena_.data(n-1, old_data_id);
         for (uint i=0; i<n; ++i, old_ptr += Element::SIZE) {
             auto& old_element = Element::element(old_ptr);
             auto armyZ = old_element.armyZ();
@@ -1343,16 +1343,16 @@ void ArmySetSparse::_convert_hash(uint unit, Coord* armies, ArmyId nr_elements, 
                 throw_logic("Element " + to_string(old_element.id()) + " is out of range [1.." + to_string(nr_elements) + "]");
             std::copy(armyZ.begin(), armyZ.end(), &armies[old_element.id() * static_cast<size_t>(ARMY)]);
         }
-        if (keep) group.data_id() = data_cache_.converted_data_id(n, old_data_id);
+        if (keep) group.data_id() = data_arena_.converted_data_id(n, old_data_id);
     }
     if (keep) {
         unlock();
-        data_cache_.post_convert();
+        data_arena_.post_convert();
     } else {
         demallocate(groups, n_groups, memory_flags_);
         groups_ = nullptr;
         unlock();
-        data_cache_.free();
+        data_arena_.free();
     }
 }
 
@@ -1369,7 +1369,7 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
         if (group.bitmap()) {
             uint n = group.bits();
             DataId data_id = group.data_id();
-            char const* RESTRICT ptr = data_cache_.data(n-1, data_id);
+            char const* RESTRICT ptr = data_arena_.data(n-1, data_id);
             for (uint i=0; i<GROUP_SIZE; ++i)
                 if (group.bit(i)) {
                     Element const& element = Element::element(ptr);
@@ -1390,7 +1390,7 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
         if (group.bitmap()) {
             uint n = group.bits();
             DataId data_id = group.data_id();
-            char const* RESTRICT ptr = data_cache_.data(n-1, data_id);
+            char const* RESTRICT ptr = data_arena_.data(n-1, data_id);
             for (uint i=0; i<GROUP_SIZE; ++i)
                 if (group.bit(i)) {
                     Element const& element = Element::element(ptr);
@@ -1417,7 +1417,7 @@ void ArmySetSparse::check(ArmyId nr_elements, char const* file, int line) const 
         throw_logic("Excessive max overflow", file, line);
     if (UNLIKELY(overflow_max_ % Element::SIZE))
         throw_logic("Max Overflow is not a multiple of Element::SIZE", file, line);
-    data_cache_.check(groups_, nr_groups(), size(), 0, nr_elements, file, line);
+    data_arena_.check(groups_, nr_groups(), size(), 0, nr_elements, file, line);
 }
 
 ArmySet::ArmySet(bool lock):
@@ -1548,6 +1548,8 @@ void ArmySet::check(char const* file, int line) const {
 ArmySetCache::ArmySetCache(ArmyId size) {
     cmallocate(cache_, size * static_cast<size_t>(Element::SIZE)+ARMY_PADDING, ALLOC_LOCK);
     mask_ = size - 1;
+    factor_ = nr_threads * FACTOR;
+    limit_ = size * factor_;
 }
 
 ArmySetCache::~ArmySetCache() {
@@ -1565,24 +1567,10 @@ void ArmySetCache::resize() {
     size_t new_allocated = old_allocated * 2;
     remallocate(cache_, old_allocated+ARMY_PADDING, new_allocated+ARMY_PADDING, ALLOC_LOCK);
     std::memcpy(cache_+old_allocated, cache_, old_allocated);
-    mask_ = 2*size-1;
-}
-
-ArmyId ArmySetCache::insert(ArmySet& set, ArmyPos const& army, Statistics& stats) {
-    ArmyId hash = army.hash();
-    Element& element = Element::element(cache_, hash & mask_);
-    // logger << "Lookup:\n" << Image{army};
-    if (army == element.armyZ()) {
-        // logger << "Hit " << element.id() << endl;
-        ++hit;
-        return element.id();
-    }
-    ++miss;
-    element = set.insert(army, hash, stats);
-    ArmyId army_id = element.id();
-    // logger << "Miss " << army_id << endl;
-    if (set.size() > allocated() * FACTOR) resize();
-    return army_id;
+    size *= 2;
+    mask_ = size-1;
+    limit_ = size * factor_;
+    logger << "Resize to " << allocated() << endl;
 }
 
 FullMove::FullMove(char const* str): FullMove{} {
@@ -2810,9 +2798,9 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
     vector<unique_ptr<ArmySet>>  army_set;
     army_set.reserve(nr_moves+2);
 
-    board_set.emplace_back(new BoardSet(true));
-    army_set.emplace_back(new ArmySet);
-    army_set.emplace_back(new ArmySet);
+    board_set.emplace_back(make_unique<BoardSet>(true));
+    army_set.emplace_back(make_unique<ArmySet>());
+    army_set.emplace_back(make_unique<ArmySet>());
     board_set[0]->insert(board, *army_set[0], *army_set[1], nr_moves);
     army_set[0]->convert_hash();
     army_set[1]->convert_hash();
@@ -2840,11 +2828,11 @@ void backtrack(Board const& board, int nr_moves, int solution_moves,
 
     cout << setw(14) << "set " << setw(2) << nr_moves << endl;
     for (int i=0; solution_moves>0; --nr_moves, --solution_moves, ++i) {
-        board_set.emplace_back(new BoardSet(true));
+        board_set.emplace_back(make_unique<BoardSet>(true));
         auto& boards_from = *board_set[i];
         auto& boards_to   = *board_set[i+1];
 
-        army_set.emplace_back(new ArmySet);
+        army_set.emplace_back(make_unique<ArmySet>());
         auto& moving_armies         = *army_set[i];
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies          = *army_set[i+2];
