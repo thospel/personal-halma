@@ -4,6 +4,8 @@
 #include <csignal>
 
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
 
@@ -91,16 +93,6 @@ std::string time_string() {
 }
 
 thread_local uint tid = -1;
-inline uint thread_id() PURE;
-uint thread_id() {
-    return tid;
-}
-
-inline std::string thread_name();
-std::string thread_name() {
-    return std::to_string(thread_id());
-}
-
 LogBuffer::LogBuffer(): prefix_{nr_threads == 1 ? "" : "Thread " + thread_name() + ": "} {
     buffer_.resize(BLOCK);
     setp(&buffer_[0], &buffer_[BLOCK]);
@@ -208,6 +200,25 @@ void set_signals() {
         throw_errno("Could not set SIGUNT handler");
     if (sigaction(SIGTERM, &new_action, nullptr))
         throw_errno("Could not set SIGTERM handler");
+}
+
+void* _fd_mmap(Fd fd, size_t length) {
+    size_t length_rounded = PAGE_ROUND(length);
+    void* ptr = mmap(nullptr,
+                     length_rounded,
+                     PROT_READ,
+                     MAP_PRIVATE, fd, 0);
+    if (ptr == MAP_FAILED)
+        throw_errno("Could not mmap " + std::to_string(length) + " bytes");
+    //std::cout << "Mmap " << length << " bytes -> " << static_cast<void const *>(ptr) << "\n";
+    return ptr;
+}
+
+void _fd_munmap(void *ptr, size_t length) {
+    // std::cout << "Unmap " << length << " bytes\n";
+    size_t length_rounded = PAGE_ROUND(length);
+    if (munmap(ptr, length_rounded))
+        throw_errno("Could not set munmap " + std::to_string(length) + " bytes");
 }
 
 inline int _mlock2(void const* addr, size_t length, int flags) ALWAYS_INLINE;
@@ -555,6 +566,57 @@ void update_allocated() {
         total_mmaps_     += mmaps_;
         total_mlocked_   += mlocked_;
         total_mlocks_    += mlocks_;
+    }
+}
+
+Fd OpenReadWrite(std::string const& filename) {
+    int fd = open(filename.c_str(), O_RDWR | O_TRUNC | O_CREAT, 0666);
+    if (fd < 0)
+        throw_errno("Could not open '" + filename + "' for write");
+    return fd;
+}
+
+Fd OpenRead(std::string const& filename) {
+    int fd = open(filename.c_str(), O_RDONLY);
+    if (fd < 0)
+        throw_errno("Could not open '" + filename + "' for read");
+    return fd;
+}
+
+void Close(Fd fd, std::string const& filename) {
+    if (close(fd))
+        throw_errno("Could not close '" + filename + "'");
+}
+
+void Write(Fd fd, void const* buffer, size_t size, std::string const& filename) {
+    while (true) {
+        auto rc = write(fd, buffer, size);
+        if (rc > 0) {
+            // logger << "Write " << rc << " of " << size << " bytes" << std::endl;
+            size -= rc;
+            if (size == 0) return;
+            logger << "Partial write " << rc << " bytes" << std::endl;
+            buffer = static_cast<char const*>(buffer) + rc;
+        } else if (rc == 0)
+            throw_logic("Zero size write");
+        else if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN)
+            throw_errno("Could not write " + std::to_string(size) + "bytes to '" + filename + "'");
+    }
+}
+
+void Read(Fd fd, void* buffer, size_t offset, size_t size, std::string const& filename) {
+    while (true) {
+        auto rc = pread(fd, buffer, size, offset);
+        if (rc > 0) {
+            size -= rc;
+            if (size == 0) return;
+            logger << "Partial read " << rc << " bytes" << std::endl;
+            buffer = static_cast<char*>(buffer) + rc;
+            offset -= rc;
+        } else if (rc == 0)
+            throw_logic("Unexpected EOF while reading from '" + filename + "'");
+        else if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN)
+            throw_errno("Could not read " + std::to_string(size) + "bytes from '" + filename + "'");
     }
 }
 

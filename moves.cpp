@@ -92,7 +92,7 @@ Statistics NAME(uint thid,
 
     Statistics stats;
 #if RED_NORMAL
-    BoardSubsetRedBuilder subset_to;
+    BoardSubsetRedBuilder& subset_to = boards_to.builder();
 #endif // RED_NORMAL
     while (true) {
 #if BLUE_NORMAL
@@ -655,9 +655,11 @@ StatisticsE ALL_NAME(
     stats.armyset_untry(moved_armies.size());
     stats.boardset_untry(boards_to.size());
 
+    boards_from.pre_read();
+    uint n = boards_to.pre_write();
     vector<future<Statistics>> results;
 #if BACKTRACK
-    for (uint i=1; i < nr_threads; ++i)
+    for (uint i=1; i < n; ++i)
         results.emplace_back
             (async
              (launch::async, NAME,
@@ -675,7 +677,7 @@ StatisticsE ALL_NAME(
 #endif // BLUE_TO_MOVE
      nr_moves);
 #else // BACKTRACK
-    for (uint i=1; i < nr_threads; ++i)
+    for (uint i=1; i < n; ++i)
         results.emplace_back
             (async
              (launch::async, NAME,
@@ -688,6 +690,10 @@ StatisticsE ALL_NAME(
      nr_moves);
 #endif // BACKTRACK
     for (auto& result: results) stats += result.get();
+
+    boards_to.post_write();
+    boards_from.post_read();
+
     stats.overflow(moved_armies.overflow_max());
     stats.armyset_size(moved_armies.size());
     stats.boardset_size(boards_to.size());

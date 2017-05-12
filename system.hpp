@@ -77,7 +77,7 @@
      #include <spe.h>
 #endif
 
-using Offset = size_t;
+using Fd = int;
 
 size_t const MMAP_THRESHOLD  = 128 * 1024;
 // size_t const MMAP_THRESHOLD  = 4096;
@@ -134,9 +134,19 @@ ssize_t total_mlocks() PURE;
 void update_allocated();
 void init_system();
 
+inline uint thread_id() PURE;
+uint thread_id() {
+    return tid;
+}
+
+inline std::string thread_name();
+std::string thread_name() {
+    return std::to_string(thread_id());
+}
+
 inline bool main_thread() PURE;
 bool main_thread() {
-    return tid == 0;
+    return thread_id() == 0;
 }
 
 inline uint popcount64(uint64_t value) FUNCTIONAL;
@@ -166,6 +176,8 @@ inline bool use_mmap(size_t size) {
     // return false;
 }
 
+void* _fd_mmap(Fd fd, size_t length);
+void _fd_munmap(void *ptr, size_t length);
 void _mlock(void* ptr, size_t length);
 void _munlock(void* ptr, size_t length);
 void* _mallocate(size_t new_size) MALLOC ALLOC_SIZE(1) RETURNS_NONNULL WARN_UNUSED;
@@ -183,14 +195,26 @@ void _demallocate(void *ptr, size_t old_size) NONNULL;
 void _demallocate(void *ptr, size_t old_size, int flags) NONNULL;
 
 template<class T>
-void memlock(T* ptr, size_t size) {
+inline void FdMap(T*& ptr, Fd fd, size_t size) {
+    size *= sizeof(T);
+    ptr = static_cast<T*>(_fd_mmap(fd, size));
+}
+
+template<class T>
+inline void FdUnmap(T*& ptr, size_t size) {
+    size *= sizeof(T);
+    _fd_munmap(ptr, size);
+}
+
+template<class T>
+inline void memlock(T* ptr, size_t size) {
     size *= sizeof(T);
     // We assume only complete ranges are locked so size also implies mmmapped
     if (use_mmap(size)) _mlock(ptr, size);
 }
 
 template<class T>
-void memunlock(T* ptr, size_t size) {
+inline void memunlock(T* ptr, size_t size) {
     size *= sizeof(T);
     // We assume only complete ranges are unlocked so size also implies mmmapped
     if (use_mmap(size)) _munlock(ptr, size);
@@ -327,6 +351,12 @@ void deallocate(T* old_ptr, size_t old_size, int flags) {
     delete [] reinterpret_cast<char*>(old_ptr);
     allocated_ -= old_size * sizeof(T);
 }
+
+Fd OpenReadWrite(std::string const& filename);
+Fd OpenRead(std::string const& filename);
+void Close(Fd fd, std::string const& filename);
+void Write(Fd fd, void const* buffer, size_t size, std::string const& filename);
+void Read(Fd fd, void* buffer, size_t offset, size_t size, std::string const& filename);
 
 class LogBuffer: public std::streambuf {
   public:
