@@ -97,6 +97,7 @@ bool const PASS = false;
 bool const BALANCE  = true;
 
 bool const MLOCK = true;
+bool const MEMORY_REPORT = false;
 
 #ifndef CHECK
 # define CHECK   0
@@ -1181,6 +1182,7 @@ class ArmySetSparse {
             }
             inline size_t check(char const* file, int line) const ALWAYS_INLINE;
             inline void check_data(DataId data_id, GroupId group_id, ArmyId nr_elements, char const* file, int line) const ALWAYS_INLINE;
+            size_t memory_report(ostream& os) const COLD;
           private:
 #if CHECK
             char* _data(DataId i) PURE {
@@ -1257,6 +1259,7 @@ class ArmySetSparse {
             return cache_[i].data(data_id);
         }
         inline void check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, ArmyId nr_elements, char const* file, int line) const ALWAYS_INLINE;
+        size_t memory_report(ostream& os) const COLD;
       private:
         array<SizeArena, GROUP_SIZE> cache_;
     };
@@ -1333,6 +1336,7 @@ class ArmySetSparse {
     ArmySetSparse& operator=(ArmySetSparse const&) = delete;
 
     inline void _convert_hash(uint unit, Coord* armies, ArmyId nr_elements, bool keep = false) ALWAYS_INLINE;
+    size_t memory_report(ostream& os, string const& prefix="") const COLD;
 
   private:
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
@@ -1418,6 +1422,7 @@ class ArmySubsets {
     static inline uint work_units() PURE {
         return ARMY_SUBSETS * ArmySubset::work_units();
     }
+    size_t memory_report(ostream& os, string const& prefix="") const COLD;
   private:
     array<ArmySubset, 1 << MAX_ARMY_SUBSET_BITS> subsets_;
 };
@@ -1463,6 +1468,7 @@ class ArmySet {
     inline void print(ostream& os, bool show_boards = true) const {
         for (auto& subset: subsets_) subset.print(os, show_boards);
     }
+    size_t memory_report(ostream& os, string const& prefix="") const COLD;
 
   private:
     inline void _convert_hash(bool keep) ALWAYS_INLINE;
@@ -1691,7 +1697,7 @@ class BoardSubset: public BoardSubsetBase {
     ArmyId random_example(ArmyId& symmetry) const COLD;
     void print(ostream& os) const;
     void print() const { print(cout); }
-
+    inline size_t memory_report() const;
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.7*factor); }
     NOINLINE void resize() RESTRICT;
@@ -1777,6 +1783,8 @@ class BoardSubsetRed: public BoardSubsetBase {
         return _find(join(red_id, symmetry < 0));
     }
     inline void map(BoardSetRed& set);
+    inline size_t memory_report() const;
+
   private:
     bool _insert(ArmyId red_value, Statistics& stats);
     bool _find(ArmyId red_value) const PURE;
@@ -1847,6 +1855,7 @@ class BoardSubsetRedBuilder: public BoardSubsetBase {
     inline void munmap();
     inline ArmyId read1(ArmyId pos) const ALWAYS_INLINE;
     inline ArmyId* map() PURE { return army_mmap_; }
+    size_t memory_report(ostream& os, string const& prefix="") const COLD;
 
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.5*factor); }
@@ -1948,13 +1957,7 @@ class BoardSet: public BoardSetBase {
     friend class BoardSubsetRef;
   public:
     BoardSet(bool keep = false, ArmyId size = INITIAL_SIZE);
-    ~BoardSet() {
-        for (auto& subset: *this)
-            subset.destroy();
-        // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
-        ++subsets_;
-        demallocate(subsets_, capacity());
-    }
+    ~BoardSet();
     inline uint pre_write(uint n = nr_threads) { return n; }
     inline void post_write() {}
     inline void pre_read() { }
@@ -2037,6 +2040,8 @@ class BoardSet: public BoardSetBase {
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
     void print(ostream& os) const;
+    size_t memory_report(ostream& os, string const& prefix="") const COLD;
+
   private:
     NOINLINE void resize() RESTRICT;
     inline BoardSubset& at(ArmyId id) PURE {
@@ -2086,6 +2091,8 @@ class BoardSetRed: public BoardSetBase {
     bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE COLD;
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
+    size_t memory_report(ostream& os, string const& prefix="") const COLD;
+
   private:
     NOINLINE void resize() RESTRICT;
     // Inefficient for core use, only meant for simple initialization
@@ -2610,6 +2617,27 @@ void Board::do_move(FullMove const& move_, bool blue_to_move) {
 void Board::do_move(FullMove const& move_) {
     do_move(move_.move());
 }
+
+size_t memory_report
+(ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet const& moved_armies,
+ BoardSetRed const& boards_from,
+ BoardSet    const& boards_to) COLD;
+
+size_t memory_report
+(ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet const& moved_armies,
+ BoardSet    const& boards_from,
+ BoardSetRed const& boards_to) COLD;
+
+size_t memory_report
+(ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet const& moved_armies,
+ BoardSet const& boards_from,
+ BoardSet const& boards_to) COLD;
 
 StatisticsE make_all_blue_moves_slow
 (BoardSetRed& boards_from,

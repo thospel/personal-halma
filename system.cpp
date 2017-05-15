@@ -570,6 +570,7 @@ void update_allocated() {
 }
 
 Fd OpenReadWrite(std::string const& filename) {
+    // std::cout << "Open " << filename << "\n";
     int fd = open(filename.c_str(), O_RDWR | O_TRUNC | O_CREAT, 0666);
     if (fd < 0)
         throw_errno("Could not open '" + filename + "' for write");
@@ -584,6 +585,7 @@ Fd OpenRead(std::string const& filename) {
 }
 
 void Close(Fd fd, std::string const& filename) {
+    // std::cout << "Close " << filename << "\n";
     if (close(fd))
         throw_errno("Could not close '" + filename + "'");
 }

@@ -671,6 +671,19 @@ void BoardSubsetRedBuilder::resize() {
     if (red_file && write_end_ < left_) left_ = write_end_;
 }
 
+size_t BoardSubsetRedBuilder::memory_report(ostream& os, string const& prefix) const {
+    size_t sz = 0;
+    os << prefix << "armies: ArmyId[" << real_allocated_ << "] (" << real_allocated_ * sizeof(armies_[0]) << " bytes, locked)\n";
+    sz += real_allocated_ * sizeof(armies_[0]);
+
+    os << prefix << "army list: ";
+    if (army_list_) {
+        os << "ArmyId[" << army_list_size_ << "] (" << army_list_size_ * sizeof(army_list_[0]) << " bytes, locked)\n";
+        sz += army_list_size_ * sizeof(army_list_[0]);
+    } else os << "nullptr\n";
+    return sz;
+}
+
 BoardSetBase::BoardSetBase(bool keep, ArmyId size): size_{0}, solution_id_{0}, capacity_{size}, from_{1}, top_{1}, keep_{keep} {
 }
 
@@ -685,6 +698,14 @@ BoardSet::BoardSet(bool keep, ArmyId size) :
     cmallocate(subsets_, capacity());
     --subsets_;
     // cout << "Create BoardSet " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
+}
+
+BoardSet::~BoardSet() {
+    for (auto& subset: *this)
+        subset.destroy();
+    // cout << "Destroy BoardSet " << static_cast<void const*>(subsets_) << "\n";
+    ++subsets_;
+    demallocate(subsets_, capacity());
 }
 
 void BoardSet::resize() {
@@ -1127,6 +1148,15 @@ void ArmySetSparse::DataArena::SizeArena::check_data(DataId data_id, GroupId gro
     }
 }
 
+size_t ArmySetSparse::DataArena::SizeArena::memory_report(ostream& os) const {
+    if (data_) {
+        os << size();
+        return size();
+    }
+    os << "X";
+    return 0;
+}
+
 void ArmySetSparse::DataArena::init() {
     for (uint i=0; i<GROUP_SIZE; ++i)
         cache_[i].init(i);
@@ -1196,6 +1226,18 @@ void ArmySetSparse::DataArena::check(Group const* groups, GroupId n, ArmyId size
         throw_logic("Excessive overflow", file, line);
 }
 
+size_t ArmySetSparse::DataArena::memory_report(ostream& os) const {
+    size_t sz = 0;
+    uint i = 0;
+    for (auto& c: cache_) {
+        os << setw(3) << i << ": ";
+        sz += c.memory_report(os);
+        ++i;
+    }
+
+    return sz;
+}
+
 void ArmySetSparse::_init(size_t size) {
     size_t nr_groups = size / GROUP_SIZE;
 
@@ -1218,7 +1260,10 @@ ArmySetSparse::ArmySetSparse():
     memory_flags_{0} {}
 
 ArmySetSparse::~ArmySetSparse() {
-    if (groups_)   demallocate(groups_, nr_groups(), memory_flags_);
+    if (groups_) {
+        data_arena_.free();
+        demallocate(groups_, nr_groups(), memory_flags_);
+    }
     if (overflow_) demallocate(overflow_, overflow_size_);
 }
 
@@ -1487,6 +1532,41 @@ void ArmySetSparse::check(ArmyId nr_elements, char const* file, int line) const 
     data_arena_.check(groups_, nr_groups(), size(), 0, nr_elements, file, line);
 }
 
+size_t ArmySetSparse::memory_report(ostream& os, string const& prefix) const {
+    size_t sz = 0;
+    os << prefix << "groups = ";
+    if (groups_) {
+        os << "Group[" << nr_groups() << "] (" << nr_groups() * sizeof(Group) << " bytes, " << (memory_flags_ & ALLOC_LOCK ? "locked" : "unlocked") << ")\n";
+        sz += nr_groups() * sizeof(Group);
+    } else os << "nullptr\n";
+
+    os << prefix << "overflow = ";
+    if (overflow_) {
+        os << "char[" << overflow_size_ << "]\n";
+        sz += overflow_size_;
+    } else os << "nullptr\n";
+
+    size_t arena = 0;
+    os << prefix << "data arena: char[]";
+    arena += data_arena_.memory_report(os);
+    os << " = " << arena << "\n";
+    sz += arena;
+
+    return sz;
+}
+
+size_t ArmySubsets::memory_report(ostream& os, string const& prefix) const {
+    size_t sz = 0;
+    uint i=0;
+    auto pre = prefix + "  ";
+    for (auto& subset: subsets_) {
+        os << prefix << " subset[" << setw(2) << i << "]:\n";
+        sz += subset.memory_report(os, pre);
+        ++i;
+    }
+    return sz;
+}
+
 ArmySet::ArmySet(bool lock):
     armies_{nullptr},
     memory_flags_{MLOCK ? lock * ALLOC_LOCK : 0} {
@@ -1604,6 +1684,19 @@ void ArmySet::check(char const* file, int line) const {
 
     ArmyId nr_elements = size();
     for (auto& subset: subsets_) subset.check(nr_elements, file, line);
+}
+
+size_t ArmySet::memory_report(ostream& os, string const& prefix) const {
+    size_t sz = 0;
+    os << prefix << "armies = ";
+    if (armies_) {
+        os << "Coord[" << size() << " * " << ARMY << "] (" << size() * sizeof(Coord) * ARMY << " bytes)\n";
+        sz += size() * sizeof(Coord) * ARMY;
+    } else os << "nullptr\n";
+
+    sz += subsets_.memory_report(os, prefix);
+    os << prefix << "ArmySet total memory = " << sz << " bytes\n";
+    return sz;
 }
 
 ArmySetCache::ArmySetCache(ArmyId size) {
@@ -2024,6 +2117,11 @@ void Tables::print_red_parity_count(ostream& os) const {
 
 Tables tables;
 
+size_t BoardSubset::memory_report() const {
+    if (armies_) return allocated();
+    return 0;
+}
+
 void BoardSet::insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) {
     Statistics dummy_stats;
 
@@ -2098,6 +2196,23 @@ Board BoardSet::random_example(ArmySet const& opponent_armies, ArmySet const& mo
     }
 }
 
+size_t BoardSet::memory_report(ostream& os, string const& prefix) const {
+    size_t sz = 0;
+    os << prefix << " subsets = ";
+    if (subsets_) {
+        os << "BoardSubset[" << capacity() << "] (" << capacity() * sizeof(subsets_[0]) << " bytes)\n";
+        sz += capacity() * sizeof(subsets_[0]);
+        size_t total_subset_size = 0;
+        for (auto& subset: *this)
+            total_subset_size += subset.memory_report();
+        os << prefix << " Total in subsets ArmyId[" << total_subset_size << "] (" << total_subset_size * sizeof(ArmyId) << " bytes)\n";
+        sz += total_subset_size * sizeof(ArmyId);
+    } else os << "nullptr\n";
+
+    os << prefix << "BoardSet total memory = " << sz << " bytes\n";
+    return sz;
+}
+
 bool BoardSubsetRed::_insert(ArmyId red_value, Statistics& stats) {
     // cout << "Insert " << red_value << "\n";
     if (!main_thread())
@@ -2109,6 +2224,11 @@ bool BoardSubsetRed::_insert(ArmyId red_value, Statistics& stats) {
     new_list[0] = red_value;
     *this = BoardSubsetRed{new_list, 1};
     return true;
+}
+
+size_t BoardSubsetRed::memory_report() const {
+    if (armies_) return size();
+    return 0;
 }
 
 bool BoardSetRed::_insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
@@ -2211,6 +2331,41 @@ Board BoardSetRed::random_example(ArmySet const& opponent_armies, ArmySet const&
         Army const red {red_armies,  red_id, symmetry};
         return Board{blue, red};
     }
+}
+
+size_t BoardSetRed::memory_report(ostream& os, string const& prefix) const {
+    size_t sz = 0;
+    os << prefix << "subsets = ";
+    if (subsets_) {
+        os << "BoardSubsetRed[" << capacity() << "] (" << capacity() * sizeof(subsets_[0]) << " bytes)\n";
+        sz += capacity() * sizeof(subsets_[0]);
+
+        if (red_file)
+            os << prefix << " Total in subsets = 0 (index into fd mmap)\n";
+        else {
+            size_t total_subset_size = 0;
+            for (auto& subset: *this)
+                total_subset_size += subset.memory_report();
+            os << prefix << " Total in subsets ArmyId[" << total_subset_size << "] (" << total_subset_size * sizeof(ArmyId) << " bytes)\n";
+            sz += total_subset_size * sizeof(ArmyId);
+        }
+    } else os << "nullptr\n";
+
+    uint i=0;
+    auto pre = prefix + "  ";
+    for (auto& builder: builders_) {
+        os << prefix << " BoardSubsetRedBuilder[" << i << "]:";
+        if (builder) {
+            os << "\n";
+            sz += builder->memory_report(os, pre);
+        } else
+            os << " ----\n";
+
+        ++i;
+    }
+
+    os << prefix << "BoardSetRed total memory = " << sz << " bytes\n";
+    return sz;
 }
 
 int Board::min_nr_moves(bool blue_to_move) const {
@@ -2578,6 +2733,81 @@ void Svg::write(time_t start_time, time_t stop_time,
         rm_file(svg_file_tmp);
         throw;
     }
+}
+
+size_t memory_report
+(ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet const& moved_armies,
+ BoardSetRed const& boards_from,
+ BoardSet    const& boards_to) {
+    size_t sz = 0;
+    logger << "moving armies:\n";
+    sz += moving_armies.memory_report(logger, " ");
+    logger << "opponent armies:\n";
+    sz += opponent_armies.memory_report(logger, " ");
+    logger << "moved armies:\n";
+    sz += moved_armies.memory_report(logger, " ");
+
+    logger << "boards from:\n";
+    sz += boards_from.memory_report(logger, " ");
+    logger << "boards to:\n";
+    sz += boards_to.memory_report(logger, " ");
+
+    logger << "Total memory " << sz << " bytes\n";
+    logger.flush();
+
+    return sz;
+}
+
+size_t memory_report
+(ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet const& moved_armies,
+ BoardSet    const& boards_from,
+ BoardSetRed const& boards_to) {
+    size_t sz = 0;
+    logger << "moving armies:\n";
+    sz += moving_armies.memory_report(logger, " ");
+    logger << "opponent armies:\n";
+    sz += opponent_armies.memory_report(logger, " ");
+    logger << "moved armies:\n";
+    sz += moved_armies.memory_report(logger, " ");
+
+    logger << "boards from:\n";
+    sz += boards_from.memory_report(logger, " ");
+    logger << "boards to:\n";
+    sz += boards_to.memory_report(logger, " ");
+
+    logger << "Total memory " << sz << " bytes\n";
+    logger.flush();
+
+    return sz;
+}
+
+size_t memory_report
+(ArmySet const& moving_armies,
+ ArmySet const& opponent_armies,
+ ArmySet const& moved_armies,
+ BoardSet const& boards_from,
+ BoardSet const& boards_to) {
+    size_t sz = 0;
+    logger << "moving armies:\n";
+    sz += moving_armies.memory_report(logger, " ");
+    logger << "opponent armies:\n";
+    sz += opponent_armies.memory_report(logger, " ");
+    logger << "moved armies:\n";
+    sz += moved_armies.memory_report(logger, " ");
+
+    logger << "boards from:\n";
+    sz += boards_from.memory_report(logger, " ");
+    logger << "boards to:\n";
+    sz += boards_to.memory_report(logger, " ");
+
+    logger << "Total memory " << sz << " bytes\n";
+    logger.flush();
+
+    return sz;
 }
 
 void play(bool print_moves=false) COLD;
