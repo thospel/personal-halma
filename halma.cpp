@@ -559,11 +559,11 @@ BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, ArmyId size) :
     real_allocated_{size},
     fd_{-1} {
     mask_ = size-1;
-    cmallocate(armies_, size, ALLOC_LOCK);
+    cmallocate(armies_, size);
     // This allocates and locks more than needed for !red_file
     // For now keep the logic consistent
     // (we will probably always do red_file for large boardsets anyways)
-    mallocate(army_list_, army_list_size_, ALLOC_LOCK);
+    mallocate(army_list_, army_list_size_);
     left_ = FACTOR(size);
     if (red_file) {
         offset_ = 0;
@@ -574,18 +574,18 @@ BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, ArmyId size) :
 }
 
 BoardSubsetRedBuilder::~BoardSubsetRedBuilder() {
-    demallocate(armies_, real_allocated_, ALLOC_LOCK);
+    demallocate(armies_, real_allocated_);
     if (fd_ >= 0) {
         if (army_mmap_) FdUnmap(army_mmap_, offset_ / sizeof(army_mmap_[0]));
         Close(fd_, filename_);
     }
     if (army_list_)
-        demallocate(army_list_, army_list_size_, ALLOC_LOCK);
+        demallocate(army_list_, army_list_size_);
     // logger << "Destroy BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
 }
 
 void BoardSubsetRedBuilder::flush() {
-    demallocate(armies_, real_allocated_, ALLOC_LOCK);
+    demallocate(armies_, real_allocated_);
     armies_ = nullptr;
 
     auto write_base = write_end_ - BLOCK;
@@ -593,7 +593,7 @@ void BoardSubsetRedBuilder::flush() {
         auto size = free_ - write_base;
         Write(fd_, &army_list_[write_base], PAGE_ROUND(size * sizeof(army_list_[0])), filename_);
     }
-    demallocate(army_list_, army_list_size_, ALLOC_LOCK);
+    demallocate(army_list_, army_list_size_);
     army_list_ = nullptr;
 }
 
@@ -634,7 +634,7 @@ void BoardSubsetRedBuilder::resize() {
         auto old_size = army_list_size_;
         auto new_size = old_size * 2;
         auto list = army_list_;
-        remallocate(army_list_, old_size, new_size, ALLOC_LOCK);
+        remallocate(army_list_, old_size, new_size);
         if (false)
             logger << "Resize BoardSubsetRedBuilder list " << static_cast<void const *>(list) << " (size " << old_size << ") -> " << static_cast<void const *>(army_list_) << " (size " << new_size << ")\n" << std::flush;
         army_list_size_ = new_size;
@@ -645,7 +645,7 @@ void BoardSubsetRedBuilder::resize() {
         auto new_allocated = old_allocated*2;
         if (new_allocated > real_allocated_) {
             auto armies = armies_;
-            cremallocate(armies_, real_allocated_, new_allocated, ALLOC_LOCK);
+            cremallocate(armies_, real_allocated_, new_allocated);
             if (false)
                 logger << "Resize BoardSubsetRedBuilder hash " << static_cast<void const *>(armies) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies_) << " (size " << new_allocated << ")\n" << std::flush;
             real_allocated_ = new_allocated;
@@ -676,12 +676,12 @@ void BoardSubsetRedBuilder::resize() {
 
 size_t BoardSubsetRedBuilder::memory_report(ostream& os, string const& prefix) const {
     size_t sz = 0;
-    os << prefix << "armies: ArmyId[" << real_allocated_ << "] (" << real_allocated_ * sizeof(armies_[0]) << " bytes, locked)\n";
+    os << prefix << "armies: ArmyId[" << real_allocated_ << "] (" << real_allocated_ * sizeof(armies_[0]) << " bytes)\n";
     sz += real_allocated_ * sizeof(armies_[0]);
 
     os << prefix << "army list: ";
     if (army_list_) {
-        os << "ArmyId[" << army_list_size_ << "] (" << army_list_size_ * sizeof(army_list_[0]) << " bytes, locked)\n";
+        os << "ArmyId[" << army_list_size_ << "] (" << army_list_size_ * sizeof(army_list_[0]) << " bytes)\n";
         sz += army_list_size_ * sizeof(army_list_[0]);
     } else os << "nullptr\n";
     return sz;

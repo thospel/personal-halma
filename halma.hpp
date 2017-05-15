@@ -1815,9 +1815,10 @@ class BoardSubsetRedBuilder: public BoardSubsetBase {
         ArmyId value = join(red_id, symmetry < 0);
         return insert(value, stats);
     }
-    inline BoardSubsetRed extract(ArmyId allocated = INITIAL_SIZE) {
-        mask_ = allocated-1;
-        std::memset(begin(), 0, allocated * sizeof(armies_[0]));
+    inline BoardSubsetRed extract(ArmyId init_allocated = INITIAL_SIZE) {
+        munneeded(begin() + init_allocated, allocated() - init_allocated);
+        mask_ = init_allocated-1;
+        std::memset(begin(), 0, init_allocated * sizeof(armies_[0]));
 
         ArmyId sz = size();
         if (false) {
@@ -1834,15 +1835,17 @@ class BoardSubsetRedBuilder: public BoardSubsetBase {
                 std::memcpy(&army_list_[0], &army_list_[write_base], to_write * sizeof(army_list_[0]));
                 write_end_ = BLOCK;
                 free_ -= write_base;
+                munneeded(army_list_ + free_, write_base);
                 // logger << "Move down " << write_base << " + " << to_write << " -> " << free_ << endl;
             }
             from_ = free_;
-            left_ = min(min(army_list_size_, from_ + FACTOR(allocated)), write_end_);
+            left_ = min(min(army_list_size_, from_ + FACTOR(init_allocated)), write_end_);
             return BoardSubsetRed{offset, sz};
         } else {
             ArmyId* new_list = mallocate<ArmyId>(sz);
             // logger << "Extract BoardSubsetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
             std::copy(&army_list_[0], &army_list_[sz], new_list);
+            munneeded(army_list_, sz);
 
             free_ = 0;
             // from_ is already 0

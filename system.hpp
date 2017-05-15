@@ -79,8 +79,8 @@
 
 using Fd = int;
 
-size_t const MMAP_THRESHOLD  = 128 * 1024;
-// size_t const MMAP_THRESHOLD  = 4096;
+size_t const MMAP_THRESHOLD = 128 * 1024;
+// size_t const MMAP_THRESHOLD = 4096;
 size_t const MMAP_THRESHOLD1 = MMAP_THRESHOLD - 1;
 size_t const MMAP_THRESHOLD_MASK = ~MMAP_THRESHOLD1;
 inline size_t MMAP_THRESHOLD_ROUND(size_t size) FUNCTIONAL;
@@ -176,6 +176,7 @@ inline bool use_mmap(size_t size) {
     // return false;
 }
 
+void _madv_free(void* ptr, size_t length);
 void* _fd_mmap(Fd fd, size_t length);
 void _fd_munmap(void *ptr, size_t length);
 void _mlock(void* ptr, size_t length);
@@ -193,6 +194,12 @@ void* _recmallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) 
 // void* _cremallocate(void* old_ptr, size_t old_size, size_t new_size) MALLOC ALLOC_SIZE(3) NONNULL RETURNS_NONNULL WARN_UNUSED;
 void _demallocate(void *ptr, size_t old_size) NONNULL;
 void _demallocate(void *ptr, size_t old_size, int flags) NONNULL;
+
+template<class T>
+void munneeded(T* ptr, size_t length) {
+    length *= sizeof(T);
+    if (length >= MMAP_THRESHOLD) _madv_free(ptr, length);
+}
 
 template<class T>
 inline void FdMap(T*& ptr, Fd fd, size_t size) {

@@ -202,6 +202,17 @@ void set_signals() {
         throw_errno("Could not set SIGTERM handler");
 }
 
+void _madv_free(void* ptr, size_t length) {
+    auto base = reinterpret_cast<size_t>(ptr);
+    auto end = (base + length) & ~PAGE_SIZE1;
+    base = (base + PAGE_SIZE1) & ~PAGE_SIZE1;
+    if (base >= end) return;
+    length = end - base;
+    ptr = reinterpret_cast<void*>(base);
+    if (madvise(ptr, length, MADV_FREE))
+        throw_errno("Could not madvise MADV_FREE " + std::to_string(length) + " bytes");
+}
+
 void* _fd_mmap(Fd fd, size_t length) {
     size_t length_rounded = PAGE_ROUND(length);
     void* ptr = mmap(nullptr,
