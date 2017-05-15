@@ -2619,21 +2619,24 @@ void Board::do_move(FullMove const& move_) {
 }
 
 size_t memory_report
-(ArmySet const& moving_armies,
+(ostream& os,
+ ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet const& moved_armies,
  BoardSetRed const& boards_from,
  BoardSet    const& boards_to) COLD;
 
 size_t memory_report
-(ArmySet const& moving_armies,
+(ostream& os,
+ ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet const& moved_armies,
  BoardSet    const& boards_from,
  BoardSetRed const& boards_to) COLD;
 
 size_t memory_report
-(ArmySet const& moving_armies,
+(ostream& os,
+ ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet const& moved_armies,
  BoardSet const& boards_from,

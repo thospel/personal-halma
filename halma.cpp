@@ -585,6 +585,9 @@ BoardSubsetRedBuilder::~BoardSubsetRedBuilder() {
 }
 
 void BoardSubsetRedBuilder::flush() {
+    demallocate(armies_, real_allocated_, ALLOC_LOCK);
+    armies_ = nullptr;
+
     auto write_base = write_end_ - BLOCK;
     if (free_ > write_base) {
         auto size = free_ - write_base;
@@ -1538,6 +1541,12 @@ size_t ArmySetSparse::memory_report(ostream& os, string const& prefix) const {
     if (groups_) {
         os << "Group[" << nr_groups() << "] (" << nr_groups() * sizeof(Group) << " bytes, " << (memory_flags_ & ALLOC_LOCK ? "locked" : "unlocked") << ")\n";
         sz += nr_groups() * sizeof(Group);
+
+        size_t arena = 0;
+        os << prefix << "data arena: char[]";
+        arena += data_arena_.memory_report(os);
+        os << " = " << arena << "\n";
+        sz += arena;
     } else os << "nullptr\n";
 
     os << prefix << "overflow = ";
@@ -1545,12 +1554,6 @@ size_t ArmySetSparse::memory_report(ostream& os, string const& prefix) const {
         os << "char[" << overflow_size_ << "]\n";
         sz += overflow_size_;
     } else os << "nullptr\n";
-
-    size_t arena = 0;
-    os << prefix << "data arena: char[]";
-    arena += data_arena_.memory_report(os);
-    os << " = " << arena << "\n";
-    sz += arena;
 
     return sz;
 }
@@ -2736,76 +2739,76 @@ void Svg::write(time_t start_time, time_t stop_time,
 }
 
 size_t memory_report
-(ArmySet const& moving_armies,
+(ostream& os,
+ ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet const& moved_armies,
  BoardSetRed const& boards_from,
  BoardSet    const& boards_to) {
     size_t sz = 0;
-    logger << "moving armies:\n";
-    sz += moving_armies.memory_report(logger, " ");
-    logger << "opponent armies:\n";
-    sz += opponent_armies.memory_report(logger, " ");
-    logger << "moved armies:\n";
-    sz += moved_armies.memory_report(logger, " ");
+    os << "moving armies:\n";
+    sz += moving_armies.memory_report(os, " ");
+    os << "opponent armies:\n";
+    sz += opponent_armies.memory_report(os, " ");
+    os << "moved armies:\n";
+    sz += moved_armies.memory_report(os, " ");
 
-    logger << "boards from:\n";
-    sz += boards_from.memory_report(logger, " ");
-    logger << "boards to:\n";
-    sz += boards_to.memory_report(logger, " ");
+    os << "boards from:\n";
+    sz += boards_from.memory_report(os, " ");
+    os << "boards to:\n";
+    sz += boards_to.memory_report(os, " ");
 
-    logger << "Total memory " << sz << " bytes\n";
-    logger.flush();
+    os << "Total memory " << sz << " bytes\n";
 
     return sz;
 }
 
 size_t memory_report
-(ArmySet const& moving_armies,
+(ostream& os,
+ ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet const& moved_armies,
  BoardSet    const& boards_from,
  BoardSetRed const& boards_to) {
     size_t sz = 0;
-    logger << "moving armies:\n";
-    sz += moving_armies.memory_report(logger, " ");
-    logger << "opponent armies:\n";
-    sz += opponent_armies.memory_report(logger, " ");
-    logger << "moved armies:\n";
-    sz += moved_armies.memory_report(logger, " ");
+    os << "moving armies:\n";
+    sz += moving_armies.memory_report(os, " ");
+    os << "opponent armies:\n";
+    sz += opponent_armies.memory_report(os, " ");
+    os << "moved armies:\n";
+    sz += moved_armies.memory_report(os, " ");
 
-    logger << "boards from:\n";
-    sz += boards_from.memory_report(logger, " ");
-    logger << "boards to:\n";
-    sz += boards_to.memory_report(logger, " ");
+    os << "boards from:\n";
+    sz += boards_from.memory_report(os, " ");
+    os << "boards to:\n";
+    sz += boards_to.memory_report(os, " ");
 
-    logger << "Total memory " << sz << " bytes\n";
-    logger.flush();
+    os << "Total memory " << sz << " bytes\n";
 
     return sz;
 }
 
 size_t memory_report
-(ArmySet const& moving_armies,
+(ostream& os,
+ ArmySet const& moving_armies,
  ArmySet const& opponent_armies,
  ArmySet const& moved_armies,
  BoardSet const& boards_from,
  BoardSet const& boards_to) {
     size_t sz = 0;
-    logger << "moving armies:\n";
-    sz += moving_armies.memory_report(logger, " ");
-    logger << "opponent armies:\n";
-    sz += opponent_armies.memory_report(logger, " ");
-    logger << "moved armies:\n";
-    sz += moved_armies.memory_report(logger, " ");
+    os << "moving armies:\n";
+    sz += moving_armies.memory_report(os, " ");
+    os << "opponent armies:\n";
+    sz += opponent_armies.memory_report(os, " ");
+    os << "moved armies:\n";
+    sz += moved_armies.memory_report(os, " ");
 
-    logger << "boards from:\n";
-    sz += boards_from.memory_report(logger, " ");
-    logger << "boards to:\n";
-    sz += boards_to.memory_report(logger, " ");
+    os << "boards from:\n";
+    sz += boards_from.memory_report(os, " ");
+    os << "boards to:\n";
+    sz += boards_to.memory_report(os, " ");
 
-    logger << "Total memory " << sz << " bytes\n";
-    logger.flush();
+    os << "Total memory " << sz << " bytes\n";
 
     return sz;
 }
