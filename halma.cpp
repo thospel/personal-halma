@@ -574,7 +574,8 @@ BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, ArmyId size) :
 }
 
 BoardSubsetRedBuilder::~BoardSubsetRedBuilder() {
-    demallocate(armies_, real_allocated_);
+    if (armies_)
+        demallocate(armies_, real_allocated_);
     if (fd_ >= 0) {
         if (army_mmap_) FdUnmap(army_mmap_, offset_ / sizeof(army_mmap_[0]));
         Close(fd_, filename_);
@@ -676,8 +677,11 @@ void BoardSubsetRedBuilder::resize() {
 
 size_t BoardSubsetRedBuilder::memory_report(ostream& os, string const& prefix) const {
     size_t sz = 0;
-    os << prefix << "armies: ArmyId[" << real_allocated_ << "] (" << real_allocated_ * sizeof(armies_[0]) << " bytes)\n";
-    sz += real_allocated_ * sizeof(armies_[0]);
+    os << prefix << "armies: ";
+    if (armies_) {
+        os << "ArmyId[" << real_allocated_ << "] (" << real_allocated_ * sizeof(armies_[0]) << " bytes)\n";
+        sz += real_allocated_ * sizeof(armies_[0]);
+    } else  os << "nullptr\n";
 
     os << prefix << "army list: ";
     if (army_list_) {
@@ -1439,6 +1443,11 @@ void ArmySetSparse::_convert_hash(uint unit, Coord* armies, ArmyId nr_elements, 
     // cout << *this;
 
     if (CHECK) check(nr_elements, __FILE__, __LINE__);
+
+    if (overflow_) {
+        demallocate(overflow_, overflow_size_);
+        overflow_ = nullptr;
+    }
 
     GroupId n_groups = nr_groups();
     Group* groups = groups_;
@@ -2746,16 +2755,16 @@ size_t memory_report
  BoardSetRed const& boards_from,
  BoardSet    const& boards_to) {
     size_t sz = 0;
-    os << "moving armies:\n";
+    os << "moving armies (" << static_cast<void const*>(&moving_armies) << "):\n";
     sz += moving_armies.memory_report(os, " ");
-    os << "opponent armies:\n";
+    os << "opponent armies (" << static_cast<void const*>(&opponent_armies) << "):\n";
     sz += opponent_armies.memory_report(os, " ");
-    os << "moved armies:\n";
+    os << "moved armies (" << static_cast<void const*>(&moved_armies) << "):\n";
     sz += moved_armies.memory_report(os, " ");
 
-    os << "boards from:\n";
+    os << "boards from (" << static_cast<void const*>(&boards_from) << "):\n";
     sz += boards_from.memory_report(os, " ");
-    os << "boards to:\n";
+    os << "boards to (" << static_cast<void const*>(&boards_to) << "):\n";
     sz += boards_to.memory_report(os, " ");
 
     os << "Total memory " << sz << " bytes\n";
@@ -2771,16 +2780,16 @@ size_t memory_report
  BoardSet    const& boards_from,
  BoardSetRed const& boards_to) {
     size_t sz = 0;
-    os << "moving armies:\n";
+    os << "moving armies (" << static_cast<void const*>(&moving_armies) << "):\n";
     sz += moving_armies.memory_report(os, " ");
-    os << "opponent armies:\n";
+    os << "opponent armies (" << static_cast<void const*>(&opponent_armies) << "):\n";
     sz += opponent_armies.memory_report(os, " ");
-    os << "moved armies:\n";
+    os << "moved armies (" << static_cast<void const*>(&moved_armies) << "):\n";
     sz += moved_armies.memory_report(os, " ");
 
-    os << "boards from:\n";
+    os << "boards from (" << static_cast<void const*>(&boards_from) << "):\n";
     sz += boards_from.memory_report(os, " ");
-    os << "boards to:\n";
+    os << "boards to (" << static_cast<void const*>(&boards_to) << "):\n";
     sz += boards_to.memory_report(os, " ");
 
     os << "Total memory " << sz << " bytes\n";
@@ -2796,16 +2805,16 @@ size_t memory_report
  BoardSet const& boards_from,
  BoardSet const& boards_to) {
     size_t sz = 0;
-    os << "moving armies:\n";
+    os << "moving armies (" << static_cast<void const*>(&moving_armies) << "):\n";
     sz += moving_armies.memory_report(os, " ");
-    os << "opponent armies:\n";
+    os << "opponent armies (" << static_cast<void const*>(&opponent_armies) << "):\n";
     sz += opponent_armies.memory_report(os, " ");
-    os << "moved armies:\n";
+    os << "moved armies (" << static_cast<void const*>(&moved_armies) << "):\n";
     sz += moved_armies.memory_report(os, " ");
 
-    os << "boards from:\n";
+    os << "boards from (" << static_cast<void const*>(&boards_from) << "):\n";
     sz += boards_from.memory_report(os, " ");
-    os << "boards to:\n";
+    os << "boards to (" << static_cast<void const*>(&boards_to) << "):\n";
     sz += boards_to.memory_report(os, " ");
 
     os << "Total memory " << sz << " bytes\n";
@@ -3032,7 +3041,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
                   nr_moves));
             boards_blue.clear();
         }
-        if (testQ) cout << moved_armies;
+        // if (testQ) cout << moved_armies;
         moving_armies.clear();
         moved_armies.drop_hash();
 

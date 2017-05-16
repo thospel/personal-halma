@@ -97,7 +97,6 @@ bool const PASS = false;
 bool const BALANCE  = true;
 
 bool const MLOCK = true;
-bool const MEMORY_REPORT = false;
 
 #ifndef CHECK
 # define CHECK   0
@@ -1589,6 +1588,7 @@ class StatisticsE: public Statistics {
         mmaps_ = total_mmaps();
         mlocked_ = total_mlocked();
         mlocks_ = total_mlocks();
+        logger << "StatisticsE::stop" << endl;
     }
     size_t memory()    const PURE { return memory_; }
     size_t allocated() const PURE { return allocated_; }

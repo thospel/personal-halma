@@ -32,6 +32,10 @@
 # define WARN_UNUSED     __attribute__((warn_unused_result))
 # define UNUSED          __attribute__((unused))
 # define BUILTIN_CONSTANT(x) __builtin_constant_p(x)
+# define FILE_LINE_P     , char const* file=__builtin_FILE(), int line=__builtin_LINE()
+# define FILE_LINE_PP    , char const* file, int line
+# define FILE_LINE_A     , file, line
+# define LOGGER          logger << file << ":" << line << ": "
 #else // __GNUC__
 # define RESTRICT
 # define NOINLINE
@@ -49,6 +53,10 @@
 # define WARN_UNUSED
 # define UNUSED
 # define BUILTIN_CONSTANT(x) true
+# define FILE_LINE_P
+# define FILE_LINE_PP
+# define FILE_LINE_A
+# define LOGGER          logger
 #endif // __GNUC__
 
 #define CAT(x, y) _CAT(x,y)
@@ -93,12 +101,15 @@ bool const CLEAR = true;
 int const ALLOC_LOCK     = 1;
 int const ALLOC_POPULATE = 2;
 
+bool const DEBUG_MALLOC = false;
+
 extern bool FATAL;
 
 extern uint nr_threads;
 extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
 extern thread_local ssize_t allocated_;
+extern bool MEMORY_REPORT;
 
 extern size_t PAGE_SIZE;
 extern size_t PAGE_SIZE1;
@@ -171,6 +182,32 @@ uint ctz64(uint64_t value) {
     return __builtin_ctzll(value);
 }
 
+
+class LogBuffer: public std::streambuf {
+  public:
+    size_t const BLOCK = 80;
+
+    LogBuffer();
+    ~LogBuffer() {
+        sync();
+    }
+  protected:
+    int sync();
+    int overflow(int ch);
+  private:
+    std::string prefix_;
+    std::vector<char> buffer_;
+};
+
+class LogStream: public std::ostream {
+  public:
+    LogStream(): std::ostream{&buffer_} {}
+  private:
+    LogBuffer buffer_;
+};
+
+extern thread_local LogStream logger;
+
 inline bool use_mmap(size_t size) {
     return size >= MMAP_THRESHOLD;
     // return false;
@@ -228,134 +265,145 @@ inline void memunlock(T* ptr, size_t size) {
 }
 
 template<class T>
-inline T* mallocate(size_t new_size) {
-    return static_cast<T*>(_mallocate(new_size * sizeof(T)));
+inline T* mallocate(size_t new_size FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_mallocate(new_size * sizeof(T)));
+    if (DEBUG_MALLOC) LOGGER << "mallocate(" << new_size << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    return ptr;
 }
 
 template<class T>
-inline void mallocate(T*& ptr, size_t new_size) {
-    ptr = mallocate<T>(new_size);
+inline void mallocate(T*& ptr, size_t new_size FILE_LINE_P) {
+    ptr = mallocate<T>(new_size FILE_LINE_A);
 }
 
 template<class T>
-inline T* mallocate(size_t new_size, int flags) {
-    return static_cast<T*>(_mallocate(new_size * sizeof(T), flags));
+inline T* mallocate(size_t new_size, int flags FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_mallocate(new_size * sizeof(T), flags));
+    if (DEBUG_MALLOC) LOGGER << "mallocate(" << new_size << ", " << flags << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    return ptr;
 }
 
 template<class T>
-inline void mallocate(T*& ptr, size_t new_size, int flags) {
-    ptr = mallocate<T>(new_size, flags);
+inline void mallocate(T*& ptr, size_t new_size, int flags FILE_LINE_P) {
+    ptr = mallocate<T>(new_size, flags FILE_LINE_A);
 }
 
 template<class T>
-inline T* cmallocate(size_t new_size) {
-    return static_cast<T*>(_cmallocate(new_size * sizeof(T)));
+inline T* cmallocate(size_t new_size FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_cmallocate(new_size * sizeof(T)));
+    if (DEBUG_MALLOC) LOGGER << "cmallocate(" << new_size << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    return ptr;
 }
 
 template<class T>
-inline void cmallocate(T*& ptr, size_t new_size) {
-    ptr = cmallocate<T>(new_size);
+inline void cmallocate(T*& ptr, size_t new_size FILE_LINE_P) {
+    ptr = cmallocate<T>(new_size FILE_LINE_A);
 }
 
 template<class T>
-inline T* cmallocate(size_t new_size, int flags) {
-    return static_cast<T*>(_cmallocate(new_size * sizeof(T), flags));
+inline T* cmallocate(size_t new_size, int flags FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_cmallocate(new_size * sizeof(T), flags));
+    if (DEBUG_MALLOC) LOGGER << "mallocate(" << new_size << ", " << flags << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    return ptr;
 }
 
 template<class T>
-inline void cmallocate(T*& ptr, size_t new_size, int flags) {
-    ptr = cmallocate<T>(new_size, flags);
+inline void cmallocate(T*& ptr, size_t new_size, int flags FILE_LINE_P) {
+    ptr = cmallocate<T>(new_size, flags FILE_LINE_A);
 }
 
 template<class T>
-inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    old_ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
+inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
+    if (DEBUG_MALLOC) LOGGER << "remallocate(" << static_cast<void const *>(old_ptr) << ", " << old_size << ", " << new_size << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    old_ptr = ptr;
 }
 
 template<class T>
-inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
-    old_ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+inline void remallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_remallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+    if (DEBUG_MALLOC) LOGGER << "remallocate(" << static_cast<void const *>(old_ptr) << ", " << old_size << ", " << new_size << ", " << flags << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    old_ptr = ptr;
 }
 
 // Only the newly added range is zerod, the old range remains
 template<class T>
-inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    old_ptr = static_cast<T*>(_recmallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
+inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_recmallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T)));
+    if (DEBUG_MALLOC) LOGGER << "recmallocate(" << static_cast<void const *>(old_ptr) << ", " << old_size << ", " << new_size << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    old_ptr = ptr;
 }
 
 // Only the newly added range is zerod, the old range remains
 template<class T>
-inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
-    old_ptr = static_cast<T*>(_recmallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+inline void recmallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags FILE_LINE_P) {
+    auto ptr = static_cast<T*>(_recmallocate(old_ptr, old_size * sizeof(T), new_size * sizeof(T), flags));
+    if (DEBUG_MALLOC) LOGGER << "recmallocate(" << static_cast<void const *>(old_ptr) << ", " << old_size << ", " << new_size << ", " << flags << ")=" << static_cast<void  const *>(ptr) << std::endl;
+    old_ptr = ptr;
 }
 
 template<class T>
-void remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep) {
-    old_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T)));
+inline void demallocate(T* old_ptr, size_t old_size FILE_LINE_P) {
+    _demallocate(old_ptr, old_size * sizeof(T));
+    if (DEBUG_MALLOC) LOGGER << "demallocate(" << static_cast<void const*>(old_ptr) << ", " << old_size << ")" << std::endl;
 }
 
 template<class T>
-void remallocate_partial(T*& old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
-    old_ptr = static_cast<T*>(_remallocate_partial(old_ptr, old_size * sizeof(T), new_size * sizeof(T), keep * sizeof(T), flags));
+inline void demallocate(T* old_ptr, size_t old_size, int flags FILE_LINE_P) {
+    _demallocate(old_ptr, old_size * sizeof(T), flags);
+    if (DEBUG_MALLOC) LOGGER << "demallocate(" << static_cast<void const*>(old_ptr) << ", " << old_size << ", " << flags << ")" << std::endl;
 }
 
 // Zero the whole new size
 template<class T>
-inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size) {
-    _demallocate(old_ptr, old_size * sizeof(T));
+inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size FILE_LINE_P) {
+    demallocate(old_ptr, old_size FILE_LINE_A);
     old_ptr = nullptr;
-    old_ptr = static_cast<T*>(_cmallocate(new_size * sizeof(T)));
+    cmallocate(old_ptr, new_size FILE_LINE_A);
 }
 
 template<class T>
-inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags) {
-    _demallocate(old_ptr, old_size * sizeof(T), flags);
+inline void cremallocate(T*& old_ptr, size_t old_size, size_t new_size, int flags FILE_LINE_P) {
+    demallocate(old_ptr, old_size, flags FILE_LINE_A);
     old_ptr = nullptr;
-    old_ptr = static_cast<T*>(_cmallocate(new_size * sizeof(T), flags));
+    cmallocate(old_ptr, new_size, flags FILE_LINE_A);
 }
 
 template<class T>
-inline void demallocate(T* old_ptr, size_t old_size) {
-    _demallocate(old_ptr, old_size * sizeof(T));
-}
-
-template<class T>
-inline void demallocate(T* old_ptr, size_t old_size, int flags) {
-    _demallocate(old_ptr, old_size * sizeof(T), flags);
-}
-
-template<class T>
-inline T* allocate(size_t new_size, int flags=0) {
+inline T* allocate(size_t new_size, int flags=0 FILE_LINE_P) {
     new_size *= sizeof(T);
     auto new_ptr = reinterpret_cast<T*>(new char[new_size]);
+    if (DEBUG_MALLOC) LOGGER << "allocate(" << new_size << ", " << flags << ")=" << static_cast<void  const *>(new_ptr) << std::endl;
     allocated_ += new_size;
     return new_ptr;
 }
 
 template<class T>
-inline void allocate(T*& ptr, size_t new_size, int flags=0) {
+inline void allocate(T*& ptr, size_t new_size, int flags=0 FILE_LINE_P) {
     ptr = allocate<T>(new_size, flags);
 }
 
 template<class T>
-inline T* callocate(size_t new_size, int flags=0) {
+inline T* callocate(size_t new_size, int flags=0 FILE_LINE_P) {
     new_size *= sizeof(T);
     auto new_ptr = reinterpret_cast<T*>(new char[new_size]);
+    if (DEBUG_MALLOC) LOGGER << "callocate(" << new_size << ", " << flags << ")=" << static_cast<void  const *>(new_ptr) << std::endl;
     std::memset(new_ptr, 0, new_size);
     allocated_ += new_size;
     return new_ptr;
 }
 
 template<class T>
-inline void callocate(T*& ptr, size_t new_size, int flags=0) {
-    ptr = callocate<T>(new_size, flags);
+inline void callocate(T*& ptr, size_t new_size, int flags=0 FILE_LINE_P) {
+    ptr = callocate<T>(new_size, flags FILE_LINE_A);
 }
 
 template<class T>
-inline void deallocate(T* old_ptr, size_t old_size, int flags=0) ALWAYS_INLINE;
+inline void deallocate(T* old_ptr, size_t old_size, int flags=0 FILE_LINE_P) ALWAYS_INLINE;
 template<class T>
-void deallocate(T* old_ptr, size_t old_size, int flags) {
+void deallocate(T* old_ptr, size_t old_size, int flags FILE_LINE_PP) {
     delete [] reinterpret_cast<char*>(old_ptr);
+    if (DEBUG_MALLOC) LOGGER << "deallocate(" << static_cast<void  const *>(old_ptr) << ", " << old_size << ", " << flags << ")" << std::endl;
     allocated_ -= old_size * sizeof(T);
 }
 
@@ -364,28 +412,3 @@ Fd OpenRead(std::string const& filename);
 void Close(Fd fd, std::string const& filename);
 void Write(Fd fd, void const* buffer, size_t size, std::string const& filename);
 void Read(Fd fd, void* buffer, size_t offset, size_t size, std::string const& filename);
-
-class LogBuffer: public std::streambuf {
-  public:
-    size_t const BLOCK = 80;
-
-    LogBuffer();
-    ~LogBuffer() {
-        sync();
-    }
-  protected:
-    int sync();
-    int overflow(int ch);
-  private:
-    std::string prefix_;
-    std::vector<char> buffer_;
-};
-
-class LogStream: public std::ostream {
-  public:
-    LogStream(): std::ostream{&buffer_} {}
-  private:
-    LogBuffer buffer_;
-};
-
-extern thread_local LogStream logger;

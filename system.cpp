@@ -24,6 +24,8 @@ uint nr_threads = 0;
 
 uint signal_counter;
 std::atomic<uint> signal_generation;
+bool MEMORY_REPORT = false;
+
 thread_local ssize_t allocated_ = 0;
 thread_local ssize_t mmapped_   = 0;
 thread_local ssize_t mmaps_     = 0;
@@ -175,6 +177,10 @@ void signal_handler(int signum) {
         case SIGTERM:
           signal_counter = 1;
           signal_generation.store(signal_counter, std::memory_order_relaxed);
+          break;
+        case SIGSTKFLT:
+          MEMORY_REPORT = !MEMORY_REPORT;
+          break;
         default:
           // Impossible. Ignore
           break;
@@ -199,6 +205,8 @@ void set_signals() {
     if (sigaction(SIGINT, &new_action, nullptr))
         throw_errno("Could not set SIGUNT handler");
     if (sigaction(SIGTERM, &new_action, nullptr))
+        throw_errno("Could not set SIGTERM handler");
+    if (sigaction(SIGSTKFLT, &new_action, nullptr))
         throw_errno("Could not set SIGTERM handler");
 }
 
@@ -378,31 +386,6 @@ void* _remallocate(void* old_ptr, size_t old_size, size_t new_size) {
     return new_ptr;
 }
 
-void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep) {
-    void* new_ptr;
-    if (use_mmap(old_size)) {
-        if (use_mmap(new_size))
-            new_ptr = _mremap(old_ptr, old_size, new_size, 0);
-        else {
-            new_ptr = new char[new_size];
-            allocated_ += new_size;
-            std::memcpy(new_ptr, old_ptr, keep);
-            _munmap(old_ptr, old_size, 0);
-        }
-    } else {
-        if (use_mmap(new_size))
-            new_ptr = _mmap(new_size, 0);
-        else {
-            new_ptr = new char[new_size];
-            allocated_ += new_size;
-        }
-        std::memcpy(new_ptr, old_ptr, keep);
-        delete [] static_cast<char *>(old_ptr);
-        allocated_ -= old_size;
-    }
-    return new_ptr;
-}
-
 void* _remallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) {
     void* new_ptr;
     if (use_mmap(old_size)) {
@@ -422,31 +405,6 @@ void* _remallocate(void* old_ptr, size_t old_size, size_t new_size, int flags) {
             allocated_ += new_size;
         }
         std::memcpy(new_ptr, old_ptr, std::min(old_size, new_size));
-        delete [] static_cast<char *>(old_ptr);
-        allocated_ -= old_size;
-    }
-    return new_ptr;
-}
-
-void* _remallocate_partial(void* old_ptr, size_t old_size, size_t new_size, size_t keep, int flags) {
-    void* new_ptr;
-    if (use_mmap(old_size)) {
-        if (use_mmap(new_size))
-            new_ptr = _mremap(old_ptr, old_size, new_size, flags);
-        else {
-            new_ptr = new char[new_size];
-            allocated_ += new_size;
-            std::memcpy(new_ptr, old_ptr, keep);
-            _munmap(old_ptr, old_size, flags);
-        }
-    } else {
-        if (use_mmap(new_size))
-            new_ptr = _mmap(new_size, flags);
-        else {
-            new_ptr = new char[new_size];
-            allocated_ += new_size;
-        }
-        std::memcpy(new_ptr, old_ptr, keep);
         delete [] static_cast<char *>(old_ptr);
         allocated_ -= old_size;
     }

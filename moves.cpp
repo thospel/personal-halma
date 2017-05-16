@@ -108,10 +108,12 @@ Statistics NAME(uint thid,
         if (thread_data.signalled()) {
             if (tid == 0) {
                 logger << time_string() << ": Processing blue " << setw(6) << blue_id << " (" << get_memory() / 1000000 << " MB)\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n";
-                if (STATISTICS) logger << "Largest subset: " << stats.largest_subset() << "\n";
-                memory_report(logger,
-                              moving_armies, opponent_armies, moved_armies,
-                              boards_from, boards_to);
+                if (MEMORY_REPORT) {
+                    if (STATISTICS) logger << "Largest subset: " << stats.largest_subset() << "\n";
+                    memory_report(logger,
+                                  moving_armies, opponent_armies, moved_armies,
+                                  boards_from, boards_to);
+                }
                 logger.flush();
             }
             if (thread_data.is_terminated()) {
