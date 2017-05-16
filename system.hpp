@@ -411,4 +411,5 @@ Fd OpenReadWrite(std::string const& filename);
 Fd OpenRead(std::string const& filename);
 void Close(Fd fd, std::string const& filename);
 void Write(Fd fd, void const* buffer, size_t size, std::string const& filename);
+void Extend(Fd fd, size_t offset, size_t size, std::string const& filename);
 void Read(Fd fd, void* buffer, size_t offset, size_t size, std::string const& filename);

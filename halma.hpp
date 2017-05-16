@@ -97,6 +97,7 @@ bool const PASS = false;
 bool const BALANCE  = true;
 
 bool const MLOCK = true;
+bool const ARMYSET_CACHE = true;
 
 #ifndef CHECK
 # define CHECK   0
@@ -699,6 +700,7 @@ class Statistics {
         armyset_tries_ = 0;
         armyset_probes_ = 0;
         armyset_immediate_ = 0;
+        armyset_cache_hits_ = 0;
         armyset_allocs_ = 0;
         armyset_allocs_cached_ = 0;
         armyset_deallocs_ = 0;
@@ -735,6 +737,9 @@ class Statistics {
     }
     inline void armyset_try() {
         if (STATISTICS || HASH_STATISTICS) ++armyset_tries_;
+    }
+    inline void armyset_cache_hit() {
+        if (STATISTICS) ++armyset_cache_hits_;
     }
     inline void armyset_untry(Counter del) {
         armyset_tries_ -= del;
@@ -782,6 +787,7 @@ class Statistics {
     Counter armyset_size() const PURE { return armyset_size_; }
     Counter armyset_tries() const PURE { return armyset_tries_; }
     Counter armyset_immediate() const PURE { return armyset_immediate_; }
+    Counter armyset_cache_hits() const PURE { return armyset_cache_hits_; }
     Counter armyset_probes() const PURE { return armyset_probes_; }
     Counter armyset_allocs() const PURE { return armyset_allocs_; }
     Counter armyset_allocs_cached() const PURE { return armyset_allocs_cached_; }
@@ -800,9 +806,10 @@ class Statistics {
         auto overflow_max   = stats.overflow_max();
         if (overflow_max > overflow_max_) overflow_max_ = overflow_max;
 
-        armyset_immediate_  += stats.armyset_immediate_;
-        armyset_probes_	  += stats.armyset_probes_;
-        armyset_tries_	  += stats.armyset_tries();
+        armyset_immediate_       += stats.armyset_immediate_;
+        armyset_probes_	         += stats.armyset_probes_;
+        armyset_tries_	         += stats.armyset_tries();
+        armyset_cache_hits_      += stats.armyset_cache_hits();
         armyset_allocs_          += stats.armyset_allocs();
         armyset_allocs_cached_   += stats.armyset_allocs_cached();
         armyset_deallocs_        += stats.armyset_deallocs();
@@ -823,6 +830,7 @@ class Statistics {
     Counter armyset_tries_;
     Counter armyset_probes_;
     Counter armyset_immediate_;
+    Counter armyset_cache_hits_;
     Counter armyset_allocs_;
     Counter armyset_allocs_cached_;
     Counter armyset_deallocs_;
@@ -839,6 +847,29 @@ STATIC const int ARMYID_BITS = std::numeric_limits<ArmyId>::digits;
 STATIC const ArmyId ARMYID_HIGHBIT = static_cast<ArmyId>(1) << (ARMYID_BITS-1);
 STATIC const ArmyId ARMYID_MASK = ARMYID_HIGHBIT-1;
 STATIC const ArmyId ARMYID_MAX  = std::numeric_limits<ArmyId>::max();
+
+class ArmySetCache {
+  public:
+    // Not copyable (avoid accidents)
+    ArmySetCache(ArmySetCache const&) = delete;
+    ArmySetCache& operator=(ArmySetCache const&) = delete;
+
+    static ArmyId const INITIAL_SIZE = 32;
+    static ArmyId const FACTOR = 16;
+
+    ArmySetCache(ArmyId size = INITIAL_SIZE);
+    ~ArmySetCache();
+    ArmyId allocated() const PURE { return mask_ + 1; }
+    inline ArmyId insert(ArmySet& set, ArmyPos const& army, Statistics& stats) HOT;
+    NOINLINE void resize() RESTRICT;
+  private:
+    char* cache_;
+    ArmyId mask_;
+    ArmyId factor_;
+    ArmyId limit_;
+    uint64_t hit  = 0;
+    uint64_t miss = 0;
+};
 
 class ArmySetDense {
   public:
@@ -1263,6 +1294,7 @@ class ArmySetSparse {
         array<SizeArena, GROUP_SIZE> cache_;
     };
   public:
+    static ArmyId const CACHE_FRACTION = 16;
     static void set_ARMY_size() {
         Element::SIZE = ARMY * sizeof(Coord) + sizeof(Element);
         // cout << "sizeof(Element) = " << sizeof(Element) << ", Element::SIZE = " << Element::SIZE << "\n";
@@ -1290,6 +1322,9 @@ class ArmySetSparse {
     }
     inline size_t allocated() const PURE {
         return nr_groups() * static_cast<size_t>(GROUP_SIZE);
+    }
+    inline ArmyId allocated_cache() const PURE {
+        return mask_cache_ + 1;
     }
     inline size_t size() const PURE {
         return FACTOR(allocated()) - left_;
@@ -1341,16 +1376,19 @@ class ArmySetSparse {
     static ArmyId constexpr FACTOR(size_t size) { return static_cast<ArmyId>(0.7*size); }
 
     NOINLINE void resize() RESTRICT;
+    inline ArmyId _insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) HOT ALWAYS_INLINE;
 
     Group* groups_;
     char* overflow_;
+    char* cache_;
     size_t overflow_used_;
     size_t overflow_size_;
     size_t overflow_max_;
     DataArena data_arena_;
     mutex exclude_;
-    // ArmyId size_;
+    mutex exclude_cache_;
     ArmyId left_;
+    ArmyId mask_cache_;
     GroupId mask_;
     int    memory_flags_;
 };
@@ -1494,29 +1532,6 @@ inline ostream& operator<<(ostream& os, ArmySet const& set) {
     return os;
 }
 
-class ArmySetCache {
-  public:
-    // Not copyable (avoid accidents)
-    ArmySetCache(ArmySetCache const&) = delete;
-    ArmySetCache& operator=(ArmySetCache const&) = delete;
-
-    static ArmyId const INITIAL_SIZE = 32;
-    static ArmyId const FACTOR = 16;
-
-    ArmySetCache(ArmyId size = INITIAL_SIZE);
-    ~ArmySetCache();
-    ArmyId allocated() const PURE { return mask_ + 1; }
-    inline ArmyId insert(ArmySet& set, ArmyPos const& army, Statistics& stats) HOT;
-    NOINLINE void resize() RESTRICT;
-  private:
-    char* cache_;
-    ArmyId mask_;
-    ArmyId factor_;
-    ArmyId limit_;
-    uint64_t hit  = 0;
-    uint64_t miss = 0;
-};
-
 Army::Army(ArmyZconst army, ArmyId symmetry) {
     _import(army.begin(), begin(), symmetry, true);
 }
@@ -1588,7 +1603,6 @@ class StatisticsE: public Statistics {
         mmaps_ = total_mmaps();
         mlocked_ = total_mlocked();
         mlocks_ = total_mlocks();
-        logger << "StatisticsE::stop" << endl;
     }
     size_t memory()    const PURE { return memory_; }
     size_t allocated() const PURE { return allocated_; }
@@ -2580,7 +2594,7 @@ ArmyId ArmySetDense::insert(ArmyPos const& army, Statistics& stats) {
     }
 }
 
-ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) {
+ArmyId ArmySetSparse::_insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) {
     // logger << "Insert: " << hex << hash << dec << " (" << left_ << " left)\n" << Image{army};
     lock_guard<mutex> lock{exclude_};
     if (left_ == 0) resize();
@@ -2610,6 +2624,27 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>&
             return element.id();
         }
         hash += ++offset;
+    }
+}
+
+ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>& last_id, Statistics& stats) {
+    if (!ARMYSET_CACHE) return _insert(army, hash, last_id, stats);
+
+    {
+        lock_guard<mutex> lock{exclude_cache_};
+        Element& element = Element::element(cache_, hash & mask_cache_);
+        if (army == element.armyZ()) {
+            // logger << "Hit " << element.id() << endl;
+            stats.armyset_cache_hit();
+            return element.id();
+        }
+    }
+    ArmyId army_id = _insert(army, hash, last_id, stats);
+    {
+        lock_guard<mutex> lock{exclude_cache_};
+        Element& element = Element::element(cache_, hash & mask_cache_);
+        element.set(army_id, army);
+        return army_id;
     }
 }
 

@@ -559,6 +559,11 @@ void Close(Fd fd, std::string const& filename) {
         throw_errno("Could not close '" + filename + "'");
 }
 
+void Extend(Fd fd, size_t offset, size_t size, std::string const& filename) {
+    if (posix_fallocate(fd, offset, size))
+        throw_errno("Could not extend '" + filename + "' by " + std::to_string(size) + " bytes");
+}
+
 void Write(Fd fd, void const* buffer, size_t size, std::string const& filename) {
     while (true) {
         auto rc = write(fd, buffer, size);

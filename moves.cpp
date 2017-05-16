@@ -109,7 +109,8 @@ Statistics NAME(uint thid,
             if (tid == 0) {
                 logger << time_string() << ": Processing blue " << setw(6) << blue_id << " (" << get_memory() / 1000000 << " MB)\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n";
                 if (MEMORY_REPORT) {
-                    if (STATISTICS) logger << "Largest subset: " << stats.largest_subset() << "\n";
+                    if (STATISTICS && RED_NORMAL)
+                        logger << "Largest subset: " << stats.largest_subset() << "\n";
                     memory_report(logger,
                                   moving_armies, opponent_armies, moved_armies,
                                   boards_from, boards_to);
@@ -393,12 +394,11 @@ Statistics NAME(uint thid,
                         if (val.base_red()) {
                             --off;
                             if (off == 0) {
-#if !BACKTRACK
-                                if (boards_to.solve(red_id, red)) {
+                                if (!BACKTRACK &&
+                                    boards_to.solve(red_id, red)) {
                                     logger << "==================================\n";
                                     logger << image.str(soldier, val, BLUE_TO_MOVE ? BLUE : RED) << "Solution!" << endl;
                                 }
-#endif // !BACKTRACK
                                 goto SOLUTION;
                             }
                         } else {

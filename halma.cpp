@@ -277,16 +277,25 @@ void StatisticsE::print(ostream& os) const {
         os << "\tLargest subset: " << largest_subset() << "\n";
         os << "\tLargest army resize overflow: " << overflow_max() << "\n";
 
+        if (ARMYSET_CACHE) {
+            auto army_tries = armyset_tries() + armyset_cache_hits();
+            os << "\tArmy front cache ratio ";
+            if (army_tries)
+                os << setw(3) << armyset_cache_hits()*100/ army_tries << "%";
+            else
+                os << "----";
+            os << "\t" << armyset_cache_hits() << " / " << army_tries << "\n";
+        }
         os << "\tCached army   allocs: ";
         if (armyset_allocs())
-            os << setw(3) << armyset_allocs_cached()*100 / armyset_allocs() << "%s";
+            os << setw(3) << armyset_allocs_cached()*100 / armyset_allocs() << "%";
         else
             os << "----";
         os << "\t" << armyset_allocs_cached() << " / " << armyset_allocs() << "\n";
 
         os << "\tCached army deallocs: ";
         if (armyset_deallocs())
-            os << setw(3) << armyset_deallocs_cached()*100 / armyset_deallocs() << "%s";
+            os << setw(3) << armyset_deallocs_cached()*100 / armyset_deallocs() << "%";
         else
             os << "----";
         os << "\t" << armyset_deallocs_cached() << " / " << armyset_deallocs() << "\n";
@@ -558,6 +567,12 @@ BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, ArmyId size) :
     write_end_{BLOCK},
     real_allocated_{size},
     fd_{-1} {
+    if (red_file) {
+        offset_ = 0;
+        fd_ = OpenReadWrite(filename_);
+        if (write_end_ < left_) left_ = write_end_;
+    }
+
     mask_ = size-1;
     cmallocate(armies_, size);
     // This allocates and locks more than needed for !red_file
@@ -565,11 +580,6 @@ BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, ArmyId size) :
     // (we will probably always do red_file for large boardsets anyways)
     mallocate(army_list_, army_list_size_);
     left_ = FACTOR(size);
-    if (red_file) {
-        offset_ = 0;
-        fd_ = OpenReadWrite(filename_);
-        if (write_end_ < left_) left_ = write_end_;
-    }
     // logger << "Create BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << size << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ") filename '" << filename_ << "'\n" << flush;
 }
 
@@ -591,8 +601,13 @@ void BoardSubsetRedBuilder::flush() {
 
     auto write_base = write_end_ - BLOCK;
     if (free_ > write_base) {
-        auto size = free_ - write_base;
-        Write(fd_, &army_list_[write_base], PAGE_ROUND(size * sizeof(army_list_[0])), filename_);
+        size_t size = free_ - write_base;
+        // logger << "list_size=" << army_list_size_ << ", free=" << free_ << ", write_end=" << write_end_ << ", write_base=" << write_base << ", size=" << size << ", PAGE_ROUND(size)=" << PAGE_ROUND(size * sizeof(army_list_[0])) << endl;
+        size *= sizeof(army_list_[0]);
+        Write(fd_, &army_list_[write_base], size, filename_);
+        size_t extra = PAGE_ROUND(size) - size;
+        if (extra > 0)
+            Extend(fd_, offset_ * sizeof(army_list_[0]), extra, filename_);
     }
     demallocate(army_list_, army_list_size_);
     army_list_ = nullptr;
@@ -1254,6 +1269,10 @@ void ArmySetSparse::_init(size_t size) {
     cmallocate(groups_, nr_groups, memory_flags_);
     // logger << "New groups  " << static_cast<void const *>(groups_) << "\n";
     data_arena_.init();
+    if (ARMYSET_CACHE) {
+        cmallocate(cache_, size / CACHE_FRACTION * Element::SIZE+ARMY_PADDING);
+        mask_cache_ = size / CACHE_FRACTION - 1;
+    }
     mallocate(overflow_, GROUP_SIZE * Element::SIZE);
     overflow_size_ = GROUP_SIZE * Element::SIZE;
 }
@@ -1261,6 +1280,7 @@ void ArmySetSparse::_init(size_t size) {
 ArmySetSparse::ArmySetSparse():
     groups_{nullptr},
     overflow_{nullptr},
+    cache_{nullptr},
     overflow_used_{0},
     overflow_size_{0},
     overflow_max_{0},
@@ -1271,7 +1291,10 @@ ArmySetSparse::~ArmySetSparse() {
         data_arena_.free();
         demallocate(groups_, nr_groups(), memory_flags_);
     }
-    if (overflow_) demallocate(overflow_, overflow_size_);
+    if (ARMYSET_CACHE && cache_)
+        demallocate(cache_, allocated_cache() * Element::SIZE+ARMY_PADDING);
+    if (overflow_)
+        demallocate(overflow_, overflow_size_);
 }
 
 void ArmySetSparse::clear() {
@@ -1279,6 +1302,10 @@ void ArmySetSparse::clear() {
         data_arena_.free();
         demallocate(groups_, nr_groups(), memory_flags_);
         groups_ = nullptr;
+    }
+    if (ARMYSET_CACHE && cache_) {
+        demallocate(cache_, allocated_cache() * Element::SIZE+ARMY_PADDING);
+        cache_ = nullptr;
     }
     if (overflow_) {
         if (overflow_used_) throw_logic("overflow is not empty");
@@ -1343,6 +1370,17 @@ void ArmySetSparse::resize() {
         + FACTOR(new_nr_groups * GROUP_SIZE)
         - FACTOR(old_nr_groups * GROUP_SIZE);
     //logger << "Resize ArmySetSparse: " << old_groups << " -> " << new_groups << ", new size=" << new_nr_groups * GROUP_SIZE << " (" << size() << " armies)" << endl;
+
+    if (ARMYSET_CACHE) {
+        lock_guard<mutex> lock{exclude_cache_};
+
+        size_t old_size_cache = allocated_cache() * Element::SIZE;
+        size_t new_size_cache = 2 * old_size_cache;
+        remallocate(cache_, old_size_cache+ARMY_PADDING, new_size_cache+ARMY_PADDING);
+        std::memcpy(cache_ + old_size_cache, cache_, old_size_cache);
+        mask_cache_ = 2 * mask_cache_ + 1;
+    }
+
     //print(logger, false);
     //logger << "Start\n" << flush;
 
@@ -1449,6 +1487,11 @@ void ArmySetSparse::_convert_hash(uint unit, Coord* armies, ArmyId nr_elements, 
         overflow_ = nullptr;
     }
 
+    if (ARMYSET_CACHE && cache_) {
+        demallocate(cache_, allocated_cache() * Element::SIZE+ARMY_PADDING);
+        cache_ = nullptr;
+    }
+
     GroupId n_groups = nr_groups();
     Group* groups = groups_;
 
@@ -1546,6 +1589,15 @@ void ArmySetSparse::check(ArmyId nr_elements, char const* file, int line) const 
 
 size_t ArmySetSparse::memory_report(ostream& os, string const& prefix) const {
     size_t sz = 0;
+
+    if (ARMYSET_CACHE) {
+        os << prefix << "cache = ";
+        if (cache_) {
+            os << "Element[" << allocated_cache() << "] (" << allocated_cache() * Element::SIZE+ARMY_PADDING << " bytes)\n";
+            sz += allocated_cache() * Element::SIZE+ARMY_PADDING;
+        } else os << "nullptr\n";
+    }
+
     os << prefix << "groups = ";
     if (groups_) {
         os << "Group[" << nr_groups() << "] (" << nr_groups() * sizeof(Group) << " bytes, " << (memory_flags_ & ALLOC_LOCK ? "locked" : "unlocked") << ")\n";
@@ -2592,7 +2644,12 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <th>Largest<br/>subset</th>\n"
             "        <th>Late<br/>prunes</th>\n"
             "        <th>Late<br/>prune<br/>ratio</th>\n"
-            "        <th>Army<br/>resize<br/>overflow</th>\n"
+            "        <th>Army<br/>resize<br/>overflow</th>\n";
+        if (ARMYSET_CACHE)
+            out_ <<
+                "        <th>Army<br/>front<br/>inserts</th>\n"
+                "        <th>Army<br/>front<br/>ratio</th>\n";
+        out_ <<
             "        <th>Army inserts</th>\n"
             "        <th>Army<br/>ratio</th>\n"
             "        <th>Board inserts</th>\n"
@@ -2631,11 +2688,22 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
                 "        <td>" << st.largest_subset() << "</td>\n"
                 "        <td>" << st.late_prunes() << "</td>\n"
                 "        <td>" << st.late_prunes() * 100 / old_boards << "%</td>\n"
-                "        <td>" << st.overflow_max() << "</td>\n"
+                "        <td>" << st.overflow_max() << "</td>\n";
+            if (ARMYSET_CACHE) {
+                auto army_tries = st.armyset_tries() + st.armyset_cache_hits();
+                out_ <<
+                    "        <td>" << st.armyset_cache_hits() << " / " << army_tries << "</td>\n"
+                    "        <td>";
+                if (army_tries)
+                    out_ << st.armyset_cache_hits()*100 / army_tries;
+                out_ << "</td>\n";
+            }
+            out_ <<
                 "        <td>" << st.armyset_size() << " / " << st.armyset_tries() << "</td>\n"
                 "        <td>";
             if (st.armyset_tries())
                 out_ << st.armyset_size()*100 / st.armyset_tries() << "%";
+
             out_ <<
                 "</td>\n"
                 "        <td>" << st.boardset_size() << " / " << st.boardset_tries() << "</td>\n"
