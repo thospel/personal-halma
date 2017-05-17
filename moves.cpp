@@ -10,14 +10,6 @@
 # define _BACKTRACK
 #endif // BACKTRACK
 
-#if RED_BUILDER
-# define RED_NORMAL	(!BLUE_TO_MOVE && !BACKTRACK)
-# define BLUE_NORMAL	( BLUE_TO_MOVE && !BACKTRACK)
-#else  // RED_BUILDER
-# define RED_NORMAL	0
-# define BLUE_NORMAL	0
-#endif // RED_BUILDER
-
 #if SLOW
 # define _SLOW _slow
 #else  // SLOW
@@ -33,18 +25,13 @@
 
 NOINLINE
 Statistics NAME(uint thid,
-#if BACKTRACK
-                BoardSet& boards_from,
-                BoardSet& boards_to,
-#else  // BACKTRACK
-# if BLUE_TO_MOVE
+#if BLUE_TO_MOVE
                 BoardSetRed& boards_from,
-                BoardSet& boards_to,
-# else // BLUE_TO_MOVE
-                BoardSet& boards_from,
+                BoardSetBlue& boards_to,
+#else // BLUE_TO_MOVE
+                BoardSetBlue& boards_from,
                 BoardSetRed& boards_to,
 #endif // BLUE_TO_MOVE
-#endif // BACKTRACK
                 ArmySet const& moving_armies,
                 ArmySet const& opponent_armies,
                 ArmySet& moved_armies,
@@ -55,18 +42,13 @@ Statistics NAME(uint thid,
 #endif // BACKTRACK && !BLUE_TO_MOVE
                 int available_moves) HOT;
 Statistics NAME(uint thid,
-#if BACKTRACK
-                BoardSet& boards_from,
-                BoardSet& boards_to,
-#else  // BACKTRACK
-# if BLUE_TO_MOVE
+#if BLUE_TO_MOVE
                 BoardSetRed& boards_from,
-                BoardSet& boards_to,
-# else // BLUE_TO_MOVE
-                BoardSet& boards_from,
+                BoardSetBlue& boards_to,
+#else // BLUE_TO_MOVE
+                BoardSetBlue& boards_from,
                 BoardSetRed& boards_to,
 #endif // BLUE_TO_MOVE
-#endif // BACKTRACK
                 ArmySet const& moving_armies,
                 ArmySet const& opponent_armies,
                 ArmySet& moved_armies,
@@ -91,15 +73,15 @@ Statistics NAME(uint thid,
 #endif
 
     Statistics stats;
-#if RED_NORMAL
+#if !BLUE_TO_MOVE
     BoardSubsetRedBuilder& subset_to = boards_to.builder();
-#endif // RED_NORMAL
+#endif // !BLUE_TO_MOVE
     while (true) {
-#if BLUE_NORMAL
+#if BLUE_TO_MOVE
         BoardSubsetRedRef subset_from{boards_from};
-#else // BLUE_NORMAL
+#else // BLUE_TO_MOVE
         BoardSubsetRef subset_from{boards_from};
-#endif // BLUE_NORMAL
+#endif // BLUE_TO_MOVE
 
         ArmyId const blue_id = subset_from.id();
         if (blue_id == 0) break;
@@ -109,7 +91,7 @@ Statistics NAME(uint thid,
             if (tid == 0) {
                 logger << time_string() << ": Processing blue " << setw(6) << blue_id << " (" << get_memory() / 1000000 << " MB)\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n";
                 if (MEMORY_REPORT) {
-                    if (STATISTICS && RED_NORMAL)
+                    if (STATISTICS && !BLUE_TO_MOVE)
                         logger << "Largest subset: " << stats.largest_subset() << "\n";
                     memory_report(logger,
                                   moving_armies, opponent_armies, moved_armies,
@@ -162,16 +144,11 @@ Statistics NAME(uint thid,
         // jump_only indicates that all blue moves must now be jumps to base
         bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
-#if !BLUE_TO_MOVE && !RED_NORMAL
-        BoardSubset subset_to;
-        subset_to.create();
-#endif // !BLUE_TO_MOVE && !RED_NORMAL
-
         auto const& red_armies = subset_from.armies();
         for (auto const& red_value: red_armies) {
-            if (!BLUE_NORMAL && red_value == 0) continue;
+            if (!BLUE_TO_MOVE && red_value == 0) continue;
             ArmyId red_id;
-            auto const symmetry = BoardSubset::split(red_value, red_id);
+            auto const symmetry = BoardSubsetBlue::split(red_value, red_id);
             if (VERBOSE) logger << " Sub Processing red " << red_id << "," << symmetry << "\n" << flush;
             Army const& blue =
                 symmetry ? bZ_symmetric : bZ;
@@ -636,18 +613,13 @@ Statistics NAME(uint thid,
 # define ALL_NAME CAT(make_all_,CAT(COLOR_TO_MOVE,CAT(_moves,CAT(_BACKTRACK,_SLOW))))
 
 StatisticsE ALL_NAME(
-#if BACKTRACK
-                     BoardSet& boards_from,
-                     BoardSet& boards_to,
-#else // BACKTRACK
-# if BLUE_TO_MOVE
-                     BoardSetRed& boards_from,
-                     BoardSet& boards_to,
-# else // BLUE_TO_MOVE
-                     BoardSet& boards_from,
-                     BoardSetRed& boards_to,
-# endif // BLUE_TO_MOVE
-#endif // BACKTRACK
+#if BLUE_TO_MOVE
+                     BoardSetRed & boards_from,
+                     BoardSetBlue& boards_to,
+#else // BLUE_TO_MOVE
+                     BoardSetBlue& boards_from,
+                     BoardSetRed & boards_to,
+#endif // BLUE_TO_MOVE
                      ArmySet const& moving_armies,
                      ArmySet const& opponent_armies,
                      ArmySet& moved_armies,
@@ -665,37 +637,25 @@ StatisticsE ALL_NAME(
     boards_from.pre_read();
     uint n = boards_to.pre_write();
     vector<future<Statistics>> results;
-#if BACKTRACK
+
     for (uint i=1; i < n; ++i)
         results.emplace_back
             (async
              (launch::async, NAME,
               i, ref(boards_from), ref(boards_to),
               ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-#if !BLUE_TO_MOVE
+#if BACKTRACK && !BLUE_TO_MOVE
               ref(red_backtrack), ref(red_backtrack_symmetric), solution_moves,
-#endif // BLUE_TO_MOVE
+#endif // BACKTRACK && !BLUE_TO_MOVE
               nr_moves));
     static_cast<Statistics&>(stats) = NAME
     (0, boards_from, boards_to,
      moving_armies, opponent_armies, moved_armies,
-#if !BLUE_TO_MOVE
+#if BACKTRACK && !BLUE_TO_MOVE
      red_backtrack, red_backtrack_symmetric, solution_moves,
-#endif // BLUE_TO_MOVE
+#endif // BACKTRACK && !BLUE_TO_MOVE
      nr_moves);
-#else // BACKTRACK
-    for (uint i=1; i < n; ++i)
-        results.emplace_back
-            (async
-             (launch::async, NAME,
-              i, ref(boards_from), ref(boards_to),
-              ref(moving_armies), ref(opponent_armies), ref(moved_armies),
-              nr_moves));
-    static_cast<Statistics&>(stats) = NAME
-    (0, boards_from, boards_to,
-     moving_armies, opponent_armies, moved_armies,
-     nr_moves);
-#endif // BACKTRACK
+
     for (auto& result: results) stats += result.get();
 
     if (MEMORY_REPORT)
