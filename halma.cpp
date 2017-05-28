@@ -3104,14 +3104,14 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             boards_blue.clear();
         }
         // if (testQ) cout << moved_armies;
-        moving_armies.clear();
-        moved_armies.drop_hash();
-
         if (is_terminated()) {
             auto stop_solve = chrono::steady_clock::now();
             duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
             return -1;
         }
+
+        moving_armies.clear();
+        moved_armies.drop_hash();
 
         if (sample_subset_red && !blue_to_move) {
             auto const& boards = boards_red;
