@@ -3497,7 +3497,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:sHSjpqQ:eEFf:vR:Ax:y:r:a:T", argv);
+    GetOpt options("b:B:t:isHSjpqQ:eEFf:vR:Ax:y:r:a:T", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
@@ -3558,6 +3558,9 @@ void my_main(int UNUSED argc, char const* const* argv) {
               if (val > MAX_ARMY-DO_ALIGN)
                   throw(range_error("ARMY must be <= " + to_string(MAX_ARMY-DO_ALIGN)));
               ARMY = val;
+              break;
+            case 'i':
+              sched_batch();
               break;
             default:
               cerr << "usage: " << argv[0] << " [-A] [-x size] [-y size] [-r ruleset] [-a soldiers] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-e] [-H] [-S] [-R sample_red_file]\n";

@@ -8,6 +8,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <fstream>
 #include <mutex>
@@ -16,6 +18,8 @@
 // Needed to implement mlock2 as long as it's not in glibc
 #include <sys/syscall.h>
 #include <asm-generic/mman.h>
+
+#include <sched.h>
 
 bool FATAL = false;
 
@@ -56,7 +60,7 @@ size_t get_memory(bool set_base_mem) {
     mem *= PAGE_SIZE;
     if (set_base_mem) {
         base_mem = mem;
-        // cout << "Base mem=" << mem / 1000000 << " MB\n";
+        // std::cout << "Base mem=" << mem / 1000000 << " MB\n";
     } else mem -= base_mem;
     return mem;
 }
@@ -208,6 +212,28 @@ void set_signals() {
         throw_errno("Could not set SIGTERM handler");
     if (sigaction(SIGSTKFLT, &new_action, nullptr))
         throw_errno("Could not set SIGTERM handler");
+}
+
+void raise_limit(int resource, rlim_t value) {
+    struct rlimit rlim;
+    if (getrlimit(resource, &rlim))
+        throw_errno("Could not getrlimit");
+    if (value == rlim.rlim_cur) return;
+    if (rlim.rlim_max != RLIM_INFINITY &&
+        (value == RLIM_INFINITY || value > rlim.rlim_max)) {
+        std::cerr << "Cannot raise resource " << resource << " from " << rlim.rlim_cur << " to " << value << ". Raise to hard limit " << rlim.rlim_max << " instead" << std::endl;
+        rlim.rlim_cur = rlim.rlim_max;
+    } else rlim.rlim_cur = value;
+    if (setrlimit(resource, &rlim))
+        throw_errno("Could not setrlimit");
+    // std::cerr << "Resource " << resource << " raised to " << value << std::endl;
+}
+
+void sched_batch() {
+    struct sched_param param;
+    param.sched_priority = 0;
+    if (sched_setscheduler(0, SCHED_BATCH, &param))
+        throw_errno("Could not sched_setscheduler");
 }
 
 void _madv_free(void* ptr, size_t length) {
@@ -618,4 +644,6 @@ void init_system() {
         throw_errno("Could not determine PAGE SIZE");
     PAGE_SIZE  = tmp;
     PAGE_SIZE1 = PAGE_SIZE-1;
+
+    raise_limit(RLIMIT_MEMLOCK, RLIM_INFINITY);
 }

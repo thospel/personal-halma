@@ -136,6 +136,7 @@ std::string time_string();
 time_t now();
 size_t get_memory(bool set_base_mem = false);
 void set_signals();
+void sched_batch();
 bool is_terminated();
 ssize_t total_allocated() PURE;
 ssize_t total_mmapped() PURE;
