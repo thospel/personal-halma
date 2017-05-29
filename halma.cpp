@@ -2429,12 +2429,9 @@ Board BoardSetRed::example(ArmySet const& opponent_armies, ArmySet const& moved_
 
 Board BoardSetRed::random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const {
     if (empty()) throw_logic("No board in BoardSet");
-uint tries = 1000;
 
     ArmyId n = subsets();
     ArmyId step = n == 1 ? 0 : random_coprime(n);
-RETRY:
-if (tries == 500) cout << "Try\n";
     for (ArmyId i = random(n); true; i = (i + step) % n) {
         ArmyId blue_id = from() + i;
         auto const& subset_red = at(blue_id);
@@ -2448,9 +2445,6 @@ if (tries == 500) cout << "Try\n";
         ArmySet const& red_armies  = blue_moved ? opponent_armies : moved_armies;
         Army const blue{blue_armies, blue_id};
         Army const red {red_armies,  red_id, symmetry};
-        Image image{blue, red};
-        image.check(__FILE__, __LINE__);
-        if (--tries) goto RETRY;
         return Board{blue, red};
     }
 }
