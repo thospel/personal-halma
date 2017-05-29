@@ -573,6 +573,9 @@ class ArmyZconst {
     explicit inline ArmyZconst(Coord const& base): base_{base} {}
     Coord const* begin() const PURE { return &base_; };
     Coord const* end()   const PURE { return &base_ + ARMY; };
+    inline uint64_t hash() const PURE {
+        return army_hash(begin());
+    }
     inline void check(char const* file, int line) const ALWAYS_INLINE;
   private:
     inline bool equal(Coord const* RESTRICT army) const {
@@ -1155,7 +1158,7 @@ class ArmySetSparse {
             inline char const* data(DataId i) const PURE {
                 return _data(i+sizeof(GroupId));
             }
-            ArmyId converted_id(DataId i, uint pos) const PURE {
+            ArmyId const& converted_id(DataId i, uint pos=0) const PURE {
                 // This is an aligned access.
                 auto ids = reinterpret_cast<ArmyId const*>(_data(i));
                 return ids[pos];
@@ -1287,6 +1290,9 @@ class ArmySetSparse {
         inline char const* data(uint i, DataId data_id) const PURE {
             return cache_[i].data(data_id);
         }
+        inline ArmyId const* converted_data(uint i, DataId data_id) const PURE {
+            return &cache_[i].converted_id(data_id);
+        }
         inline void check(Group const* groups, GroupId n, ArmyId size, ArmyId overflowed, ArmyId nr_elements, char const* file, int line) const ALWAYS_INLINE;
         size_t memory_report(ostream& os) const COLD;
       private:
@@ -1337,7 +1343,7 @@ class ArmySetSparse {
     inline ArmyId find(ArmySet const& army_set, Army const& army, uint64_t hash) const PURE COLD;
     inline ArmyId find(ArmySet const& army_set, ArmyPos const& army, uint64_t hash) const PURE COLD;
 
-    void print(ostream& os, bool show_boards = true) const;
+    void print(ostream& os, bool show_boards = true, Coord const* armies = nullptr) const;
 
     inline size_t _overflowed() const PURE {
         return overflow_used_;
@@ -1502,7 +1508,7 @@ class ArmySet {
     size_t overflow_max() const PURE;
     void check(char const* file, int line) const;
     inline void print(ostream& os, bool show_boards = true) const {
-        for (auto& subset: subsets_) subset.print(os, show_boards);
+        for (auto& subset: subsets_) subset.print(os, show_boards, armies_);
     }
     size_t memory_report(ostream& os, string const& prefix="") const COLD;
 

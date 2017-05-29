@@ -1540,7 +1540,7 @@ size_t ArmySetSparse::overflow_max() const {
     return overflow_max_ / Element::SIZE;
 }
 
-void ArmySetSparse::print(ostream& os, bool show_boards) const {
+void ArmySetSparse::print(ostream& os, bool show_boards, Coord const* armies) const {
     GroupId n_groups = nr_groups();
     Group* groups = groups_;
     for (GroupId g=0; g<n_groups; ++g) {
@@ -1549,14 +1549,23 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
         if (group.bitmap()) {
             uint n = group.bits();
             DataId data_id = group.data_id();
-            char const* RESTRICT ptr = data_arena_.data(n-1, data_id);
-            for (uint i=0; i<GROUP_SIZE; ++i)
-                if (group.bit(i)) {
-                    Element const& element = Element::element(ptr);
-                    os << " " << element.id();
-                    ptr += Element::SIZE;
-                } else
-                    os << " D";
+            if (armies) {
+                ArmyId const* RESTRICT ptr = data_arena_.converted_data(n-1, data_id);
+                for (uint i=0; i<GROUP_SIZE; ++i)
+                    if (group.bit(i)) {
+                        os << " " << *ptr++;
+                    } else
+                        os << " D";
+            } else {
+                char const* RESTRICT ptr = data_arena_.data(n-1, data_id);
+                for (uint i=0; i<GROUP_SIZE; ++i)
+                    if (group.bit(i)) {
+                        Element const& element = Element::element(ptr);
+                        os << " " << element.id();
+                        ptr += Element::SIZE;
+                    } else
+                        os << " D";
+            }
         }
         os << " }";
     }
@@ -1570,14 +1579,25 @@ void ArmySetSparse::print(ostream& os, bool show_boards) const {
         if (group.bitmap()) {
             uint n = group.bits();
             DataId data_id = group.data_id();
-            char const* RESTRICT ptr = data_arena_.data(n-1, data_id);
-            for (uint i=0; i<GROUP_SIZE; ++i)
-                if (group.bit(i)) {
-                    Element const& element = Element::element(ptr);
-                    auto h = element.hash() >> ARMY_SUBSET_BITS;
-                    os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
-                    ptr += Element::SIZE;
-                }
+            if (armies) {
+                ArmyId const* RESTRICT ptr = data_arena_.converted_data(n-1, data_id);
+                for (uint i=0; i<GROUP_SIZE; ++i)
+                    if (group.bit(i)) {
+                        ArmyId id = *ptr++;
+                        ArmyZconst const army{armies[id * static_cast<size_t>(ARMY)]};
+                        auto h = army.hash() >> ARMY_SUBSET_BITS;
+                        os << "Army " << id << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{army};
+                    }
+            } else {
+                char const* RESTRICT ptr = data_arena_.data(n-1, data_id);
+                for (uint i=0; i<GROUP_SIZE; ++i)
+                    if (group.bit(i)) {
+                        Element const& element = Element::element(ptr);
+                        auto h = element.hash() >> ARMY_SUBSET_BITS;
+                        os << "Army " << element.id() << ", hash " << hex << h << dec << " [" << ((h >> GROUP_BITS) & mask) << "," << (h & GROUP_MASK) << "]\n" << Image{element.armyZ()};
+                        ptr += Element::SIZE;
+                    }
+            }
         }
     }
 }
