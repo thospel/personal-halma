@@ -777,7 +777,7 @@ BoardSetRed::BoardSetRed(bool keep, ArmyId size) :
     cmallocate(subsets_, capacity());
     --subsets_;
     // cout << "Create BoardSetRed " << static_cast<void const*>(subsets_) << ": size " << capacity_ << "\n";
-    top_ = size + 1;
+    top_ = 1;
 }
 
 BoardSetRed::~BoardSetRed() {
@@ -837,6 +837,16 @@ void BoardSetRed::clear(ArmyId size) {
     --subsets_;
     capacity_ = size;
     top_ = size+1;
+}
+
+void BoardSetRed::print(ostream& os) const {
+    os << "-----\n";
+    for (ArmyId i = from(); i < top_; ++i) {
+        os << " Blue id " << i << ":";
+        cat(i).print(os);
+        os << "\n";
+    }
+    os << "-----\n";
 }
 
 string Image::_str() const {
@@ -2328,6 +2338,15 @@ size_t BoardSubsetRed::memory_report() const {
     return 0;
 }
 
+void BoardSubsetRed::print(ostream& os) const {
+    ArmyId sz = size();
+    for (ArmyId i=0; i < sz; ++i) {
+        ArmyId red_id;
+        auto symmetry = split(armies_[i], red_id);
+        os << " " << red_id << (symmetry ? "-" : "+");
+    }
+}
+
 bool BoardSetRed::_insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
     if (CHECK) {
         if (UNLIKELY(blue_id <= 0))
@@ -2976,7 +2995,8 @@ void play(bool print_moves) {
         ArmySet  army_set[3];
         bool blue_to_move = nr_moves & 1;
         if (blue_to_move) {
-            BoardSetRed red_boards{false, 1};
+            BoardSetRed red_boards{false};
+            red_boards.grow(1);
             red_boards.insert(board, army_set[0], army_set[1]);
             army_set[0].drop_hash();
             army_set[1].convert_hash();
@@ -3001,7 +3021,8 @@ void play(bool print_moves) {
             army_set[0].drop_hash();
             army_set[1].convert_hash();
 
-            BoardSetRed red_boards{false, blue_boards.back_id()};
+            BoardSetRed red_boards{false};
+            red_boards.grow(blue_boards.back_id());
             auto stats = make_all_red_moves
                 (blue_boards, red_boards,
                  army_set[0], army_set[1], army_set[2],
@@ -3081,7 +3102,8 @@ int solve(Board const& board, int nr_moves, Army& red_army,
 
     vector<ArmyId> largest_red;
     BoardSetBlue boards_blue;
-    BoardSetRed  boards_red{red_file ? true : false, 1};
+    BoardSetRed  boards_red{red_file ? true : false};
+    boards_red.grow(1);
     array<ArmySet, 3>  army_set;
     bool blue_to_move = nr_moves & 1;
     if (blue_to_move)
@@ -3224,6 +3246,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
     army_set.emplace_back(make_unique<ArmySet>());
     if (solution_moves & 1) {
         // BLUE does the first move
+        boardset_pairs.red (solution_moves).grow(1);
         boardset_pairs.red (solution_moves).insert(board, *army_set[0], *army_set[1]);
     } else {
         // RED does the first move

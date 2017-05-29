@@ -1810,6 +1810,7 @@ class BoardSubsetRed: public BoardSubsetBase {
     }
     inline void map(BoardSetRed& set);
     inline size_t memory_report() const;
+    void print(ostream& os) const;
 
   private:
     bool _insert(ArmyId red_value, Statistics& stats);
@@ -2098,6 +2099,7 @@ class BoardSetRed: public BoardSetBase {
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE;
     size_t memory_report(ostream& os, string const& prefix="") const COLD;
+    void print(ostream& os) const;
 
   private:
     NOINLINE void resize() RESTRICT;
@@ -2114,6 +2116,11 @@ class BoardSetRed: public BoardSetBase {
 };
 
 inline ostream& operator<<(ostream& os, BoardSetBlue const& set) {
+    set.print(os);
+    return os;
+}
+
+inline ostream& operator<<(ostream& os, BoardSetRed const& set) {
     set.print(os);
     return os;
 }
