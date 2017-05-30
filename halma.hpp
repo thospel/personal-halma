@@ -708,6 +708,7 @@ class Statistics {
         armyset_deallocs_ = 0;
         armyset_deallocs_cached_ = 0;
 
+        boardset_uniques_ = 0;
         boardset_size_ = 0;
         boardset_tries_ = 0;
         boardset_probes_ = 0;
@@ -762,6 +763,10 @@ class Statistics {
         if (!STATISTICS) return;
         ++armyset_deallocs_cached_;
     }
+    inline void boardset_unique() {
+        if (!STATISTICS) return;
+        ++boardset_uniques_;
+    }
     inline void boardset_size(Counter size) {
         boardset_tries_ += size;
         boardset_size_ = size;
@@ -795,6 +800,7 @@ class Statistics {
     Counter armyset_allocs_cached() const PURE { return armyset_allocs_cached_; }
     Counter armyset_deallocs() const PURE { return armyset_deallocs_; }
     Counter armyset_deallocs_cached() const PURE { return armyset_deallocs_cached_; }
+    Counter boardset_uniques() const PURE { return boardset_uniques_; }
     Counter boardset_size() const PURE { return boardset_size_; }
     Counter boardset_tries() const PURE { return boardset_tries_; }
     Counter boardset_immediate() const PURE { return boardset_immediate_; }
@@ -808,8 +814,8 @@ class Statistics {
         auto overflow_max   = stats.overflow_max();
         if (overflow_max > overflow_max_) overflow_max_ = overflow_max;
 
-        armyset_immediate_       += stats.armyset_immediate_;
-        armyset_probes_	         += stats.armyset_probes_;
+        armyset_immediate_       += stats.armyset_immediate();
+        armyset_probes_	         += stats.armyset_probes();
         armyset_tries_	         += stats.armyset_tries();
         armyset_cache_hits_      += stats.armyset_cache_hits();
         armyset_allocs_          += stats.armyset_allocs();
@@ -817,6 +823,7 @@ class Statistics {
         armyset_deallocs_        += stats.armyset_deallocs();
         armyset_deallocs_cached_ += stats.armyset_deallocs_cached();
 
+        boardset_uniques_   += stats.boardset_uniques();
         boardset_immediate_ += stats.boardset_immediate_;
         boardset_probes_    += stats.boardset_probes_;
         boardset_tries_	    += stats.boardset_tries();
@@ -837,6 +844,7 @@ class Statistics {
     Counter armyset_allocs_cached_;
     Counter armyset_deallocs_;
     Counter armyset_deallocs_cached_;
+    Counter boardset_uniques_;
     Counter boardset_size_;
     Counter boardset_tries_;
     Counter boardset_probes_;
@@ -1718,6 +1726,7 @@ class BoardSubsetBlue: public BoardSubsetBase {
         }
         return find(join(red_id, symmetry < 0));
     }
+    void sort();
     ArmyId example(ArmyId& symmetry) const COLD;
     ArmyId random_example(ArmyId& symmetry) const COLD;
     void print(ostream& os) const;
@@ -1730,7 +1739,7 @@ class BoardSubsetBlue: public BoardSubsetBase {
     inline bool insert(ArmyId red_value, Statistics& stats);
     bool find(ArmyId id) const PURE;
 
-    ArmyId* end()   PURE { return &armies_[allocated()]; }
+    ArmyId* end()   PURE { return &armies_[size()]; }
 };
 
 bool BoardSubsetBlue::insert(ArmyId red_value, Statistics& stats) {
@@ -2164,6 +2173,7 @@ class BoardSubsetBlueRef: public BoardSubsetRefBase {
     BoardSubsetBlue const& armies() const PURE {
         return static_cast<BoardSubsetBlue const&>(subset_);
     }
+    void sort() { _armies().sort(); }
   private:
     BoardSubsetBlue& _armies() PURE {
         return static_cast<BoardSubsetBlue&>(subset_);

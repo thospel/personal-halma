@@ -307,6 +307,8 @@ void StatisticsE::print(ostream& os) const {
             os << "----";
         os << "\t" << armyset_size() << " / " << armyset_tries() << "\n";
 
+        if (boardset_uniques())
+            os << "\tUnique input boards: " << boardset_uniques() << "\n";
         os << "\tBoard inserts: ";
         if (boardset_tries())
             os << setw(3) << boardset_size()*100 / boardset_tries() << "%";
@@ -441,6 +443,10 @@ void BoardSubsetBlue::resize() {
     ArmyId new_size = old_size*2;
     remallocate(armies_, old_size, new_size);
     allocated_ = new_size;
+}
+
+void BoardSubsetBlue::sort() {
+    std::sort(begin(), end());
 }
 
 ArmyId BoardSubsetBlue::example(ArmyId& symmetry) const {
