@@ -1662,21 +1662,21 @@ using StatisticsList = vector<StatisticsE>;
 
 class BoardSubsetBase {
   public:
-    //static ArmyId split(ArmyId value, ArmyId& red_id) {
-    //    red_id = value >> 1;
-    //    return value & 1;
-    //}
-    //static inline constexpr ArmyId join(ArmyId id, bool flip) {
-    //    return id << 1 | flip;
-    //}
     static ArmyId split(ArmyId value, ArmyId& red_id) {
-        red_id = value & ARMYID_MASK;
-        // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMYID_HIGHBIT) << dec << "\n";
-        return value & ARMYID_HIGHBIT;
+        red_id = value >> 1;
+        return value & 1;
     }
     static inline constexpr ArmyId join(ArmyId id, bool flip) {
-        return id | (flip ? ARMYID_HIGHBIT : 0);
+        return id << 1 | flip;
     }
+    //static ArmyId split(ArmyId value, ArmyId& red_id) {
+    //    red_id = value & ARMYID_MASK;
+    //    // cout << "Split: Value=" << hex << value << ", red id=" << red_id << ", symmetry=" << (value & ARMYID_HIGHBIT) << dec << "\n";
+    //    return value & ARMYID_HIGHBIT;
+    //}
+    //static inline constexpr ArmyId join(ArmyId id, bool flip) {
+    //    return id | (flip ? ARMYID_HIGHBIT : 0);
+    //}
     ArmyId const* begin() const PURE { return &armies_[0]; }
   protected:
     ArmyId* begin() PURE { return &armies_[0]; }
