@@ -431,75 +431,31 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
 }
 
 bool BoardSubsetBlue::find(ArmyId red_id) const {
-    auto mask = mask_;
-    ArmyId pos = hash64(red_id) & mask;
-    ArmyId offset = 0;
-    auto armies = armies_;
-    while (true) {
-        // cout << "Try " << pos << " of " << size_ << "\n";
-        auto& id = armies[pos];
-        if (id == 0) return false;
-        if (id == red_id) {
-            // cout << "Found duplicate " << hash << "\n";
-            return true;
-        }
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
+    for (auto value: *this)
+        if (value == red_id) return true;
+    return false;
 }
 
 void BoardSubsetBlue::resize() {
     auto old_size = allocated();
     ArmyId new_size = old_size*2;
-    auto new_armies = cmallocate<ArmyId>(new_size);
-    auto old_armies = armies_;
-    armies_ = new_armies;
-    // logger << "Resize BoardSubsetBlue " << static_cast<void const *>(old_armies) << " -> " << static_cast<void const *>(new_armies) << ": " << new_size << "\n" << flush;
-    ArmyId mask = new_size-1;
-    mask_ = mask;
-    left_ += FACTOR(new_size) - FACTOR(old_size);
-    for (ArmyId i = 0; i < old_size; ++i) {
-        auto const& value = old_armies[i];
-        if (value == 0) continue;
-        // cout << "Insert " << value << "\n";
-        ArmyId pos = hash64(value) & mask;
-        ArmyId offset = 0;
-        while (new_armies[pos]) {
-            // cout << "Try " << pos << " of " << mask+1 << "\n";
-            ++offset;
-            pos = (pos + offset) & mask;
-        }
-        new_armies[pos] = value;
-        // cout << "Found empty\n";
-    }
-    demallocate(old_armies, old_size);
+    remallocate(armies_, old_size, new_size);
+    allocated_ = new_size;
 }
 
 ArmyId BoardSubsetBlue::example(ArmyId& symmetry) const {
     if (empty()) throw_logic("No red value in BoardSubset");
 
-    auto armies = armies_;
-    for (auto end = &armies[allocated()]; armies < end; ++armies)
-        if (*armies) {
-            ArmyId red_id;
-            symmetry = split(*armies, red_id);
-            return red_id;
-        }
-    throw_logic("No red value even though the BoardSubsetBlue is not empty");
+    ArmyId red_id;
+    symmetry = split(armies_[0], red_id);
+    return red_id;
 }
 
 ArmyId BoardSubsetBlue::random_example(ArmyId& symmetry) const {
     if (empty()) throw_logic("No red value in BoardSubset");
 
-    auto armies = armies_;
-    ArmyId n = allocated();
-    ArmyId i = random(n);
-    ArmyId mask = n-1;
-    ArmyId offset = 0;
-
-    while (armies[i] == 0) i = (i + ++offset) & mask;
     ArmyId red_id;
-    symmetry = split(armies[i], red_id);
+    symmetry = split(armies_[random(size())], red_id);
     return red_id;
 }
 

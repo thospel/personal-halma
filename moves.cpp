@@ -80,7 +80,7 @@ Statistics NAME(uint thid,
 #if BLUE_TO_MOVE
         BoardSubsetRedRef subset_from{boards_from};
 #else // BLUE_TO_MOVE
-        BoardSubsetRef subset_from{boards_from};
+        BoardSubsetBlueRef subset_from{boards_from};
 #endif // BLUE_TO_MOVE
 
         ArmyId const blue_id = subset_from.id();
@@ -146,7 +146,7 @@ Statistics NAME(uint thid,
 
         auto const& red_armies = subset_from.armies();
         for (auto const& red_value: red_armies) {
-            if (!BLUE_TO_MOVE && red_value == 0) continue;
+            // if (!BLUE_TO_MOVE && red_value == 0) continue;
             ArmyId red_id;
             auto const symmetry = BoardSubsetBlue::split(red_value, red_id);
             if (VERBOSE) logger << " Sub Processing red " << red_id << "," << symmetry << "\n" << flush;
