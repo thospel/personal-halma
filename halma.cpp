@@ -633,60 +633,91 @@ bool BoardSubsetRed::_find(ArmyId red_value) const {
                [red_value](ArmyId value) { return value == red_value; });
 }
 
-BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, ArmyId size) :
-    filename_{red_file ? red_file + to_string(t) : string{}},
-    army_list_{nullptr},
+BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, size_t size) :
+    armies_end_{nullptr},
     army_mmap_{nullptr},
-    army_list_size_{size},
-    free_{0},
-    from_{0},
-    write_end_{BLOCK},
-    real_allocated_{size},
+    allocated_{size},
+    begin_{0},
+    filename_{red_file ? red_file + to_string(t) : string{}},
     fd_{-1} {
     if (red_file) {
         offset_ = 0;
         fd_ = OpenReadWrite(filename_);
-        if (write_end_ < left_) left_ = write_end_;
     }
 
-    mask_ = size-1;
-    cmallocate(armies_, size);
-    // This allocates and locks more than needed for !red_file
-    // For now keep the logic consistent
-    // (we will probably always do red_file for large boardsets anyways)
-    mallocate(army_list_, army_list_size_);
-    left_ = FACTOR(size);
+    mallocate(armies_, allocated());
+    armies_end_ = armies_ + allocated();
     // logger << "Create BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << size << "), list " << static_cast<void const *>(army_list_) << " (size " << left_ << ") filename '" << filename_ << "'\n" << flush;
 }
 
 BoardSubsetRedBuilder::~BoardSubsetRedBuilder() {
-    if (armies_)
-        demallocate(armies_, real_allocated_);
+    if (armies_end_)
+        demallocate(armies_end_ - allocated(), allocated());
     if (fd_ >= 0) {
         if (army_mmap_) FdUnmap(army_mmap_, offset_ / sizeof(army_mmap_[0]));
         Close(fd_, filename_);
     }
-    if (army_list_)
-        demallocate(army_list_, army_list_size_);
     // logger << "Destroy BoardSubsetRedBuilder hash " << static_cast<void const *>(armies_) << " (size " << real_allocated_ << "), list " << static_cast<void const *>(army_list) << " (size " << FACTOR(real_allocated_) << ")\n" << flush;
 }
 
-void BoardSubsetRedBuilder::flush() {
-    demallocate(armies_, real_allocated_);
-    armies_ = nullptr;
+BoardSubsetRed BoardSubsetRedBuilder::extract() {
+    auto sz = size();
+    auto end = armies_;
+    auto from = end - sz;
+    lib_sort(from, end);
 
-    auto write_base = write_end_ - BLOCK;
-    if (free_ > write_base) {
-        size_t size = free_ - write_base;
-        // logger << "list_size=" << army_list_size_ << ", free=" << free_ << ", write_end=" << write_end_ << ", write_base=" << write_base << ", size=" << size << ", PAGE_ROUND(size)=" << PAGE_ROUND(size * sizeof(army_list_[0])) << endl;
-        size *= sizeof(army_list_[0]);
-        Write(fd_, &army_list_[write_base], size, filename_);
-        size_t extra = PAGE_ROUND(size) - size;
-        if (extra > 0)
-            Extend(fd_, offset_ * sizeof(army_list_[0]), extra, filename_);
+    if (red_file) {
+        auto base = armies_end_ - allocated();
+        size_t b = begin_;
+        auto offset = offset_;
+        offset -= b;
+        for (ArmyId previous = 0; from < end; ++from)
+            if (*from != previous) {
+                previous = *from;
+                base[b++] = previous;
+                if (b == BLOCK) {
+                    Write(fd_, base, b * sizeof(*base), filename_);
+                    offset += b;
+                    b = 0;
+                }
+            }
+        offset += b;
+        begin_ = b;
+        armies_ = base + b;
+        munneeded(armies_, end - armies_);
+        auto old_offset = offset_;
+        auto sz = offset - old_offset;
+        offset_ = offset;
+        return BoardSubsetRed(old_offset, sz);
+    } else {
+        armies_ = from;
+        auto to = from;
+        for (ArmyId previous = 0; from < end; ++from)
+            if (*from != previous) {
+                previous = *from;
+                *to++ = previous;
+            }
+
+        from = armies_;
+        size_t new_sz = to - from;
+        ArmyId* new_list = mallocate<ArmyId>(new_sz);
+        // logger << "Extract BoardSubsetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
+        std::copy(from, to, new_list);
+        munneeded(from, sz);
+
+        return BoardSubsetRed(new_list, new_sz);
     }
-    demallocate(army_list_, army_list_size_);
-    army_list_ = nullptr;
+}
+
+void BoardSubsetRedBuilder::flush() {
+    auto base = armies_end_ - allocated();
+    if (begin_) {
+        size_t sz = PAGE_ROUND(begin_ * sizeof(armies_[0]));
+        Write(fd_, base, sz, filename_);
+    }
+
+    demallocate(base, allocated());
+    armies_end_ = nullptr;
 }
 
 ArmyId BoardSubsetRedBuilder::read1(ArmyId pos) const {
@@ -709,76 +740,23 @@ void BoardSubsetRedBuilder::munmap() {
 }
 
 void BoardSubsetRedBuilder::resize() {
-    ArmyId free = free_;
-
-    if (red_file && free == write_end_ ) {
-        if (false) {
-            logger << "File write\n";
-            for (ArmyId i=write_end_ - BLOCK; i < write_end_; ++i)
-                logger << "File[" << i << "]=" << army_list_[i] << "\n";
-            logger << "--- wrote " << BLOCK << endl;
-        }
-        Write(fd_, &army_list_[write_end_ - BLOCK], BLOCK_BYTES, filename_);
-        write_end_ += BLOCK;
-    }
-
-    if (free == army_list_size_) {
-        auto old_size = army_list_size_;
-        auto new_size = old_size * 2;
-        auto list = army_list_;
-        remallocate(army_list_, old_size, new_size);
-        if (false)
-            logger << "Resize BoardSubsetRedBuilder list " << static_cast<void const *>(list) << " (size " << old_size << ") -> " << static_cast<void const *>(army_list_) << " (size " << new_size << ")\n" << std::flush;
-        army_list_size_ = new_size;
-    }
-
-    if (size() >= capacity()) {
-        auto old_allocated = allocated();
-        auto new_allocated = old_allocated*2;
-        if (new_allocated > real_allocated_) {
-            auto armies = armies_;
-            cremallocate(armies_, real_allocated_, new_allocated);
-            if (false)
-                logger << "Resize BoardSubsetRedBuilder hash " << static_cast<void const *>(armies) << " (size " << real_allocated_ << ") -> " << static_cast<void const *>(armies_) << " (size " << new_allocated << ")\n" << std::flush;
-            real_allocated_ = new_allocated;
-        } else
-            std::memset(begin(), 0, new_allocated * sizeof(armies_[0]));
-
-        ArmyId mask = new_allocated-1;
-        mask_ = mask;
-        auto armies = armies_;
-        auto army_list = army_list_;
-        for (ArmyId i = from_; i < free; ++i) {
-            auto value = army_list[i];
-            // cout << "Insert " << value << "\n";
-            ArmyId pos = hash64(value) & mask;
-            ArmyId offset = 0;
-            while (armies[pos]) {
-                // cout << "Try " << pos << " of " << mask+1 << "\n";
-                ++offset;
-                pos = (pos + offset) & mask;
-            }
-            armies[pos] = value;
-            // cout << "Found empty\n";
-        }
-    }
-    left_ = min(army_list_size_, from_ + capacity());
-    if (red_file && write_end_ < left_) left_ = write_end_;
+    auto sz = size();
+    auto old_allocated = allocated();
+    auto base = armies_end_ - old_allocated;
+    auto new_allocated = old_allocated * 2;
+    remallocate(base, old_allocated, new_allocated);
+    armies_end_ = base + new_allocated;
+    armies_ = base + begin_ + sz;
+    allocated_ = new_allocated;
 }
 
 size_t BoardSubsetRedBuilder::memory_report(ostream& os, string const& prefix) const {
     size_t sz = 0;
     os << prefix << "armies: ";
-    if (armies_) {
-        os << "ArmyId[" << real_allocated_ << "] (" << real_allocated_ * sizeof(armies_[0]) << " bytes)\n";
-        sz += real_allocated_ * sizeof(armies_[0]);
+    if (armies_end_) {
+        os << "ArmyId[" << allocated() << "] (" << allocated() * sizeof(armies_[0]) << " bytes)\n";
+        sz += allocated() * sizeof(armies_[0]);
     } else  os << "nullptr\n";
-
-    os << prefix << "army list: ";
-    if (army_list_) {
-        os << "ArmyId[" << army_list_size_ << "] (" << army_list_size_ * sizeof(army_list_[0]) << " bytes)\n";
-        sz += army_list_size_ * sizeof(army_list_[0]);
-    } else os << "nullptr\n";
     return sz;
 }
 
@@ -2405,7 +2383,7 @@ void BoardSetBlue::insert(Board const& board, ArmySet& armies_blue, ArmySet& arm
     int symmetry = blue_symmetry * red_symmetry;
 
     pre_write(1);
-    insert(blue_id, red_id, symmetry, dummy_stats);
+    insert(blue_id, red_id, symmetry);
     post_write();
 }
 
@@ -2543,7 +2521,7 @@ void BoardSetRed::insert(Board const& board, ArmySet& armies_blue, ArmySet& armi
 
     pre_write(1);
     BoardSubsetRedBuilder& subset_to = builder();
-    subset_to.insert(red_id, symmetry, dummy_stats);
+    subset_to.insert(red_id, symmetry);
     if (STATISTICS) dummy_stats.subset_size(subset_to.size());
     insert(blue_id, subset_to);
     post_write();

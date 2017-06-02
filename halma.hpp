@@ -1722,7 +1722,7 @@ class BoardSubsetBlue: public BoardSubsetBase {
     }
     ArmyId const* end()   const PURE { return &armies_[size()]; }
 
-    inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
+    inline void insert(ArmyId red_id, int symmetry) {
         if (CHECK) {
             if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
@@ -1730,7 +1730,7 @@ class BoardSubsetBlue: public BoardSubsetBase {
                 throw_logic("red_id is too large");
         }
         ArmyId value = join(red_id, symmetry < 0);
-        return insert(value, stats);
+        insert(value);
     }
     bool find(ArmyId red_id, int symmetry) const PURE {
         if (CHECK) {
@@ -1752,18 +1752,16 @@ class BoardSubsetBlue: public BoardSubsetBase {
   private:
     NOINLINE void resize() RESTRICT;
 
-    inline bool insert(ArmyId red_value, Statistics& stats);
+    inline void insert(ArmyId red_value);
     bool find(ArmyId id) const PURE;
 
     ArmyId* end()   PURE { return &armies_[size()]; }
 };
 
-bool BoardSubsetBlue::insert(ArmyId red_value, Statistics& stats) {
+void BoardSubsetBlue::insert(ArmyId red_value) {
     // logger << "Insert " << red_value << "\n";
     if (size() == allocated()) resize();
-    stats.boardset_probe(0);
     armies_[left_++] = red_value;
-    return true;
 }
 
 class BoardSetRed;
@@ -1825,18 +1823,16 @@ class BoardSubsetRedBuilder {
   public:
     using Uptr = unique_ptr<BoardSubsetRedBuilder>;
 
-    static ArmyId const INITIAL_SIZE = 32;
+    static size_t const INITIAL_SIZE = 32;
     static size_t const BLOCK_BYTES = 1 << 20;
     // static size_t const BLOCK_BYTES = 1 << 6;
-    static ArmyId const BLOCK = BLOCK_BYTES / sizeof(ArmyId);
-    static ArmyId const EXTRACT_FACTOR = 16;
+    static size_t const BLOCK = BLOCK_BYTES / sizeof(ArmyId);
 
-    BoardSubsetRedBuilder(uint t, ArmyId allocate = INITIAL_SIZE);
+    BoardSubsetRedBuilder(uint t, size_t allocate = max(INITIAL_SIZE, BLOCK));
     ~BoardSubsetRedBuilder();
-    ArmyId allocated() const PURE { return mask_+1; }
-    ArmyId capacity()  const PURE { return FACTOR(allocated()); }
-    ArmyId size()      const PURE { return free_ - from_; }
-    inline bool insert(ArmyId red_id, int symmetry, Statistics& stats) {
+    size_t allocated() const PURE { return allocated_; }
+    size_t size()      const PURE { return allocated() - (armies_end_ - armies_) - begin_; }
+    inline void insert(ArmyId red_id, int symmetry) {
         if (CHECK) {
             if (UNLIKELY(red_id <= 0))
                 throw_logic("red_id <= 0");
@@ -1844,46 +1840,9 @@ class BoardSubsetRedBuilder {
                 throw_logic("red_id is too large");
         }
         ArmyId value = BoardSubsetBase::join(red_id, symmetry < 0);
-        return insert(value, stats);
+        insert(value);
     }
-    inline BoardSubsetRed extract(ArmyId init_allocated = INITIAL_SIZE) {
-        munneeded(begin() + init_allocated, allocated() - init_allocated);
-        mask_ = init_allocated-1;
-        std::memset(begin(), 0, init_allocated * sizeof(armies_[0]));
-
-        ArmyId sz = size();
-        if (false) {
-            for (ArmyId i=0; i<sz; ++i)
-                logger << "write_list[" << i << "]=" << army_list_[i+from_] << "\n";
-            logger << "--- write_size=" << sz << endl;
-        }
-        if (red_file) {
-            size_t offset = offset_;
-            offset_ = offset + sz;
-            auto write_base = write_end_ - BLOCK;
-            auto to_write = free_ - write_base;
-            if (to_write <= write_base / EXTRACT_FACTOR) {
-                std::memcpy(&army_list_[0], &army_list_[write_base], to_write * sizeof(army_list_[0]));
-                write_end_ = BLOCK;
-                free_ -= write_base;
-                munneeded(army_list_ + free_, write_base);
-                // logger << "Move down " << write_base << " + " << to_write << " -> " << free_ << endl;
-            }
-            from_ = free_;
-            left_ = min(min(army_list_size_, from_ + FACTOR(init_allocated)), write_end_);
-            return BoardSubsetRed{offset, sz};
-        } else {
-            ArmyId* new_list = mallocate<ArmyId>(sz);
-            // logger << "Extract BoardSubsetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
-            std::copy(&army_list_[0], &army_list_[sz], new_list);
-            munneeded(army_list_, sz);
-
-            free_ = 0;
-            // from_ is already 0
-            left_ = min(army_list_size_, capacity());
-            return BoardSubsetRed{new_list, sz};
-        }
-    }
+    BoardSubsetRed extract();
     void flush();
     inline void mmap();
     inline void munmap();
@@ -1894,54 +1853,23 @@ class BoardSubsetRedBuilder {
   private:
     static ArmyId constexpr FACTOR(ArmyId factor=1) { return static_cast<ArmyId>(0.5*factor); }
 
-    ArmyId const* begin() const PURE { return &armies_[0]; }
-    ArmyId      * begin()       PURE { return &armies_[0]; }
-    ArmyId const* end()   const PURE { return &armies_[allocated()]; }
-    ArmyId      * end()         PURE { return &armies_[allocated()]; }
-    inline bool insert(ArmyId red_value, Statistics& stats) ALWAYS_INLINE;
+    inline void insert(ArmyId red_value) ALWAYS_INLINE;
     NOINLINE void resize() RESTRICT;
 
     ArmyId* armies_;
-    ArmyId mask_;
-    ArmyId left_;
-    string  filename_;
-    size_t offset_;
-    ArmyId* army_list_;
+    ArmyId* armies_end_;
     ArmyId* army_mmap_;
-    ArmyId  army_list_size_;
-    ArmyId  free_;
-    ArmyId  from_;
-    ArmyId  write_end_;
-    ArmyId  real_allocated_;
+    size_t  allocated_;
+    size_t  begin_;
+    size_t  offset_;
+    string  filename_;
     Fd fd_;
 };
 
-bool BoardSubsetRedBuilder::insert(ArmyId red_value, Statistics& stats) {
+void BoardSubsetRedBuilder::insert(ArmyId red_value) {
     // logger << "Insert " << red_value << " into BoardSubsetRedBuilder\n";
-    if (free_ == left_) resize();
-    auto mask = mask_;
-    ArmyId pos = hash64(red_value) & mask;
-    ArmyId offset = 0;
-    auto armies = armies_;
-    while (true) {
-        // cout << "Try " << pos << " of " << mask+1 << "\n";
-        auto& rv = armies[pos];
-        if (rv == 0) {
-            stats.boardset_probe(offset);
-            rv = red_value;
-            army_list_[free_++] = red_value;
-            // logger << "Found empty" << endl;
-            return true;
-        }
-        if (rv == red_value) {
-            stats.boardset_probe(offset);
-            stats.boardset_try();
-            // logger << "Found duplicate" << endl;
-            return false;
-        }
-        ++offset;
-        pos = (pos + offset) & mask;
-    }
+    *armies_++ = red_value;
+    if (armies_ == armies_end_) resize();
 }
 
 class BoardSetBase {
@@ -2011,7 +1939,7 @@ class BoardSetBlue: public BoardSetBase {
     inline BoardSubsetBlue const* begin() const PURE { return &cat(from()); }
     inline BoardSubsetBlue const* end()   const PURE { return &cat(top_); }
 
-    inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
+    inline void insert(ArmyId blue_id, ArmyId red_id, int symmetry) {
         if (CHECK) {
             if (UNLIKELY(blue_id <= 0))
                 throw_logic("blue_id <= 0");
@@ -2024,9 +1952,8 @@ class BoardSetBlue: public BoardSetBase {
             while (blue_id > capacity_) resize();
             while (blue_id >= top_) at(top_++).create();
         }
-        bool result = at(blue_id).insert(red_id, symmetry, stats);
-        size_ += result;
-        return result;
+        at(blue_id).insert(red_id, symmetry);
+        ++size_;
     }
     void insert(Board const& board, ArmySet& armies_blue, ArmySet& armies_red) COLD;
     bool find(ArmyId blue_id, ArmyId red_id, int symmetry) const PURE {

@@ -729,28 +729,21 @@ Statistics NAME(uint thid,
 #if BLUE_TO_MOVE
                     // The opponent is red and after this it is red's move
                     result_symmetry *= red_symmetry;
-                    if (boards_to.insert(moved_id, red_id, result_symmetry, stats)) {
-                        if (edge_c) stats.edge();
-                        if (VERBOSE) {
-                            // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                            logger << "   Inserted Blue id " << moved_id << "\n" << image.str(soldier, val, BLUE) << flush;
-                        }
+                    boards_to.insert(moved_id, red_id, result_symmetry);
+                    if (edge_c) stats.edge();
+                    if (VERBOSE) {
+                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                        logger << "   Inserted Blue id " << moved_id << "\n" << image.str(soldier, val, BLUE) << flush;
                     }
 #else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
                     result_symmetry *= blue_symmetry;
-                    if (subset_to.insert(moved_id, result_symmetry, stats)) {
-                        if (VERBOSE) {
-                            // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                            logger << "   Inserted Red id " << moved_id << "\n" << image.str(soldier, val, RED) << flush;
-                        }
+                    subset_to.insert(moved_id, result_symmetry);
+                    if (VERBOSE) {
+                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
+                        logger << "   Inserted Red id " << moved_id << "\n" << image.str(soldier, val, RED) << flush;
                     }
 #endif // BLUE_TO_MOVE
-                    else if (VERBOSE) {
-                        logger << "   Move " << soldier << " to " << val << "\n";
-                        logger << "   Duplicate\n";
-                        logger.flush();
-                    }
                 }
             }
             if (CHECK) image.check(__FILE__, __LINE__);
