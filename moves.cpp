@@ -145,15 +145,23 @@ Statistics NAME(uint thid,
         bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
 #if !BLUE_TO_MOVE
+# if BACKTRACK
+        subset_from.sort_compress();
+# else // BACKTRACK
         subset_from.sort();
         ArmyId red_value_previous = 0;
+# endif // BACKTRACK
 #endif // !BLUE_TO_MOVE
         auto const& red_armies = subset_from.armies();
         for (auto const& red_value: red_armies) {
 #if !BLUE_TO_MOVE
+# if BACKTRACK
+            stats.boardset_unique();
+# else // BACKTRACK
             if (red_value == red_value_previous) continue;
             stats.boardset_unique();
             red_value_previous = red_value;
+# endif // BACKTRACK
 #endif // !BLUE_TO_MOVE
             ArmyId red_id;
             auto const symmetry = BoardSubsetBlue::split(red_value, red_id);

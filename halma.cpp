@@ -449,6 +449,18 @@ void BoardSubsetBlue::sort() {
     std::sort(begin(), end());
 }
 
+void BoardSubsetBlue::sort_compress() {
+    std::sort(begin(), end());
+    ArmyId red_value_previous = 0;
+    ArmyId* to = begin();
+    for (ArmyId red_value: *this) {
+        if (red_value == red_value_previous) continue;
+        *to++ = red_value_previous = red_value;
+    }
+    left_ = to - begin();
+    munneeded(to, allocated() - size());
+}
+
 ArmyId BoardSubsetBlue::example(ArmyId& symmetry) const {
     if (empty()) throw_logic("No red value in BoardSubset");
 
@@ -3294,6 +3306,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
         }
         cout << stats << flush;
     }
+    boardset_pairs.blue(1).sort_compress();
 
     auto stop_backtrack = chrono::steady_clock::now();
     duration = chrono::duration_cast<Sec>(stop_backtrack-start_backtrack).count();
@@ -3310,8 +3323,11 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
             throw_logic("More than 1 final blue army");
         blue_id = 1;
         // There should be only 1 final board
-        if (final_board_set.size() != 1)
+        if (final_board_set.back_id() != 1) {
+            if (final_board_set.back_id() == 0)
+                throw_logic("0 solution while backtracking");
             throw_logic("More than 1 solution while backtracking");
+        }
     } else {
         Army const& blue_army = tables.start().red();
         blue_id = final_army_set.find(blue_army);

@@ -1727,6 +1727,7 @@ class BoardSubsetBlue: public BoardSubsetBase {
         return find(join(red_id, symmetry < 0));
     }
     void sort();
+    void sort_compress();
     ArmyId example(ArmyId& symmetry) const COLD;
     ArmyId random_example(ArmyId& symmetry) const COLD;
     void print(ostream& os) const;
@@ -2026,6 +2027,7 @@ class BoardSetBlue: public BoardSetBase {
     bool find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const PURE COLD;
     NOINLINE Board example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
     NOINLINE Board random_example(ArmySet const& opponent_armies, ArmySet const& moved_armies, bool blue_moved) const PURE COLD;
+    void sort_compress() { for (auto& subset: *this) subset.sort_compress(); }
     void print(ostream& os) const;
     size_t memory_report(ostream& os, string const& prefix="") const COLD;
 
@@ -2173,7 +2175,12 @@ class BoardSubsetBlueRef: public BoardSubsetRefBase {
     BoardSubsetBlue const& armies() const PURE {
         return static_cast<BoardSubsetBlue const&>(subset_);
     }
-    void sort() { _armies().sort(); }
+    void sort() {
+        _armies().sort();
+    }
+    void sort_compress() {
+        _armies().sort_compress();
+    }
   private:
     BoardSubsetBlue& _armies() PURE {
         return static_cast<BoardSubsetBlue&>(subset_);
