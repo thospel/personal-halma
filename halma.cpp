@@ -2612,6 +2612,7 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
     out_ <<
         "</td>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
+        "      <tr class='cores'><th>Cores</th><td>" << NR_CPU << "</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
         "      <tr class='stop_time'><th>Stop</th><td>"  << time_string(stop_time) << "</td></tr>\n"
@@ -2711,12 +2712,15 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
     out_ <<
         "      </tr>\n";
     Statistics::Counter old_boards = 1;
-    for (auto const& st: stats_list) {
+    size_t stats_size = stats_list.size();
+    for (size_t i=0; i < stats_size; ++i) {
+        auto const& st = stats_list[i];
+        Statistics::Counter nr_boards = i+1 < stats_size && stats_list[i+1].boardset_uniques() ? stats_list[i+1].boardset_uniques() : st.boardset_size();
         out_ <<
             "      <tr class='" << st.css_color() << "'>\n"
             "        <td class='available_moves'>" << st.available_moves() << "</td>\n"
             "        <td class='duration'>" << st.duration() << "</td>\n"
-            "        <td class='boards'>" << st.boardset_size() << "</td>\n"
+            "        <td class='boards'>" << nr_boards << "</td>\n"
             "        <td class='armies'>" << st.armyset_size() << "</td>\n"
             "        <td class='memory'>" << st.memory()    / 1000000 << "</td>\n"
             "        <td class='allocated'>" << st.allocated() / 1000000 << "</td>\n"
@@ -2748,10 +2752,10 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
 
             out_ <<
                 "</td>\n"
-                "        <td>" << st.boardset_size() << " / " << st.boardset_tries() << "</td>\n"
+                "        <td>" << nr_boards << " / " << st.boardset_tries() << "</td>\n"
                 "        <td>";
             if (st.boardset_tries())
-                out_ << st.boardset_size()*100 / st.boardset_tries() << "%";
+                out_ << nr_boards*100 / st.boardset_tries() << "%";
             out_ << "</td>\n"
                 "</td>\n"
                 "        <td>" << st.edges() << " / " << st.boardset_size() << "</td>\n"

@@ -48,6 +48,7 @@ std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 size_t PAGE_SIZE;
 size_t PAGE_SIZE1;
+int NR_CPU;
 
 // Linux specific
 size_t get_memory(bool set_base_mem) {
@@ -644,6 +645,11 @@ void init_system() {
         throw_errno("Could not determine PAGE SIZE");
     PAGE_SIZE  = tmp;
     PAGE_SIZE1 = PAGE_SIZE-1;
+
+    cpu_set_t cs;
+    if (sched_getaffinity(0, sizeof(cs), &cs))
+        throw_errno("Could not determine number of CPUs");
+    NR_CPU = CPU_COUNT(&cs);
 
     raise_limit(RLIMIT_MEMLOCK, RLIM_INFINITY);
 }

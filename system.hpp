@@ -111,6 +111,7 @@ extern std::atomic<uint> signal_generation;
 extern thread_local ssize_t allocated_;
 extern bool MEMORY_REPORT;
 
+extern int NR_CPU;
 extern size_t PAGE_SIZE;
 extern size_t PAGE_SIZE1;
 extern uint64_t PID;
