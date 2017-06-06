@@ -352,6 +352,7 @@ Statistics NAME(uint thid,
                                 }
                                 continue;
                             }
+                            if (image.get(target) != EMPTY) continue;
                             reachable[nr_reachable++] = target;
                         }
                     } else if (VERBOSE) {
