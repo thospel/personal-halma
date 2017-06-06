@@ -19,6 +19,7 @@ CXXFLAGS += -DCOMMIT="`git rev-parse HEAD`" -DCOMMIT_TIME="`git show -s --format
 all: halma
 
 halma.o fast_moves.o slow_moves.o: halma.hpp xxhash64.h system.hpp Makefile
+halma.o: pdqsort.h
 system.o: system.hpp Makefile
 
 halma.o: halma.cpp

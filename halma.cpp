@@ -44,6 +44,15 @@ char const* red_file = nullptr;
 bool testq = false;
 int  testQ = 0;
 
+#include "pdqsort.h"
+template <class RandomAccessIterator>
+inline void lib_sort(RandomAccessIterator first, RandomAccessIterator last) ALWAYS_INLINE;
+template <class RandomAccessIterator>
+void lib_sort(RandomAccessIterator first, RandomAccessIterator last) {
+    // std::sort(first, last);
+    pdqsort_branchless(first, last);
+}
+
 // Handle commandline options.
 // Simplified getopt for systems that don't have it in their library (Windows..)
 class GetOpt {
@@ -198,7 +207,7 @@ void Army::check(const char* file, int line) const {
 }
 
 void Army::sort(Coord* RESTRICT base) {
-    std::sort(base, base+ARMY);
+    lib_sort(base, base+ARMY);
 }
 
 void Army::_import_symmetric(Coord const* RESTRICT from, Coord* RESTRICT to) {
@@ -372,7 +381,7 @@ Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} 
     uint i = 0;
     uint j = 0;
     int diffs = 0;
-    while (i < ARMY || j < ARMY) {
+    while (i < ARMY && j < ARMY) {
         if (fromE[i] == toE[j]) {
             ++i;
             ++j;
@@ -385,6 +394,14 @@ Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} 
             ++j;
             ++diffs;
         }
+    }
+    if (i < ARMY) {
+        from = fromE[i];
+        diffs += ARMY-i;
+    }
+    if (j < ARMY) {
+        to = toE[j];
+        diffs += ARMY-j;
     }
     if (diffs > 2)
         throw_logic("Multimove");
@@ -399,7 +416,7 @@ Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1},
     uint i = 0;
     uint j = 0;
     diffs = 0;
-    while (i < ARMY || j < ARMY) {
+    while (i < ARMY && j < ARMY) {
         if (fromE[i] == toE[j]) {
             ++i;
             ++j;
@@ -413,6 +430,8 @@ Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1},
             ++diffs;
         }
     }
+    diffs += ARMY-i;
+    diffs += ARMY-j;
 }
 
 void Board::svg(ostream& os, uint scale, uint margin) const {
@@ -444,11 +463,11 @@ void BoardSubsetBlue::resize() {
 }
 
 void BoardSubsetBlue::sort() {
-    std::sort(begin(), end());
+    lib_sort(begin(), end());
 }
 
 void BoardSubsetBlue::sort_compress() {
-    std::sort(begin(), end());
+    lib_sort(begin(), end());
     ArmyId red_value_previous = 0;
     ArmyId* to = begin();
     for (ArmyId red_value: *this) {
@@ -456,7 +475,6 @@ void BoardSubsetBlue::sort_compress() {
         *to++ = red_value_previous = red_value;
     }
     left_ = to - begin();
-    munneeded(to, allocated() - size());
 }
 
 ArmyId BoardSubsetBlue::example(ArmyId& symmetry) const {
@@ -1950,7 +1968,7 @@ void Tables::init() {
         }
     }
     if (rule < RULES) throw_logic("too few directions");
-    sort(&directions[0], &directions[RULES]);
+    lib_sort(&directions[0], &directions[RULES]);
     if (false) {
         cout << "Rules:\n";
         for (uint r=0; r<RULES; ++r) cout << "  " << directions[r] << "\n";
@@ -2039,8 +2057,8 @@ void Tables::init() {
         }
         d++;
     }
-    sort(blue.begin(), blue.end());
-    sort(red .begin(), red .end());
+    lib_sort(blue.begin(), blue.end());
+    lib_sort(red .begin(), red .end());
     if (DO_ALIGN)
         for (uint i=ARMY; i < ARMY+ARMY_PADDING; ++i) {
             blue[i] = Coord::MAX();
