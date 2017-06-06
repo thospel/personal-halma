@@ -1999,7 +1999,7 @@ class BoardSetBlue: public BoardSetBase {
     inline bool insert(ArmyId blue_id, ArmyId red_id, int symmetry, Statistics& stats) {
         if (CHECK) {
             if (UNLIKELY(blue_id <= 0))
-                throw_logic("red_id <= 0");
+                throw_logic("blue_id <= 0");
         }
         lock_guard<mutex> lock{exclude_};
 
@@ -2645,7 +2645,7 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>&
     {
         lock_guard<mutex> lock{exclude_cache_};
         Element& element = Element::element(cache_, hash & mask_cache_);
-        if (army == element.armyZ()) {
+        if (army == element.armyZ() && LIKELY(ARMY > 1)) {
             // logger << "Hit " << element.id() << endl;
             stats.armyset_cache_hit();
             return element.id();
