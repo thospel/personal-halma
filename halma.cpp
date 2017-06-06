@@ -433,9 +433,7 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
 }
 
 bool BoardSubsetBlue::find(ArmyId red_id) const {
-    for (auto value: *this)
-        if (value == red_id) return true;
-    return false;
+    return std::binary_search(begin(), end(), red_id);
 }
 
 void BoardSubsetBlue::resize() {
@@ -2974,15 +2972,16 @@ void play(bool print_moves) {
                 (red_boards, blue_boards,
                  army_set[0], army_set[1], army_set[2],
                  nr_moves);
-            cout << stats << "===============================\n";
             --nr_moves;
             board.do_move(move);
             army_set[2].convert_hash();
-            if (blue_boards.find(board, army_set[1], army_set[2])) {
+            blue_boards.sort_compress();
+            if (blue_boards.find(board, army_set[2], army_set[1])) {
                 cout << "Good\n";
             } else {
                 cout << "Bad\n";
             }
+            cout << stats << "===============================\n";
         } else {
             BoardSetBlue    blue_boards;
             blue_boards.insert(board, army_set[1], army_set[0]);
@@ -2995,7 +2994,6 @@ void play(bool print_moves) {
                 (blue_boards, red_boards,
                  army_set[0], army_set[1], army_set[2],
                  nr_moves);
-            cout << stats << "===============================\n";
             --nr_moves;
             board.do_move(move);
             army_set[2].convert_hash();
@@ -3004,6 +3002,7 @@ void play(bool print_moves) {
             } else {
                 cout << "Bad\n";
             }
+            cout << stats << "===============================\n";
         }
         // cout << board;
         if (print_moves) {
