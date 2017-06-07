@@ -475,6 +475,7 @@ void BoardSubsetBlue::sort_compress() {
         *to++ = red_value_previous = red_value;
     }
     left_ = to - begin();
+    munneeded(to, allocated() - size());
 }
 
 ArmyId BoardSubsetBlue::example(ArmyId& symmetry) const {

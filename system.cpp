@@ -230,6 +230,18 @@ void raise_limit(int resource, rlim_t value) {
     // std::cerr << "Resource " << resource << " raised to " << value << std::endl;
 }
 
+long read_value(char const* filename) {
+    FILE* fp = fopen(filename, "r");
+    if (!fp) throw_errno("Could not open '" + std::string{filename} + "'");
+    long value;
+    if (!fscanf(fp, "%ld", &value)) {
+        fclose(fp);
+        throw_logic("Could not read value from '" + std::string{filename} + "'");
+    }
+    fclose(fp);
+    return value;
+}
+
 void sched_batch() {
     struct sched_param param;
     param.sched_priority = 0;
@@ -645,6 +657,10 @@ void init_system() {
         throw_errno("Could not determine PAGE SIZE");
     PAGE_SIZE  = tmp;
     PAGE_SIZE1 = PAGE_SIZE-1;
+
+    tmp = read_value("/proc/sys/vm/max_map_count");
+    if (tmp < 65536)
+        std::cerr << "Warning: Maximum number of mmapped areas is " << tmp << ". This may be too low for large problems. If you run out of mmaps either increase the value in /proc/sys/vm/max_map_count or recompile with a larger value for MMAP_THRESHOLD (currently " << MMAP_THRESHOLD << ")\n" << std::flush;
 
     cpu_set_t cs;
     if (sched_getaffinity(0, sizeof(cs), &cs))
