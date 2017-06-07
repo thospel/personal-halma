@@ -2102,36 +2102,61 @@ void Tables::init() {
     for (auto const& r: red)
         ++parity_count_[parity(r)];
 
+    deep_red_.fill(0);
+    nr_deep_red_ = 0;
     BoardTable<uint8_t> seen;
     seen.zero();
     for (uint y=0; y < Y; ++y) {
         for (uint x=0; x < X; ++x) {
             Coord const pos{x, y};
             nr_slide_jumps_red_[pos] = 0;
-            if (base_red_[pos]) continue;
-
-            auto const pos_parity = parity(pos);
-            // We are outside the red base
-            auto steps1 = slide_targets(pos);
-            for (uint r = 0; r < RULES; ++r, steps1.next()) {
-                auto const target1 = steps1.current();
-                if (target1 == pos) break;
-                if (base_red_[target1]) continue;
-                auto steps2 = slide_targets(target1);
-                for (uint r = 0; r < RULES; ++r, steps2.next()) {
-                    auto const target2 = steps2.current();
-                    if (target2 == target1) break;
-                    if (!base_red_[target2]) continue;
-                    if (parity(target2) != pos_parity) continue;
-                    if (seen[target2]) continue;
-                    seen[target2] = 1;
-                    if (nr_slide_jumps_red_[pos] >= RULES)
-                        throw_logic("Too many slide_jumps_red");
-                    slide_jumps_red_[pos][nr_slide_jumps_red_[pos]++] = target2;
+            if (base_red_[pos]) {
+                deep_red_[pos] = 1;
+                auto targets = jump_targets(pos);
+                for (uint r = 0; r < RULES; ++r, targets.next()) {
+                    auto const target = targets.current();
+                    if (!base_red(target)) {
+                        deep_red_[pos] = 0;
+                        break;
+                    }
                 }
+                if (!deep_red_[pos]) continue;
+
+                targets = slide_targets(pos);
+                for (uint r = 0; r < RULES; ++r, targets.next()) {
+                    auto const target = targets.current();
+                    if (!base_red(target)) {
+                        deep_red_[pos] = 0;
+                        break;
+                    }
+                }
+                if (!deep_red_[pos]) continue;
+
+                ++nr_deep_red_;
+            } else {
+                auto const pos_parity = parity(pos);
+                // We are outside the red base
+                auto steps1 = slide_targets(pos);
+                for (uint r = 0; r < RULES; ++r, steps1.next()) {
+                    auto const target1 = steps1.current();
+                    if (target1 == pos) break;
+                    if (base_red_[target1]) continue;
+                    auto steps2 = slide_targets(target1);
+                    for (uint r = 0; r < RULES; ++r, steps2.next()) {
+                        auto const target2 = steps2.current();
+                        if (target2 == target1) break;
+                        if (!base_red_[target2]) continue;
+                        if (parity(target2) != pos_parity) continue;
+                        if (seen[target2]) continue;
+                        seen[target2] = 1;
+                        if (nr_slide_jumps_red_[pos] >= RULES)
+                            throw_logic("Too many slide_jumps_red");
+                        slide_jumps_red_[pos][nr_slide_jumps_red_[pos]++] = target2;
+                    }
+                }
+                for (uint i=0; i < nr_slide_jumps_red_[pos]; ++i)
+                    seen[slide_jumps_red_[pos][i]] = 0;
             }
-            for (uint i=0; i < nr_slide_jumps_red_[pos]; ++i)
-                seen[slide_jumps_red_[pos][i]] = 0;
         }
     }
 
@@ -2175,6 +2200,16 @@ void Tables::print_edge_red(ostream& os) const {
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(edge_red(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_deep_red(ostream& os) const {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(deep_red(pos));
         }
         os << "\n";
     }
@@ -2612,7 +2647,7 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
     out_ <<
         "</td>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
-        "      <tr class='cores'><th>Cores</th><td>" << NR_CPU << "</td></tr>\n"
+        "      <tr class='cpus'><th>CPUs</th><td>" << NR_CPU << "</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
         "      <tr class='stop_time'><th>Stop</th><td>"  << time_string(stop_time) << "</td></tr>\n"
@@ -3562,7 +3597,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
               sched_batch();
               break;
             default:
-              cerr << "usage: " << argv[0] << " [-A] [-x size] [-y size] [-r ruleset] [-a soldiers] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-e] [-H] [-S] [-R sample_red_file]\n";
+              cerr << "usage: " << argv[0] << " [-A] [-x size] [-y size] [-r ruleset] [-a soldiers] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-T] [-F] [-f path_prefix] [-e] [-H] [-S] [-R sample_red_file]\n";
               exit(EXIT_FAILURE);
         }
 
@@ -3627,6 +3662,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
         tables.print_base_red();
         cout << "Edge red:\n";
         tables.print_edge_red();
+        cout << "Deep red:\n";
+        tables.print_deep_red();
         cout << "Parity:\n";
         tables.print_parity();
         cout << "Blue Base parity count:\n";

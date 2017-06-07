@@ -248,6 +248,7 @@ Statistics NAME(uint thid,
 
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
+            uint deep_red = 0;
             if (jump_only) {
                 // Find EMPTY in the red base
                 red_top_from = reachable.size()-1;
@@ -255,6 +256,9 @@ Statistics NAME(uint thid,
                     reachable[red_top_from] = r;
                     red_top_from -= image.get(r) == EMPTY;
                 }
+                if (red_top_from >= reachable.size()-3 && tables.nr_deep_red())
+                    for (auto const r: red)
+                        deep_red += r.deep_red();
             }
 #endif // BLUE_TO_MOVE
 
@@ -459,6 +463,13 @@ Statistics NAME(uint thid,
                         }
 #if BLUE_TO_MOVE
                         if (red_empty == 0 && jump_only) {
+                            // The red base is full and since we already checked
+                            // for solution this means there is at least one red
+                            // soldier still on base. Can any red soldier leave
+                            // in such a way that blue is able to fill the hole?
+                            // Since blue can only jump and the leaving soldier
+                            // has the same parity the leaving soldier will not
+                            // be jumped over (it may block blue though)
                             image.set(soldier, EMPTY);
                             image.set(val, BLUE);
                             // logger << "Full:\n" << image;
@@ -529,8 +540,18 @@ Statistics NAME(uint thid,
                         }
 #else  // BLUE_TO_MOVE
                         if (jump_only) {
-                            image.set(soldier, EMPTY);
                             uint r_top = red_top;
+                            if (r_top + val.base_red() == reachable.size()-2 &&
+                                deep_red + val.deep_red() - soldier.deep_red()) {
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune deep red\n";
+                                    // logger << image.str(soldier, val, RED);
+                                    logger.flush();
+                                }
+                                continue;
+                            }
+                            image.set(soldier, EMPTY);
                             for (uint i = reachable.size()-1; i > r_top; --i)
                                 image.set(reachable[i], COLORS);
                             // Setting pos val must be able to override COLORS

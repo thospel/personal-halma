@@ -237,6 +237,7 @@ class Coord {
     inline uint8_t base_blue() const PURE;
     inline uint8_t base_red() const PURE;
     inline uint8_t edge_red() const PURE;
+    inline uint8_t deep_red() const PURE;
     inline Nbits Ndistance_base_red() const PURE;
     inline Coords slide_targets() const PURE;
     inline Coords jumpees() const PURE;
@@ -2421,6 +2422,7 @@ class Tables {
     // only ever be applied to the constant "tables" so they access
     // global memory that never changes making them effectively FUNCTIONAL
     uint min_nr_moves() const FUNCTIONAL { return min_nr_moves_; }
+    uint nr_deep_red()  const FUNCTIONAL { return nr_deep_red_; }
     // Use the less often changing coordinate as "slow"
     // This will keep more of the data in the L1 cache
     inline Norm distance(Coord const& slow, Coord const& fast) const FUNCTIONAL {
@@ -2440,6 +2442,9 @@ class Tables {
     }
     inline uint8_t edge_red(Coord const& pos) const FUNCTIONAL {
         return edge_red_[pos];
+    }
+    inline uint8_t deep_red(Coord const& pos) const FUNCTIONAL {
+        return deep_red_[pos];
     }
 #if __BMI2__
     inline Parity parity(Coord const& pos) const PURE {
@@ -2495,6 +2500,10 @@ class Tables {
     void print_edge_red() const {
         print_edge_red(cout);
     }
+    void print_deep_red(ostream& os) const COLD;
+    void print_deep_red() const {
+        print_deep_red(cout);
+    }
     void print_parity(ostream& os) const COLD;
     void print_parity() const {
         print_parity(cout);
@@ -2519,6 +2528,7 @@ class Tables {
     BoardTable<uint8_t> base_blue_;
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
+    BoardTable<uint8_t> deep_red_;
     BoardTable<uint8_t> nr_slide_jumps_red_;
     BoardTable<Offsets> slide_jumps_red_;
 #if !__BMI2__
@@ -2529,6 +2539,7 @@ class Tables {
     Norm   infinity_;
     Nbits Ninfinity_;
     uint min_nr_moves_;
+    uint nr_deep_red_;
     Board start_;
 };
 
@@ -2548,6 +2559,10 @@ uint8_t Coord::base_red() const {
 
 uint8_t Coord::edge_red() const {
     return tables.edge_red(*this);
+}
+
+uint8_t Coord::deep_red() const {
+    return tables.deep_red(*this);
 }
 
 Nbits Coord::Ndistance_base_red() const {
