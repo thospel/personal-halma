@@ -123,7 +123,7 @@ Statistics NAME(uint thid,
         int off_base_from = ARMY;
         int edge_count_from = 0;
         ParityCount parity_blue = tables.parity_count();
-        for (auto const& b: bZ) {
+        for (auto const b: bZ) {
             --parity_blue[b.parity()];
             off_base_from -= b.base_red();
             edge_count_from += b.edge_red();
@@ -153,7 +153,7 @@ Statistics NAME(uint thid,
 # endif // BACKTRACK
 #endif // !BLUE_TO_MOVE
         auto const& red_armies = subset_from.armies();
-        for (auto const& red_value: red_armies) {
+        for (auto const red_value: red_armies) {
 #if !BLUE_TO_MOVE
 # if BACKTRACK
             stats.boardset_unique();
@@ -188,9 +188,9 @@ Statistics NAME(uint thid,
                 logger << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image << flush;
 
             Nbits Ndistance_army = tables.Ninfinity();
-            for (auto const& b: blue) {
+            for (auto const b: blue) {
                 if (b.base_red()) continue;
-                for (auto const& r: red)
+                for (auto const r: red)
                     Ndistance_army |= tables.Ndistance(b, r);
             }
             int const distance_army = __builtin_clz(Ndistance_army);
@@ -222,7 +222,7 @@ Statistics NAME(uint thid,
             uint red_empty = 1;
             if (jump_only) {
                 red_empty = off_base_from -1;
-                for (auto const& r: red)
+                for (auto const r: red)
                     red_empty -= r.base_red();
             }
 #else  // BLUE_TO_MOVE
@@ -234,7 +234,7 @@ Statistics NAME(uint thid,
 #if BACKTRACK
             int backtrack_count_from = 2*ARMY;
             int backtrack_count_symmetric_from = 2*ARMY;
-            for (auto const& pos: red) {
+            for (auto const pos: red) {
                 backtrack_count_from -= backtrack[pos];
                 backtrack_count_symmetric_from -= backtrack_symmetric[pos];
             }
@@ -242,7 +242,7 @@ Statistics NAME(uint thid,
 
             if (BALANCE && balance_mask) {
                 std::memset(&balance_count_from[0], 0, sizeof(balance_count_from));
-                for (auto const&pos: red)
+                for (auto const pos: red)
                     ++balance_count_from[pos.parity()];
             }
 
@@ -252,7 +252,7 @@ Statistics NAME(uint thid,
             if (jump_only) {
                 // Find EMPTY in the red base
                 red_top_from = reachable.size()-1;
-                for (auto const& r: tables.army_red()) {
+                for (auto const r: tables.army_red()) {
                     reachable[red_top_from] = r;
                     red_top_from -= image.get(r) == EMPTY;
                 }
@@ -402,7 +402,7 @@ Statistics NAME(uint thid,
                         } else {
                             edge_c += val.edge_red();
                             Ndistance_r |=  val.Ndistance_base_red();
-                            for (auto const& r: red)
+                            for (auto const r: red)
                                 Ndistance_a |= tables.Ndistance(val, r);
                         }
                         int const distance_red  = __builtin_clz(Ndistance_r);
@@ -444,7 +444,7 @@ Statistics NAME(uint thid,
                         // We won't notice an increase in army distance, but
                         // these are rare and will be discovered in the late
                         // prune
-                        for (auto const& b: blue) {
+                        for (auto const b: blue) {
                             if (b.base_red()) continue;
                             Ndistance_a |= tables.Ndistance(val, b);
                         }

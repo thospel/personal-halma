@@ -190,6 +190,10 @@ inline string font_color(Color color) {
     }
 }
 
+inline bool is_EMPTY(Color color) {
+    return color >> 6;
+}
+
 using Parity = uint8_t;
 using ParityCount = array<int, 4>;
 
@@ -262,19 +266,19 @@ class Coord {
 
     value_type pos_;
 
-    friend inline bool operator<(Coord const& l, Coord const& r) {
+    friend inline bool operator<(Coord const l, Coord const r) {
         return l.pos_ < r.pos_;
     }
-    friend inline bool operator>(Coord const& l, Coord const& r) {
+    friend inline bool operator>(Coord const l, Coord const r) {
         return l.pos_ > r.pos_;
     }
-    friend inline bool operator>=(Coord const& l, Coord const& r) {
+    friend inline bool operator>=(Coord const l, Coord const r) {
         return l.pos_ >= r.pos_;
     }
-    friend inline bool operator==(Coord const& l, Coord const& r) {
+    friend inline bool operator==(Coord const l, Coord const r) {
         return l.pos_ == r.pos_;
     }
-    friend inline bool operator!=(Coord const& l, Coord const& r) {
+    friend inline bool operator!=(Coord const l, Coord const r) {
         return l.pos_ != r.pos_;
     }
 };
@@ -286,8 +290,8 @@ Coord Coord::MAX() {
     return Coord{std::numeric_limits<value_type>::max()};
 }
 
-inline ostream& operator<<(ostream& os, Coord const& pos) ALWAYS_INLINE;
-ostream& operator<<(ostream& os, Coord const& pos) {
+inline ostream& operator<<(ostream& os, Coord const pos) ALWAYS_INLINE;
+ostream& operator<<(ostream& os, Coord const pos) {
     os << setw(2) << pos.x() << "," << setw(3) << pos.y();
     return os;
 }
@@ -489,7 +493,7 @@ class alignas(Align) ArmyPos {
         pos_  = pos;
         _copy(army);
     }
-    void store(Coord const& val) {
+    void store(Coord const val) {
         if (val > at(pos_+1)) {
             do {
                 at(pos_) = at(pos_+1);
@@ -607,8 +611,8 @@ class BoardTable {
     using iterator       = typename Array::iterator;
     using const_iterator = typename Array::const_iterator;
 
-    T&       operator[](Coord const& pos)       PURE { return data_[pos._pos()];}
-    T const& operator[](Coord const& pos) const PURE { return data_[pos._pos()];}
+    T&       operator[](Coord const pos)       PURE { return data_[pos._pos()];}
+    T const& operator[](Coord const pos) const PURE { return data_[pos._pos()];}
     inline iterator begin() { return data_.begin(); }
     inline const_iterator begin()  const { return data_.begin(); }
     inline const_iterator cbegin() const { return data_.begin(); }
@@ -618,7 +622,7 @@ class BoardTable {
     void fill(T value) { std::fill(begin(), end(), value); }
     void zero() { std::memset(begin(), 0, MAX_X * sizeof(T) * Y); }
     void set(Army const& army, T value) {
-        for (auto const& pos: army) (*this)[pos] = value;
+        for (auto const pos: army) (*this)[pos] = value;
     }
   private:
     Array data_;
@@ -627,12 +631,12 @@ class BoardTable {
 int Army::symmetry() const {
     if (!SYMMETRY || X != Y) return 0;
     BoardTable<uint8_t> test;
-    for (auto const& pos: *this)
+    for (auto const pos: *this)
         test[pos] = 0;
-    for (auto const& pos: *this)
+    for (auto const pos: *this)
         test[pos.symmetric()] = 1;
     uint8_t sum = ARMY;
-    for (auto const& pos: *this)
+    for (auto const pos: *this)
         sum -= test[pos];
     return sum ? 1 : 0;
 }
@@ -643,7 +647,7 @@ class ArmyMapper {
         for (uint i=0; i<ARMY; ++i)
             mapper_[army_symmetric[i].symmetric()] = i;
     }
-    uint8_t map(Coord const& pos) const PURE {
+    uint8_t map(Coord const pos) const PURE {
         return mapper_[pos];
     }
   private:
@@ -1556,7 +1560,7 @@ Army::Army(ArmySet const& armies, ArmyId id, ArmyId symmetry):
 
 struct Move {
     Move() {}
-    Move(Coord const& from_, Coord const& to_): from{from_}, to{to_} {}
+    Move(Coord const from_, Coord const to_): from{from_}, to{to_} {}
     Move(Army const& army_from, Army const& army_to);
     Move(Army const& army_from, Army const& army_to, int& diff);
 
@@ -2232,26 +2236,29 @@ class Image {
         set(army, color);
     }
     inline void clear() { image_.fill(EMPTY); }
-    inline Color get(Coord const& pos) const PURE { return image_[pos]; }
+    inline Color get(Coord const pos) const PURE { return image_[pos]; }
     inline Color get(int x, int y) const PURE { return get(Coord{x,y}); }
-    inline void  set(Coord const& pos, Color c) { image_[pos] = c; }
+    inline void  set(Coord const pos, Color c) { image_[pos] = c; }
     inline void  set(int x, int y, Color c) { set(Coord{x,y}, c); }
     inline void  set(ArmyZconst army, Color c) {
-        for (auto const& pos: army) set(pos, c);
+        for (auto const pos: army) set(pos, c);
     }
     inline void  set(Army const& army, Color c) {
-        for (auto const& pos: army) set(pos, c);
+        for (auto const pos: army) set(pos, c);
     }
     inline void  set(ArmyPos const& army, Color c) {
-        for (auto const& pos: army) set(pos, c);
+        for (auto const pos: army) set(pos, c);
     }
-    inline bool jumpable(Coord const& jumpee, Coord const& target) const PURE {
+    inline bool is_EMPTY(Coord const pos) const PURE {
+        return ::is_EMPTY(get(pos));
+    }
+    inline bool jumpable(Coord const jumpee, Coord const target) const PURE {
         return (get(target) >> get(jumpee)) != 0;
     }
-    inline bool blue_jumpable(Coord const& jumpee, Coord const& target) const PURE {
+    inline bool blue_jumpable(Coord const jumpee, Coord const target) const PURE {
         return ((get(target) << 2) & get(jumpee)) != 0;
     }
-    inline bool red_jumpable(Coord const& jumpee, Coord const& target) const PURE {
+    inline bool red_jumpable(Coord const jumpee, Coord const target) const PURE {
         return ((get(target) + 3) & get(jumpee) & 4) != 0;
     }
     NOINLINE string str() const PURE;
@@ -2425,51 +2432,54 @@ class Tables {
     uint nr_deep_red()  const FUNCTIONAL { return nr_deep_red_; }
     // Use the less often changing coordinate as "slow"
     // This will keep more of the data in the L1 cache
-    inline Norm distance(Coord const& slow, Coord const& fast) const FUNCTIONAL {
+    inline Norm distance(Coord const slow, Coord const fast) const FUNCTIONAL {
         return distance_[slow][fast];
     }
-    inline Nbits Ndistance(Coord const& slow, Coord const& fast) const FUNCTIONAL {
+    inline Nbits Ndistance(Coord const slow, Coord const fast) const FUNCTIONAL {
         return NLEFT >> distance(slow, fast);
     }
-    inline Nbits Ndistance_base_red(Coord const& pos) const FUNCTIONAL {
+    inline Nbits Ndistance_base_red(Coord const pos) const FUNCTIONAL {
         return Ndistance_base_red_[pos];
     }
-    inline uint8_t base_blue(Coord const& pos) const FUNCTIONAL {
+    inline uint8_t base_blue(Coord const pos) const FUNCTIONAL {
         return base_blue_[pos];
     }
-    inline uint8_t base_red(Coord const& pos) const FUNCTIONAL {
+    inline uint8_t base_red(Coord const pos) const FUNCTIONAL {
         return base_red_[pos];
     }
-    inline uint8_t edge_red(Coord const& pos) const FUNCTIONAL {
+    inline uint8_t edge_red(Coord const pos) const FUNCTIONAL {
         return edge_red_[pos];
     }
-    inline uint8_t deep_red(Coord const& pos) const FUNCTIONAL {
+    inline uint8_t deep_red(Coord const pos) const FUNCTIONAL {
         return deep_red_[pos];
     }
+    inline Coord deep_red_base(uint i) const FUNCTIONAL {
+        return deep_red_base_[i];
+    }
 #if __BMI2__
-    inline Parity parity(Coord const& pos) const PURE {
+    inline Parity parity(Coord const pos) const PURE {
         // The intrinsics version seems to have the exact same speed as a
         // table fetch. But it should lower the pressure one the L1 cache a bit
         return _pext_u32(pos._pos(), 0x11);
     }
 #else // __BMI2__
-    inline Parity parity(Coord const& pos) const FUNCTIONAL {
+    inline Parity parity(Coord const pos) const FUNCTIONAL {
         return parity_[pos];
     }
 #endif // !__BMI2__
-    inline Coords slide_targets(Coord const& pos) const FUNCTIONAL {
+    inline Coords slide_targets(Coord const pos) const FUNCTIONAL {
         return slide_targets_[pos];
     }
-    inline Coords jumpees(Coord const& pos) const FUNCTIONAL {
+    inline Coords jumpees(Coord const pos) const FUNCTIONAL {
         return jumpees_[pos];
     }
-    inline Coords jump_targets(Coord const& pos) const FUNCTIONAL {
+    inline Coords jump_targets(Coord const pos) const FUNCTIONAL {
         return jump_targets_[pos];
     }
-    inline uint8_t nr_slide_jumps_red(Coord const& pos) const FUNCTIONAL {
+    inline uint8_t nr_slide_jumps_red(Coord const pos) const FUNCTIONAL {
         return nr_slide_jumps_red_[pos];
     }
-    inline Offsets const& slide_jumps_red(Coord const& pos) const FUNCTIONAL {
+    inline Offsets const& slide_jumps_red(Coord const pos) const FUNCTIONAL {
         return slide_jumps_red_[pos];
     }
     inline ParityCount const& parity_count() const FUNCTIONAL {
@@ -2541,6 +2551,7 @@ class Tables {
     uint min_nr_moves_;
     uint nr_deep_red_;
     Board start_;
+    Army deep_red_base_;
 };
 
 extern Tables tables;

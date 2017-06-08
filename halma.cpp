@@ -188,7 +188,7 @@ void Coord::svg(ostream& os, Color color, uint scale) const {
 }
 
 ostream& operator<<(ostream& os, Army const& army) {
-    for (auto const& pos: army)
+    for (auto const pos: army)
         os << pos << "\n";
     return os;
 }
@@ -445,9 +445,9 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
         os << "L " << margin + X * scale << " " << margin + y * scale << " ";
     }
     os << "'\n            stroke='black' />\n";
-    for (auto const& pos: blue())
+    for (auto const pos: blue())
         pos.svg(os, BLUE, scale);
-    for (auto const& pos: red())
+    for (auto const pos: red())
         pos.svg(os, RED,  scale);
 }
 
@@ -2066,7 +2066,7 @@ void Tables::init() {
             red [i] = Coord::MAX();
         }
 
-    for (auto const& pos: blue) {
+    for (auto const pos: blue) {
         if (base_red_[pos])
             throw_logic("Red and blue overlap");
         if (!base_blue_[pos.symmetric()])
@@ -2100,11 +2100,12 @@ void Tables::init() {
     }
 
     parity_count_.fill(0);
-    for (auto const& r: red)
+    for (auto const r: red)
         ++parity_count_[parity(r)];
 
     deep_red_.fill(0);
     nr_deep_red_ = 0;
+    uint shallow_red = ARMY;
     BoardTable<uint8_t> seen;
     seen.zero();
     for (uint y=0; y < Y; ++y) {
@@ -2118,6 +2119,7 @@ void Tables::init() {
                     auto const target = targets.current();
                     if (!base_red(target)) {
                         deep_red_[pos] = 0;
+                        deep_red_base_[--shallow_red] = pos;
                         break;
                     }
                 }
@@ -2128,12 +2130,13 @@ void Tables::init() {
                     auto const target = targets.current();
                     if (!base_red(target)) {
                         deep_red_[pos] = 0;
+                        deep_red_base_[--shallow_red] = pos;
                         break;
                     }
                 }
                 if (!deep_red_[pos]) continue;
 
-                ++nr_deep_red_;
+                deep_red_base_[nr_deep_red_++] = pos;
             } else {
                 auto const pos_parity = parity(pos);
                 // We are outside the red base
@@ -2160,6 +2163,7 @@ void Tables::init() {
             }
         }
     }
+    if (nr_deep_red_ != shallow_red) throw_logic("Inconsistent deep_red_base");
 
     min_nr_moves_ = start_.min_nr_moves();
 }
@@ -2519,13 +2523,13 @@ int Board::min_nr_moves(bool blue_to_move) const {
     ParityCount parity_count_from = tables.parity_count();
     int edge_count_from = 0;
 
-    for (auto const& b: blue()) {
+    for (auto const b: blue()) {
         --parity_count_from[b.parity()];
         if (b.base_red()) continue;
         ++off_base_from;
         edge_count_from += b.edge_red();
         Ndistance_red |= b.Ndistance_base_red();
-        for (auto const& r: red())
+        for (auto const r: red())
             Ndistance_army |= tables.Ndistance(r, b);
     }
     int slides = 0;
@@ -2659,7 +2663,7 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
 
 void Svg::move(FullMove const& move) {
     out_ << "      <polyline points='";
-    for (auto const& pos: move) {
+    for (auto const pos: move) {
         out_ << pos.x() * scale_ + scale_/2 + margin_ << "," << pos.y() * scale_ + scale_/2 + margin_ << " ";
     }
     out_ << "' stroke='black' stroke-width='" << scale_/10 << "' fill='none' marker-end='url(#arrowhead)' />\n";
