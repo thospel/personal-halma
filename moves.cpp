@@ -150,14 +150,29 @@ Statistics NAME(uint thid,
         // jump_only indicates that all blue moves must now be jumps to base
         bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
-#if !BLUE_TO_MOVE
+#if BLUE_TO_MOVE
+        array<ParityCount, 3> non_blue_count;
+        if (jump_only) {
+            non_blue_count[0].fill(0);
+            non_blue_count[1].fill(0);
+            int i = tables.nr_deep_red();
+            while(--i >= 0) {
+                Coord const pos = tables.deep_red_base(i);
+                non_blue_count[0][pos.parity()] += image_normal.get(pos) != BLUE;
+            }
+            for (uint i=tables.medium_red(); i<ARMY; ++i) {
+                Coord const pos = tables.deep_red_base(i);
+                non_blue_count[1][pos.parity()] += image_normal.get(pos) != BLUE;
+            }
+        }
+#else // BLUE_TO_MOVE
 # if BACKTRACK
         subset_from.sort_compress();
 # else // BACKTRACK
         subset_from.sort();
         ArmyId red_value_previous = 0;
 # endif // BACKTRACK
-#endif // !BLUE_TO_MOVE
+#endif // BLUE_TO_MOVE
         auto const& red_armies = subset_from.armies();
         for (auto const red_value: red_armies) {
 #if !BLUE_TO_MOVE
@@ -469,7 +484,7 @@ Statistics NAME(uint thid,
                         }
 #if BLUE_TO_MOVE
                         if (jump_only) {
-                            if (soldier.shallow_red()) throw_logic("Shallow Soldier");
+                            // soldier is off base so can't be shallow
                             if (red_empty - val.shallow_red() == 0) {
                                 image.set(soldier, EMPTY);
                                 image.set(val, BLUE);
@@ -543,6 +558,21 @@ Statistics NAME(uint thid,
                                 image.set(val, EMPTY);
                                 image.set(soldier, BLUE);
                             }
+                            Coord sval = symmetry ? val.symmetric() : val;
+                            --non_blue_count[tables.deepness(sval)][sval.parity()];
+                            if ((non_blue_count[0][0]&&!non_blue_count[1][0]) ||
+                                (non_blue_count[0][1]&&!non_blue_count[1][1]) ||
+                                (non_blue_count[0][2]&&!non_blue_count[1][2]) ||
+                                (non_blue_count[0][3]&&!non_blue_count[1][3])) {
+                                ++non_blue_count[tables.deepness(sval)][sval.parity()];
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune deep red\n";
+                                    logger.flush();
+                                }
+                                continue;
+                            }
+                            ++non_blue_count[tables.deepness(sval)][sval.parity()];
                         }
 #else  // BLUE_TO_MOVE
                         if (jump_only) {
