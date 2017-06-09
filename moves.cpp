@@ -16,12 +16,13 @@
 # define _SLOW _fast
 #endif // SLOW
 
+#define GUARD_VAR		CAT(dummy_, __LINE__)
+#define START_GUARD(code)	for (uint GUARD_VAR=0; GUARD_VAR < 1; ++GUARD_VAR, (code)) {
+#define END_GUARD		}
+
 #define VERBOSE (SLOW && UNLIKELY(verbose))
 
 #define NAME	CAT(thread_,CAT(COLOR_TO_MOVE,CAT(_moves,CAT(_BACKTRACK,_SLOW))))
-
-#define SCOPE_OPEN	{
-#define SCOPE_CLOSE	}
 
 NOINLINE
 Statistics NAME(uint thid,
@@ -73,6 +74,7 @@ Statistics NAME(uint thid,
 #endif
 
     Statistics stats;
+    Image image_normal, image_symmetric;
 #if !BLUE_TO_MOVE
     BoardSubsetRedBuilder& subset_to = boards_to.builder();
 #endif // !BLUE_TO_MOVE
@@ -118,6 +120,10 @@ Statistics NAME(uint thid,
         int b_symmetry = !SYMMETRY ? 0 :
             bZ == bZ_symmetric ? 0 : 1;
 #endif  // BLUE_TO_MOVE
+        image_normal.set(bZ, BLUE);
+        START_GUARD(image_normal.set(bZ, EMPTY));
+        image_symmetric.set(bZ_symmetric, BLUE);
+        START_GUARD(image_symmetric.set(bZ_symmetric, EMPTY));
 
         Nbits Ndistance_red = tables.Ninfinity();
         int off_base_from = ARMY;
@@ -166,8 +172,7 @@ Statistics NAME(uint thid,
             ArmyId red_id;
             auto const symmetry = BoardSubsetBlue::split(red_value, red_id);
             if (VERBOSE) logger << " Sub Processing red " << red_id << "," << symmetry << "\n" << flush;
-            Army const& blue =
-                symmetry ? bZ_symmetric : bZ;
+            Army const& blue = symmetry ? bZ_symmetric : bZ;
 #if BLUE_TO_MOVE
             ParityCount const& parity_count_from =
                 symmetry ? parity_blue_symmetric : parity_blue;
@@ -183,7 +188,9 @@ Statistics NAME(uint thid,
                     moving_armies.cat(red_id)};
             if (CHECK) red.check(__FILE__, __LINE__);
 
-            Image image{blue, red};
+            auto& image = symmetry ? image_symmetric : image_normal;
+            image.set(red, RED);
+            START_GUARD(image.set(red, EMPTY))
             if (VERBOSE)
                 logger << "  From: [" << blue_id << ", " << red_id << ", " << symmetry << "] " << available_moves << " moves\n" << image << flush;
 
@@ -636,12 +643,15 @@ Statistics NAME(uint thid,
                 }
             }
             if (CHECK) image.check(__FILE__, __LINE__);
+            END_GUARD;
         }
 #if !BLUE_TO_MOVE
         if (edge_count_from) stats.edge(subset_to.size());
         if (STATISTICS) stats.subset_size(subset_to.size());
         boards_to.insert(blue_id, subset_to);
 #endif // !BLUE_TO_MOVE
+        END_GUARD;
+        END_GUARD;
     }
 
     // logger << "Stopped (Set " << available_moves << ")\n" << flush;
