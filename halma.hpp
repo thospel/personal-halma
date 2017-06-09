@@ -170,6 +170,11 @@ using Norm = uint8_t;
 using Nbits = uint;
 int const NBITS = std::numeric_limits<Nbits>::digits;
 Nbits const NLEFT = static_cast<Nbits>(1) << (NBITS-1);
+
+// EMPTY  0011 0001
+// BLUE   0000 0101
+// RED    0000 0100
+// COLORS 0000 1000
 enum Color : uint8_t { EMPTY = 0x49, BLUE = 0x05, RED = 0x04, COLORS= 0x08 };
 
 inline string svg_color(Color color) {
@@ -242,6 +247,7 @@ class Coord {
     inline uint8_t base_red() const PURE;
     inline uint8_t edge_red() const PURE;
     inline uint8_t deep_red() const PURE;
+    inline uint8_t shallow_red() const PURE;
     inline Nbits Ndistance_base_red() const PURE;
     inline Coords slide_targets() const PURE;
     inline Coords jumpees() const PURE;
@@ -2453,8 +2459,17 @@ class Tables {
     inline uint8_t deep_red(Coord const pos) const FUNCTIONAL {
         return deep_red_[pos];
     }
+    inline uint8_t shallow_red(Coord const pos) const FUNCTIONAL {
+        return shallow_red_[pos];
+    }
     inline Coord deep_red_base(uint i) const FUNCTIONAL {
         return deep_red_base_[i];
+    }
+    inline Coord deep_target(uint i, uint j) const FUNCTIONAL {
+        return deep_targets_[i][j];
+    }
+    inline int8_t nr_deep_targets(uint i) const FUNCTIONAL {
+        return nr_deep_targets_[i];
     }
 #if __BMI2__
     inline Parity parity(Coord const pos) const PURE {
@@ -2514,6 +2529,10 @@ class Tables {
     void print_deep_red() const {
         print_deep_red(cout);
     }
+    void print_shallow_red(ostream& os) const COLD;
+    void print_shallow_red() const {
+        print_shallow_red(cout);
+    }
     void print_parity(ostream& os) const COLD;
     void print_parity() const {
         print_parity(cout);
@@ -2539,12 +2558,15 @@ class Tables {
     BoardTable<uint8_t> base_red_;
     BoardTable<uint8_t> edge_red_;
     BoardTable<uint8_t> deep_red_;
+    BoardTable<uint8_t> shallow_red_;
     BoardTable<uint8_t> nr_slide_jumps_red_;
     BoardTable<Offsets> slide_jumps_red_;
 #if !__BMI2__
     BoardTable<Parity> parity_;
 #endif // !__BMI2__
     BoardTable<BoardTable<Norm>> distance_;
+    array<Offsets, MAX_ARMY> deep_targets_;
+    array<int8_t, MAX_ARMY> nr_deep_targets_;
     ParityCount parity_count_;
     Norm   infinity_;
     Nbits Ninfinity_;
@@ -2574,6 +2596,10 @@ uint8_t Coord::edge_red() const {
 
 uint8_t Coord::deep_red() const {
     return tables.deep_red(*this);
+}
+
+uint8_t Coord::shallow_red() const {
+    return tables.shallow_red(*this);
 }
 
 Nbits Coord::Ndistance_base_red() const {

@@ -30,6 +30,7 @@ int balance_delay = 0;
 int balance_min, balance_max;
 
 int example = 0;
+int verbose_move = 0;
 bool prune_slide = false;
 bool prune_jump  = false;
 
@@ -2104,6 +2105,7 @@ void Tables::init() {
         ++parity_count_[parity(r)];
 
     deep_red_.fill(0);
+    shallow_red_.fill(0);
     nr_deep_red_ = 0;
     uint shallow_red = ARMY;
     BoardTable<uint8_t> seen;
@@ -2118,23 +2120,28 @@ void Tables::init() {
                 for (uint r = 0; r < RULES; ++r, targets.next()) {
                     auto const target = targets.current();
                     if (!base_red(target)) {
+                        shallow_red_[pos] = 1;
                         deep_red_[pos] = 0;
                         deep_red_base_[--shallow_red] = pos;
                         break;
                     }
                 }
-                if (!deep_red_[pos]) continue;
+                if (shallow_red_[pos]) continue;
 
-                targets = slide_targets(pos);
-                for (uint r = 0; r < RULES; ++r, targets.next()) {
-                    auto const target = targets.current();
-                    if (!base_red(target)) {
-                        deep_red_[pos] = 0;
-                        deep_red_base_[--shallow_red] = pos;
-                        break;
+                // We only consider deep/shalllow for jump_only
+                if (false) {
+                    targets = slide_targets(pos);
+                    for (uint r = 0; r < RULES; ++r, targets.next()) {
+                        auto const target = targets.current();
+                        if (!base_red(target)) {
+                            shallow_red_[pos] = 1;
+                            deep_red_[pos] = 0;
+                            deep_red_base_[--shallow_red] = pos;
+                            break;
+                        }
                     }
+                    if (shallow_red_[pos]) continue;
                 }
-                if (!deep_red_[pos]) continue;
 
                 deep_red_base_[nr_deep_red_++] = pos;
             } else {
@@ -2164,6 +2171,18 @@ void Tables::init() {
         }
     }
     if (nr_deep_red_ != shallow_red) throw_logic("Inconsistent deep_red_base");
+    nr_deep_targets_.fill(0);
+    for (uint i=0; i<nr_deep_red_; ++i) {
+        Coord pos = deep_red_base_[i];
+        auto targets = jump_targets(pos);
+        for (uint r = 0; r < RULES; ++r, targets.next()) {
+            auto const target = targets.current();
+            if (!deep_red_[target]) {
+                deep_targets_[i][nr_deep_targets_[i]++] = target;
+                // cout << "Deep escape " << pos << " -> " << target << "\n";
+            }
+        }
+    }
 
     min_nr_moves_ = start_.min_nr_moves();
 }
@@ -2215,6 +2234,16 @@ void Tables::print_deep_red(ostream& os) const {
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(deep_red(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_shallow_red(ostream& os) const {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(shallow_red(pos));
         }
         os << "\n";
     }
@@ -3149,6 +3178,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             cout << "User abort\n";
             return -1;
         }
+        if (nr_moves == verbose_move) verbose = !verbose;
 
         auto& moving_armies         = army_set[ i    % 3];
         auto const& opponent_armies = army_set[(i+1) % 3];
@@ -3536,10 +3566,11 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:isHSjpqQ:eEFf:vR:Ax:y:r:a:T", argv);
+    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:T", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
+    bool batch = true;
     while (options.next())
         switch (options.option()) {
             case 'A': attempt     = false; break;
@@ -3559,6 +3590,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'q': testq       = true; break;
             case 's': prune_slide = true; break;
             case 'v': verbose     = true; break;
+            case 'V': verbose_move = atoi(options.arg()); break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -3598,13 +3630,14 @@ void my_main(int UNUSED argc, char const* const* argv) {
                   throw(range_error("ARMY must be <= " + to_string(MAX_ARMY-DO_ALIGN)));
               ARMY = val;
               break;
-            case 'i':
-              sched_batch();
+            case 'I':
+              batch = false;
               break;
             default:
-              cerr << "usage: " << argv[0] << " [-A] [-x size] [-y size] [-r ruleset] [-a soldiers] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-T] [-F] [-f path_prefix] [-e] [-H] [-S] [-R sample_red_file]\n";
+              cerr << "usage: " << argv[0] << " [-A] [-x size] [-y size] [-r ruleset] [-a soldiers] [-v] [-V verbose_move] [-I] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-T] [-F] [-f path_prefix] [-e] [-H] [-S] [-R sample_red_file]\n";
               exit(EXIT_FAILURE);
         }
+    if (batch) sched_batch();
 
     if (X == 0)
         if (Y == 0) X = Y = 9;
@@ -3669,6 +3702,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
         tables.print_edge_red();
         cout << "Deep red:\n";
         tables.print_deep_red();
+        cout << "Shallow red:\n";
+        tables.print_shallow_red();
         cout << "Parity:\n";
         tables.print_parity();
         cout << "Blue Base parity count:\n";

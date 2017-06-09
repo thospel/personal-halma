@@ -151,6 +151,25 @@ Statistics NAME(uint thid,
         bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
 #if !BLUE_TO_MOVE
+        bool deep_escape = true;
+        if (jump_only) {
+            uint nr_deep_red = tables.nr_deep_red();
+            uint deep_unblues = nr_deep_red;
+            for (uint i=0; i<nr_deep_red; ++i) {
+                Coord const pos = tables.deep_red_base(i);
+                if (image_normal.get(pos) == BLUE) --deep_unblues;
+                else {
+                    int j = tables.nr_deep_targets(i);
+                    while (--j >= 0) {
+                        Coord const target = tables.deep_target(i, j);
+                        if (image_normal.get(target) != BLUE)
+                            goto ESCAPE;
+                    }
+                }
+            }
+            deep_escape = deep_unblues == 0;
+          ESCAPE:;
+        }
 # if BACKTRACK
         subset_from.sort_compress();
 # else // BACKTRACK
@@ -255,17 +274,15 @@ Statistics NAME(uint thid,
 
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
-            uint deep_red = 0;
             if (jump_only) {
-                // Find EMPTY in the red base
+                // Find EMPTY in the shallow red base
                 red_top_from = reachable.size()-1;
-                for (auto const r: tables.army_red()) {
+                // Walk shallow red positions
+                for (uint i = tables.nr_deep_red(); i < ARMY; ++i) {
+                    auto r = tables.deep_red_base(i);
                     reachable[red_top_from] = r;
-                    red_top_from -= image.get(r) == EMPTY;
+                    red_top_from -= image.is_EMPTY(r);
                 }
-                if (red_top_from >= reachable.size()-3 && tables.nr_deep_red())
-                    for (auto const r: red)
-                        deep_red += r.deep_red();
             }
 #endif // BLUE_TO_MOVE
 
@@ -289,7 +306,7 @@ Statistics NAME(uint thid,
                 uint red_top = 0;
                 if (jump_only) {
                     reachable[red_top_from] = soldier;
-                    red_top = red_top_from - soldier.base_red();
+                    red_top = red_top_from - soldier.shallow_red();
                 }
 
 # if BACKTRACK
@@ -469,7 +486,8 @@ Statistics NAME(uint thid,
                             continue;
                         }
 #if BLUE_TO_MOVE
-                        if (red_empty == 0 && jump_only) {
+                        // red_empty == 0 implies jump_only so no need to test
+                        if (red_empty == 0) {
                             // The red base is full and since we already checked
                             // for solution this means there is at least one red
                             // soldier still on base. Can any red soldier leave
@@ -547,18 +565,8 @@ Statistics NAME(uint thid,
                         }
 #else  // BLUE_TO_MOVE
                         if (jump_only) {
-                            uint r_top = red_top;
-                            if (r_top + val.base_red() == reachable.size()-2 &&
-                                deep_red + val.deep_red() - soldier.deep_red()) {
-                                if (VERBOSE) {
-                                    logger << "   Move " << soldier << " to " << val << "\n";
-                                    logger << "   Prune deep red\n";
-                                    // logger << image.str(soldier, val, RED);
-                                    logger.flush();
-                                }
-                                continue;
-                            }
                             image.set(soldier, EMPTY);
+                            uint r_top = red_top;
                             for (uint i = reachable.size()-1; i > r_top; --i)
                                 image.set(reachable[i], COLORS);
                             // Setting pos val must be able to override COLORS
@@ -598,6 +606,32 @@ Statistics NAME(uint thid,
                                 image.set(reachable[i], EMPTY);
                             image.set(val, EMPTY);
                             image.set(soldier, RED);
+
+                            r_top = red_top + val.shallow_red();
+                            uint r_empty = reachable.size()-1 - r_top;
+                            if (r_empty <= 1) {
+                                if (r_empty < 1) {
+                                    // Shallow full. Red moved into base
+                                    // (Since there was an EMPTY that got
+                                    //  succesfully backtracked)
+                                    if (VERBOSE) {
+                                        logger << "   Move " << soldier << " to " << val << "\n";
+                                        logger << "   Prune red base blocked\n";
+                                        logger.flush();
+                                    }
+                                    continue;
+                                }
+                                if (!deep_escape) {
+                                    if (VERBOSE) {
+                                        logger << "   Move " << soldier << " to " << val << "\n";
+                                        logger << "   Prune deep red\n";
+                                        logger.flush();
+                                    }
+                                    logger << image.str(soldier, val, RED);
+                                    exit(0);
+                                    continue;
+                                }
+                            }
                         }
 #endif // BLUE_TO_MOVE
                     }
