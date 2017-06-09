@@ -2106,6 +2106,7 @@ void Tables::init() {
 
     deep_red_.fill(0);
     shallow_red_.fill(0);
+    deepness_.fill(2);
     nr_deep_red_ = 0;
     uint shallow_red = ARMY;
     BoardTable<uint8_t> seen;
@@ -2116,12 +2117,14 @@ void Tables::init() {
             nr_slide_jumps_red_[pos] = 0;
             if (base_red_[pos]) {
                 deep_red_[pos] = 1;
+                deepness_[pos] = 0;
                 auto targets = jump_targets(pos);
                 for (uint r = 0; r < RULES; ++r, targets.next()) {
                     auto const target = targets.current();
                     if (!base_red(target)) {
                         shallow_red_[pos] = 1;
                         deep_red_[pos] = 0;
+                        deepness_[pos] = 2;
                         deep_red_base_[--shallow_red] = pos;
                         break;
                     }
@@ -2136,6 +2139,7 @@ void Tables::init() {
                         if (!base_red(target)) {
                             shallow_red_[pos] = 1;
                             deep_red_[pos] = 0;
+                            deepness_[pos] = 2;
                             deep_red_base_[--shallow_red] = pos;
                             break;
                         }
@@ -2171,18 +2175,22 @@ void Tables::init() {
         }
     }
     if (nr_deep_red_ != shallow_red) throw_logic("Inconsistent deep_red_base");
-    nr_deep_targets_.fill(0);
+    medium_red_ = ARMY;
     for (uint i=0; i<nr_deep_red_; ++i) {
         Coord pos = deep_red_base_[i];
         auto targets = jump_targets(pos);
         for (uint r = 0; r < RULES; ++r, targets.next()) {
             auto const target = targets.current();
-            if (!deep_red_[target]) {
-                deep_targets_[i][nr_deep_targets_[i]++] = target;
-                // cout << "Deep escape " << pos << " -> " << target << "\n";
+            if (deepness_[target] == 2) {
+                deepness_[target] = 1;
+                --medium_red_;
             }
         }
     }
+    sort(&deep_red_base_[nr_deep_red_], &deep_red_base_[ARMY],
+         [this](Coord left, Coord right) {
+             return deepness_[left] > deepness_[right];
+         });
 
     min_nr_moves_ = start_.min_nr_moves();
 }
@@ -2244,6 +2252,16 @@ void Tables::print_shallow_red(ostream& os) const {
         for (uint x=0; x < X; ++x) {
             auto pos = Coord{x, y};
             os << " " << static_cast<uint>(shallow_red(pos));
+        }
+        os << "\n";
+    }
+}
+
+void Tables::print_deepness(ostream& os) const {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << static_cast<uint>(deepness(pos));
         }
         os << "\n";
     }
@@ -3704,6 +3722,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
         tables.print_deep_red();
         cout << "Shallow red:\n";
         tables.print_shallow_red();
+        cout << "Deepness:\n";
+        tables.print_deepness();
         cout << "Parity:\n";
         tables.print_parity();
         cout << "Blue Base parity count:\n";

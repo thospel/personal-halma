@@ -151,25 +151,6 @@ Statistics NAME(uint thid,
         bool const jump_only = available_moves <= off_base_from*2 && !slides;
 
 #if !BLUE_TO_MOVE
-        bool deep_escape = true;
-        if (jump_only) {
-            uint nr_deep_red = tables.nr_deep_red();
-            uint deep_unblues = nr_deep_red;
-            for (uint i=0; i<nr_deep_red; ++i) {
-                Coord const pos = tables.deep_red_base(i);
-                if (image_normal.get(pos) == BLUE) --deep_unblues;
-                else {
-                    int j = tables.nr_deep_targets(i);
-                    while (--j >= 0) {
-                        Coord const target = tables.deep_target(i, j);
-                        if (image_normal.get(target) != BLUE)
-                            goto ESCAPE;
-                    }
-                }
-            }
-            deep_escape = deep_unblues == 0;
-          ESCAPE:;
-        }
 # if BACKTRACK
         subset_from.sort_compress();
 # else // BACKTRACK
@@ -245,11 +226,12 @@ Statistics NAME(uint thid,
             Army const& army_symmetric = symmetry ? bZ : bZ_symmetric;
 
             array<Coord, MAX_X*MAX_Y/4+1> reachable;
-            uint red_empty = 1;
+            uint red_empty = 0;
             if (jump_only) {
-                red_empty = off_base_from -1;
-                for (auto const r: red)
-                    red_empty -= r.base_red();
+                for (uint i=tables.nr_deep_red(); i<ARMY; ++i) {
+                    Coord const pos = tables.deep_red_base(i);
+                    red_empty += image.is_EMPTY(pos);
+                }
             }
 #else  // BLUE_TO_MOVE
             Army const& army           = red;
@@ -486,82 +468,81 @@ Statistics NAME(uint thid,
                             continue;
                         }
 #if BLUE_TO_MOVE
-                        // red_empty == 0 implies jump_only so no need to test
-                        if (red_empty == 0) {
-                            // The red base is full and since we already checked
-                            // for solution this means there is at least one red
-                            // soldier still on base. Can any red soldier leave
-                            // in such a way that blue is able to fill the hole?
-                            // Since blue can only jump and the leaving soldier
-                            // has the same parity the leaving soldier will not
-                            // be jumped over (it may block blue though)
-                            image.set(soldier, EMPTY);
-                            image.set(val, BLUE);
-                            // logger << "Full:\n" << image;
-                            array<Coord, MAX_X*MAX_Y/4+1> reachable;
-                            uint nr_reachable = 0;
-                            for (uint i=0; i<a; ++i) {
-                                // army == blue
-                                auto b = army[i];
-                                reachable[nr_reachable] = b;
-                                nr_reachable += 1-b.base_red();
-                            }
-                            for (uint i=a+1; i<ARMY; ++i) {
-                                // army == blue
-                                auto b = army[i];
-                                reachable[nr_reachable] = b;
-                                nr_reachable += 1-b.base_red();
-                            }
-                            uint blues = nr_reachable;
+                        if (jump_only) {
+                            if (soldier.shallow_red()) throw_logic("Shallow Soldier");
+                            if (red_empty - val.shallow_red() == 0) {
+                                image.set(soldier, EMPTY);
+                                image.set(val, BLUE);
+                                // The red base is full. Can any red soldier
+                                // leave in such a way that blue is able to fill
+                                // the hole?
+                                // logger << "Full:\n" << image;
+                                array<Coord, MAX_X*MAX_Y/4+1> reachable;
+                                uint nr_reachable = 0;
+                                for (uint i=0; i<a; ++i) {
+                                    // army == blue
+                                    auto b = army[i];
+                                    reachable[nr_reachable] = b;
+                                    nr_reachable += 1-b.base_red();
+                                }
+                                for (uint i=a+1; i<ARMY; ++i) {
+                                    // army == blue
+                                    auto b = army[i];
+                                    reachable[nr_reachable] = b;
+                                    nr_reachable += 1-b.base_red();
+                                }
+                                uint blues = nr_reachable;
 
-                            for (uint i = 0; i < nr_reachable; ++i) {
-                                auto jumpees      = reachable[i].jumpees();
-                                auto jump_targets = reachable[i].jump_targets();
-                                for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
-                                    auto const jumpee = jumpees.current();
-                                    auto const target = jump_targets.current();
-                                    if (!image.red_jumpable(jumpee, target))
-                                        continue;
-                                    Color c = image.get(target);
-                                    if (c == RED) {
-                                        if (target.base_red()) {
-                                            // logger << "Reach:\n" << image << flush;
+                                for (uint i = 0; i < nr_reachable; ++i) {
+                                    auto jumpees      = reachable[i].jumpees();
+                                    auto jump_targets = reachable[i].jump_targets();
+                                    for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                                        auto const jumpee = jumpees.current();
+                                        auto const target = jump_targets.current();
+                                        if (!image.red_jumpable(jumpee, target))
+                                            continue;
+                                        Color c = image.get(target);
+                                        if (c == RED) {
+                                            if (target.base_red()) {
+                                                // logger << "Reach:\n" << image << flush;
+                                                goto ACCEPTABLE;
+                                            }
+                                            continue;
+                                        }
+
+                                        image.set(target, COLORS);
+                                        reachable[nr_reachable++] = target;
+                                    }
+                                }
+                                for (uint i = 0; i < nr_reachable; ++i) {
+                                    auto pos = reachable[i];
+                                    uint n = pos.nr_slide_jumps_red();
+                                    for (uint j=0; j<n; ++j) {
+                                        auto slider = pos.slide_jumps_red()[j];
+                                        if (image.get(slider) == RED) {
+                                            // logger << "Slide:\n" << image << flush;
                                             goto ACCEPTABLE;
                                         }
-                                        continue;
                                     }
+                                }
+                                // logger << "Fail:\n" << image << flush;
+                                for (uint i = blues; i < nr_reachable; ++i)
+                                    image.set(reachable[i], EMPTY);
+                                image.set(val, EMPTY);
+                                image.set(soldier, BLUE);
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Red base is full and red cannot move away fast enough\n";
+                                    logger.flush();
+                                }
+                                continue;
+                              ACCEPTABLE:
+                                for (uint i = blues; i < nr_reachable; ++i)
+                                    image.set(reachable[i], EMPTY);
 
-                                    image.set(target, COLORS);
-                                    reachable[nr_reachable++] = target;
-                                }
+                                image.set(val, EMPTY);
+                                image.set(soldier, BLUE);
                             }
-                            for (uint i = 0; i < nr_reachable; ++i) {
-                                auto pos = reachable[i];
-                                uint n = pos.nr_slide_jumps_red();
-                                for (uint j=0; j<n; ++j) {
-                                    auto slider = pos.slide_jumps_red()[j];
-                                    if (image.get(slider) == RED) {
-                                        // logger << "Slide:\n" << image << flush;
-                                        goto ACCEPTABLE;
-                                    }
-                                }
-                            }
-                            // logger << "Fail:\n" << image << flush;
-                            for (uint i = blues; i < nr_reachable; ++i)
-                                image.set(reachable[i], EMPTY);
-                            image.set(val, EMPTY);
-                            image.set(soldier, BLUE);
-                            if (VERBOSE) {
-                                logger << "   Move " << soldier << " to " << val << "\n";
-                                logger << "   Red base is full and red cannot move away fast enough\n";
-                                logger.flush();
-                            }
-                            continue;
-                          ACCEPTABLE:
-                            for (uint i = blues; i < nr_reachable; ++i)
-                                image.set(reachable[i], EMPTY);
-                            image.set(val, EMPTY);
-                            image.set(soldier, BLUE);
                         }
 #else  // BLUE_TO_MOVE
                         if (jump_only) {
@@ -609,28 +590,16 @@ Statistics NAME(uint thid,
 
                             r_top = red_top + val.shallow_red();
                             uint r_empty = reachable.size()-1 - r_top;
-                            if (r_empty <= 1) {
-                                if (r_empty < 1) {
-                                    // Shallow full. Red moved into base
-                                    // (Since there was an EMPTY that got
-                                    //  succesfully backtracked)
-                                    if (VERBOSE) {
-                                        logger << "   Move " << soldier << " to " << val << "\n";
-                                        logger << "   Prune red base blocked\n";
-                                        logger.flush();
-                                    }
-                                    continue;
+                            if (r_empty == 0) {
+                                // Shallow full. Red moved into base
+                                // (Since there was an EMPTY that got
+                                //  succesfully backtracked)
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune red base blocked\n";
+                                    logger.flush();
                                 }
-                                if (!deep_escape) {
-                                    if (VERBOSE) {
-                                        logger << "   Move " << soldier << " to " << val << "\n";
-                                        logger << "   Prune deep red\n";
-                                        logger.flush();
-                                    }
-                                    logger << image.str(soldier, val, RED);
-                                    exit(0);
-                                    continue;
-                                }
+                                continue;
                             }
                         }
 #endif // BLUE_TO_MOVE
