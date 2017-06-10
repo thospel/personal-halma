@@ -166,6 +166,14 @@ Statistics NAME(uint thid,
             }
         }
 #else // BLUE_TO_MOVE
+        uint non_blue = tables.nr_deep_red();
+        if (jump_only) {
+            int i = non_blue;
+            while (--i >= 0) {
+                Coord const pos = tables.deep_red_base(i);
+                non_blue -= image_normal.get(pos) == BLUE;
+            }
+        }
 # if BACKTRACK
         subset_from.sort_compress();
 # else // BACKTRACK
@@ -271,14 +279,23 @@ Statistics NAME(uint thid,
 
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
+            uint deep_red_empty = 2;
             if (jump_only) {
                 // Find EMPTY in the shallow red base
                 red_top_from = reachable.size()-1;
                 // Walk shallow red positions
                 for (uint i = tables.nr_deep_red(); i < ARMY; ++i) {
-                    auto r = tables.deep_red_base(i);
+                    Coord const r = tables.deep_red_base(i);
                     reachable[red_top_from] = r;
                     red_top_from -= image.is_EMPTY(r);
+                }
+                if (non_blue) {
+                    deep_red_empty = 0;
+                    int i = tables.nr_deep_red();
+                    while (--i >= 0) {
+                        Coord const r = tables.deep_red_base(i);
+                        deep_red_empty += image.is_EMPTY(r);
+                    }
                 }
             }
 #endif // BLUE_TO_MOVE
@@ -620,16 +637,26 @@ Statistics NAME(uint thid,
 
                             r_top = red_top + val.shallow_red();
                             uint r_empty = reachable.size()-1 - r_top;
-                            if (r_empty == 0) {
-                                // Shallow full. Red moved into base
-                                // (Since there was an EMPTY that got
-                                //  succesfully backtracked)
-                                if (VERBOSE) {
-                                    logger << "   Move " << soldier << " to " << val << "\n";
-                                    logger << "   Prune red base blocked\n";
-                                    logger.flush();
+                            if (r_empty <= 1) {
+                                if (r_empty < 1) {
+                                    // Shallow full. Red moved into base
+                                    // (Since there was an EMPTY that got
+                                    //  succesfully backtracked)
+                                    if (VERBOSE) {
+                                        logger << "   Move " << soldier << " to " << val << "\n";
+                                        logger << "   Prune red base blocked\n";
+                                        logger.flush();
+                                    }
+                                    continue;
                                 }
-                                continue;
+                                if (deep_red_empty + soldier.deep_red() - val.deep_red() == 0) {
+                                    if (VERBOSE) {
+                                        logger << "   Move " << soldier << " to " << val << "\n";
+                                        logger << "   Prune deep out of time\n";
+                                        logger.flush();
+                                    }
+                                    continue;
+                                }
                             }
                         }
 #endif // BLUE_TO_MOVE
