@@ -147,27 +147,15 @@ Statistics NAME(uint thid,
         }};
 #endif // BLUE_TO_MOVE
         int const slides = min_slides(parity_blue);
-        // jump_only indicates that all blue moves must now be jumps to base
-        bool const jump_only = available_moves <= off_base_from*2 && !slides;
+        // All blue moves must now be from off base to on_base:
+        bool const blue_base_only = available_moves <= off_base_from*2;
+        // All blue moves must now be jumps from off base to on_base:
+        bool const blue_jump_only = blue_base_only && !slides;
 
 #if BLUE_TO_MOVE
-        array<ParityCount, 3> non_blue_count;
-        if (jump_only) {
-            non_blue_count[0].fill(0);
-            non_blue_count[1].fill(0);
-            int i = tables.nr_deep_red();
-            while(--i >= 0) {
-                Coord const pos = tables.deep_red_base(i);
-                non_blue_count[0][pos.parity()] += image_normal.get(pos) != BLUE;
-            }
-            for (uint i=tables.medium_red(); i<ARMY; ++i) {
-                Coord const pos = tables.deep_red_base(i);
-                non_blue_count[1][pos.parity()] += image_normal.get(pos) != BLUE;
-            }
-        }
 #else // BLUE_TO_MOVE
         uint non_blue = tables.nr_deep_red();
-        if (jump_only) {
+        if (blue_jump_only) {
             int i = non_blue;
             while (--i >= 0) {
                 Coord const pos = tables.deep_red_base(i);
@@ -250,7 +238,7 @@ Statistics NAME(uint thid,
 
             array<Coord, MAX_X*MAX_Y/4+1> reachable;
             uint red_empty = 0;
-            if (jump_only) {
+            if (blue_jump_only) {
                 for (uint i=tables.nr_deep_red(); i<ARMY; ++i) {
                     Coord const pos = tables.deep_red_base(i);
                     red_empty += image.is_EMPTY(pos);
@@ -280,7 +268,7 @@ Statistics NAME(uint thid,
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
             uint deep_red_empty = 2;
-            if (jump_only) {
+            if (blue_jump_only) {
                 // Find EMPTY in the shallow red base
                 red_top_from = reachable.size()-1;
                 // Walk shallow red positions
@@ -318,7 +306,7 @@ Statistics NAME(uint thid,
                 edge_count -= soldier.edge_red();
 #else
                 uint red_top = 0;
-                if (jump_only) {
+                if (blue_jump_only) {
                     reachable[red_top_from] = soldier;
                     red_top = red_top_from - soldier.shallow_red();
                 }
@@ -336,7 +324,7 @@ Statistics NAME(uint thid,
 
                 // Jumps
                 int nr_reachable = 1;
-                if (!(BLUE_TO_MOVE && jump_only) || !soldier.base_red()) {
+                if (!(BLUE_TO_MOVE && blue_jump_only) || !soldier.base_red()) {
                     reachable[0] = soldier;
                     image.set(soldier, CLOSED_LOOP ? EMPTY : COLORS);
                     for (int i=0; i < nr_reachable; ++i) {
@@ -355,7 +343,7 @@ Statistics NAME(uint thid,
                     image.set(soldier, BLUE_TO_MOVE ? BLUE : RED);
 
                     // Only allow jumps off base...
-                    if ((BLUE_TO_MOVE && jump_only) ||
+                    if ((BLUE_TO_MOVE && blue_jump_only) ||
                         (BLUE_TO_MOVE && prune_jump && !soldier.base_blue())) {
                         // ... or jump onto target
                         int i = 1;
@@ -376,7 +364,7 @@ Statistics NAME(uint thid,
                 }
 
                 // Slides
-                if (BLUE_TO_MOVE && jump_only) {
+                if (BLUE_TO_MOVE && blue_jump_only) {
                     if (VERBOSE)
                         logger << "   Prune all blue slides (jump only)\n" << flush;
                 } else if (BLUE_TO_MOVE && prune_slide) {
@@ -500,7 +488,7 @@ Statistics NAME(uint thid,
                             continue;
                         }
 #if BLUE_TO_MOVE
-                        if (jump_only) {
+                        if (blue_jump_only) {
                             // soldier is off base so can't be shallow
                             if (red_empty - val.shallow_red() == 0) {
                                 image.set(soldier, EMPTY);
@@ -525,6 +513,7 @@ Statistics NAME(uint thid,
                                 }
                                 uint blues = nr_reachable;
 
+                                // Consider all places blue can reach by jumping
                                 for (uint i = 0; i < nr_reachable; ++i) {
                                     auto jumpees      = reachable[i].jumpees();
                                     auto jump_targets = reachable[i].jump_targets();
@@ -534,6 +523,9 @@ Statistics NAME(uint thid,
                                         if (!image.red_jumpable(jumpee, target))
                                             continue;
                                         Color c = image.get(target);
+                                        // If blue can hit RED on base we assume
+                                        // that RED soldier is able to leave on
+                                        // the next move making room for BLUE
                                         if (c == RED) {
                                             if (target.base_red()) {
                                                 // logger << "Reach:\n" << image << flush;
@@ -541,11 +533,14 @@ Statistics NAME(uint thid,
                                             }
                                             continue;
                                         }
-
+                                        // Getting here means target is EMPTY
                                         image.set(target, COLORS);
                                         reachable[nr_reachable++] = target;
                                     }
                                 }
+                                // Check if any of the positions reachable for
+                                // BLUE can use a RED soldier sliding off base
+                                // to jump into the resulting hole
                                 for (uint i = 0; i < nr_reachable; ++i) {
                                     auto pos = reachable[i];
                                     uint n = pos.nr_slide_jumps_red();
@@ -575,24 +570,9 @@ Statistics NAME(uint thid,
                                 image.set(val, EMPTY);
                                 image.set(soldier, BLUE);
                             }
-                            Coord sval = symmetry ? val.symmetric() : val;
-                            --non_blue_count[tables.deepness(sval)][sval.parity()];
-                            if ((non_blue_count[0][0]&&!non_blue_count[1][0]) ||
-                                (non_blue_count[0][1]&&!non_blue_count[1][1]) ||
-                                (non_blue_count[0][2]&&!non_blue_count[1][2]) ||
-                                (non_blue_count[0][3]&&!non_blue_count[1][3])) {
-                                ++non_blue_count[tables.deepness(sval)][sval.parity()];
-                                if (VERBOSE) {
-                                    logger << "   Move " << soldier << " to " << val << "\n";
-                                    logger << "   Prune deep red\n";
-                                    logger.flush();
-                                }
-                                continue;
-                            }
-                            ++non_blue_count[tables.deepness(sval)][sval.parity()];
                         }
 #else  // BLUE_TO_MOVE
-                        if (jump_only) {
+                        if (blue_jump_only) {
                             image.set(soldier, EMPTY);
                             uint r_top = red_top;
                             for (uint i = reachable.size()-1; i > r_top; --i)

@@ -2259,12 +2259,15 @@ class Image {
     inline bool is_EMPTY(Coord const pos) const PURE {
         return ::is_EMPTY(get(pos));
     }
+    // (jumpee is RED or BLUE) and (target is EMPTY)
     inline bool jumpable(Coord const jumpee, Coord const target) const PURE {
         return (get(target) >> get(jumpee)) != 0;
     }
+    // (jumpee is RED or BLUE) and (target is BLUE or EMPTY)
     inline bool blue_jumpable(Coord const jumpee, Coord const target) const PURE {
         return ((get(target) << 2) & get(jumpee)) != 0;
     }
+    // (jumpee is RED or BLUE) and (target is RED or EMPTY)
     inline bool red_jumpable(Coord const jumpee, Coord const target) const PURE {
         return ((get(target) + 3) & get(jumpee) & 4) != 0;
     }
