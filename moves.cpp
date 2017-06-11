@@ -268,7 +268,7 @@ Statistics NAME(uint thid,
             array<Coord, MAX_X*MAX_Y/4+1+MAX_ARMY+1> reachable;
             uint red_top_from = 0;
             uint deep_red_empty = 2;
-            if (blue_jump_only) {
+            if (blue_base_only) {
                 // Find EMPTY in the shallow red base
                 red_top_from = reachable.size()-1;
                 // Walk shallow red positions
@@ -306,7 +306,7 @@ Statistics NAME(uint thid,
                 edge_count -= soldier.edge_red();
 #else
                 uint red_top = 0;
-                if (blue_jump_only) {
+                if (blue_base_only) {
                     reachable[red_top_from] = soldier;
                     red_top = red_top_from - soldier.shallow_red();
                 }
@@ -519,16 +519,14 @@ Statistics NAME(uint thid,
                                     auto targets = pos.slide_targets();
                                     for (uint r = 0; r < RULES; ++r, targets.next()) {
                                         auto const target = targets.current();
-                                        if (!target.shallow_red()) {
-                                            if (target == pos) break;
-                                            continue;
-                                        }
+                                        if (!target.shallow_red()) continue;
                                         if (image.get(target) == RED)
                                             goto SLIDABLE;
                                     }
                                 }
 
-                            // Consider all places blue can reach by jumping
+                            // BLUE cannot slide onto the base. How about jumps?
+                            // Consider all places BLUE can reach by jumping
                             image.set(soldier, EMPTY);
                             image.set(val, BLUE);
                             for (uint i = 0; i < nr_reachable; ++i) {
@@ -589,13 +587,29 @@ Statistics NAME(uint thid,
                           SLIDABLE:;
                         }
 #else  // BLUE_TO_MOVE
-                        if (blue_jump_only) {
-                            image.set(soldier, EMPTY);
+                        if (blue_base_only) {
                             uint r_top = red_top;
-                            for (uint i = reachable.size()-1; i > r_top; --i)
+
+                            if (slides) {
+                                for (uint i = r_top+1; i < reachable.size(); ++i) {
+                                    auto targets = reachable[i].slide_targets();
+                                    for (uint r = 0; r < RULES; ++r, targets.next()) {
+                                        auto const target = targets.current();
+                                        if (target.base_red()) continue;
+                                        if (image.get(target) == BLUE)
+                                            goto SLIDABLE;
+                                    }
+                                }
+                            }
+
+                            image.set(soldier, EMPTY);
+                            for (uint i = r_top+1; i < reachable.size(); ++i)
                                 image.set(reachable[i], COLORS);
                             // Setting pos val must be able to override COLORS
+                            // since val can be shallow red leading to a false
+                            // EMPTY
                             image.set(val, RED);
+
                             // logger << "Start mass backtrack:\n" << image;
                             for (uint i = reachable.size()-1; i > r_top; --i) {
                                 auto jumpees      = reachable[i].jumpees();
@@ -632,6 +646,7 @@ Statistics NAME(uint thid,
                             image.set(val, EMPTY);
                             image.set(soldier, RED);
 
+                          SLIDABLE:
                             r_top = red_top + val.shallow_red();
                             uint r_empty = reachable.size()-1 - r_top;
                             if (r_empty <= 1) {

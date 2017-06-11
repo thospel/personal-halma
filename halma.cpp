@@ -2131,21 +2131,18 @@ void Tables::init() {
                 }
                 if (shallow_red_[pos]) continue;
 
-                // We only consider deep/shalllow for jump_only
-                if (false) {
-                    targets = slide_targets(pos);
-                    for (uint r = 0; r < RULES; ++r, targets.next()) {
-                        auto const target = targets.current();
-                        if (!base_red(target)) {
-                            shallow_red_[pos] = 1;
-                            deep_red_[pos] = 0;
-                            deepness_[pos] = 2;
-                            deep_red_base_[--shallow_red] = pos;
-                            break;
-                        }
+                targets = slide_targets(pos);
+                for (uint r = 0; r < RULES; ++r, targets.next()) {
+                    auto const target = targets.current();
+                    if (!base_red(target)) {
+                        shallow_red_[pos] = 1;
+                        deep_red_[pos] = 0;
+                        deepness_[pos] = 2;
+                        deep_red_base_[--shallow_red] = pos;
+                        break;
                     }
-                    if (shallow_red_[pos]) continue;
                 }
+                if (shallow_red_[pos]) continue;
 
                 deep_red_base_[nr_deep_red_++] = pos;
             } else {
