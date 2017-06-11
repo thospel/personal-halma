@@ -1674,7 +1674,7 @@ ArmySet::ArmySet(bool lock):
 
 ArmySet::~ArmySet() {
     if (armies_)
-        demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY));
+        demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY) + ARMY_PADDING);
 }
 
 void ArmySet::init() {
@@ -1687,7 +1687,7 @@ void ArmySet::init() {
 void ArmySet::clear() {
     for (auto& subset: subsets_) subset.clear();
     if (armies_) {
-        demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY));
+        demallocate(armies_+ARMY, size() * static_cast<size_t>(ARMY) + ARMY_PADDING);
         armies_ = nullptr;
     }
     init();
@@ -1748,7 +1748,7 @@ void ArmySet::_convert_hash(bool keep) {
         throw_logic("_convert_hash should not be called from a subthread");
     if (armies_) throw_logic("Already converted ArmySetSparse");
 
-    mallocate(armies_, size() * static_cast<size_t>(ARMY));
+    mallocate(armies_, size() * static_cast<size_t>(ARMY) + ARMY_PADDING);
     armies_ -= ARMY;
 
     uint n = work_units();
@@ -1789,8 +1789,8 @@ size_t ArmySet::memory_report(ostream& os, string const& prefix) const {
     size_t sz = 0;
     os << prefix << "armies = ";
     if (armies_) {
-        os << "Coord[" << size() << " * " << ARMY << "] (" << size() * sizeof(Coord) * ARMY << " bytes)\n";
-        sz += size() * sizeof(Coord) * ARMY;
+        os << "Coord[" << size() << " * " << ARMY << " + " << ARMY_PADDING << "] (" << size() * sizeof(Coord) * ARMY << " bytes)\n";
+        sz += (size() * ARMY + ARMY_PADDING) * sizeof(Coord);
     } else os << "nullptr\n";
 
     sz += subsets_.memory_report(os, prefix);
