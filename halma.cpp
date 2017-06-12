@@ -2,6 +2,7 @@
 #define ONCE 1
 #include "halma.hpp"
 
+#include <cctype>
 #include <fstream>
 
 #include <random>
@@ -433,6 +434,88 @@ Move::Move(Army const& army_from, Army const& army_to, int& diffs): from{-1,-1},
     }
     diffs += ARMY-i;
     diffs += ARMY-j;
+}
+
+Board::Board(FILE* fp) {
+    read(fp);
+}
+
+Board::Board(string const& file) {
+    FILE* fp = fopen(file.c_str(), "r");
+    if (!fp) throw_errno("Could not open '" + file + "'");
+    try {
+        read(fp);
+    } catch(exception& e) {
+        fclose(fp);
+        throw;
+    }
+    if (fclose(fp)) throw_errno("Could not close '" + file + "'");
+}
+
+void Board::read(FILE* fp) {
+    array<Coord, MAX_ARMY> blueZ;
+    array<Coord, MAX_ARMY> redZ;
+    uint x = 0;
+    uint y = 0;
+    uint nr_blue = 0;
+    uint nr_red = 0;
+    uint i=X*Y+1;
+    while (i>0) {
+        int ch = getc_unlocked(fp);
+        if (isspace(ch)) continue;
+        switch(ch) {
+            case '+':
+            case '-':
+            case '|':
+              break;
+            case '.':
+              --i;
+              if (++x >= X) {
+                  x = 0;
+                  ++y;
+              }
+              break;
+            case 'O':
+              --i;
+              if (i == 0) ungetc(ch, fp);
+              else {
+                  if (nr_blue >= ARMY) throw_logic("Too many blue soldiers");
+                  if (y >= Y) throw_logic("Board too large");
+                  blueZ[nr_blue++] = Coord{x, y};
+                  if (++x >= X) {
+                      x = 0;
+                      ++y;
+                  }
+              }
+              break;
+            case 'X':
+              --i;
+              if (i == 0) ungetc(ch, fp);
+              else {
+                  if (nr_red >= ARMY) throw_logic("Too many red soldiers");
+                  if (y >= Y) throw_logic("Board too large");
+                  redZ[nr_red++] = Coord{x, y};
+                  if (++x >= X) {
+                      x = 0;
+                      ++y;
+                  }
+              }
+              break;
+            case EOF:
+              --i;
+              if (i != 0) throw_logic("Unexpected EOF");
+              break;
+            default:
+              ungetc(ch, fp);
+              throw_logic("Invalid board character '" + string(1, ch) + "'");
+        }
+    }
+    if (nr_blue < ARMY) throw_logic("Too few blue soldiers");
+    if (nr_red  < ARMY) throw_logic("Too few red soldiers");
+    // Silly copy games because we don't export a direct Army setter
+    // But at least it takes care of proper termination
+    blue() = Army{ArmyZconst(blueZ[0]), 0};
+    red () = Army{ArmyZconst(redZ [0]), 0};
 }
 
 void Board::svg(ostream& os, uint scale, uint margin) const {
@@ -2905,7 +2988,7 @@ void Svg::write(time_t start_time, time_t stop_time,
                 StatisticsList const& stats_list_solve, Sec::rep solve_duration,
                 StatisticsList const& stats_list_backtrack, Sec::rep backtrack_duration) {
     bool terminated = is_terminated();
-    int target_moves = stats_list_solve[0].available_moves();
+    int target_moves = stats_list_solve.size() ? stats_list_solve[0].available_moves() : solution_moves;
     if (solution_moves >= 0) {
         html_header(boards.size()-1, target_moves, terminated);
         parameters(start_time, stop_time);
@@ -2914,8 +2997,10 @@ void Svg::write(time_t start_time, time_t stop_time,
         html_header(stats_list_solve.size()-1, target_moves, terminated);
         parameters(start_time, stop_time);
     }
-    out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
-    stats("Solve", stats_list_solve);
+    if (stats_list_solve.size()) {
+        out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
+        stats("Solve", stats_list_solve);
+    }
     if (stats_list_backtrack.size()) {
         out_ << "<h3>Backtrack (" << backtrack_duration << " seconds)</h3>\n";
         stats("Backtrack", stats_list_backtrack);
@@ -3581,11 +3666,12 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:T", argv);
+    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:iT", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
     bool batch = true;
+    bool input = false;
     while (options.next())
         switch (options.option()) {
             case 'A': attempt     = false; break;
@@ -3606,6 +3692,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 's': prune_slide = true; break;
             case 'v': verbose     = true; break;
             case 'V': verbose_move = atoi(options.arg()); break;
+            case 'i': input       = true; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -3762,8 +3849,14 @@ void my_main(int UNUSED argc, char const* const* argv) {
 
     auto start_time = now();
     Army red_army;
-    int solution_moves =
-        solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
+    int solution_moves;
+    if (input) {
+        solution_moves = nr_moves;
+        Board final_board{stdin};
+        red_army = final_board.red();
+    } else
+        solution_moves =
+            solve(start_board, nr_moves, red_army, stats_list_solve, solve_duration);
     if (solution_moves >= 0)
         backtrack(start_board, nr_moves, solution_moves, red_army,
                   stats_list_backtrack, backtrack_duration, boards);

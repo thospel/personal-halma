@@ -1581,9 +1581,12 @@ class Board {
   public:
     Board() {}
     Board(Army const& blue, Army const& red): blue_{blue}, red_{red} {}
+    NOINLINE Board(FILE* fp);
+    NOINLINE Board(string const& file);
     inline Board(Board const& board) ALWAYS_INLINE = default;
     inline Board& operator=(Board const& army) ALWAYS_INLINE = default;
 
+    inline void read(FILE* fp) ALWAYS_INLINE;
     void do_move(Move const& move_);
     void do_move(Move const& move, bool blue_to_move) {
         auto& army = blue_to_move ? blue() : red();
