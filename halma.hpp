@@ -2508,6 +2508,7 @@ class Tables {
     Norm   infinity() const FUNCTIONAL { return  infinity_; }
     Nbits Ninfinity() const FUNCTIONAL { return Ninfinity_; }
     Board const& start() const FUNCTIONAL { return start_; }
+    inline int min_surround() const FUNCTIONAL { return min_surround_; }
 
     void print_directions(ostream& os) const COLD;
     void print_directions() const {
@@ -2580,6 +2581,7 @@ class Tables {
     uint min_nr_moves_;
     uint nr_deep_red_;
     uint medium_red_;
+    uint min_surround_;
     Board start_;
     Army deep_red_base_;
 };

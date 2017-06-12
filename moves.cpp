@@ -153,6 +153,7 @@ Statistics NAME(uint thid,
         bool const blue_jump_only = blue_base_only && !slides;
 
 #if BLUE_TO_MOVE
+        bool maybe_surround = off_base_from <= tables.min_surround();
 #else // BLUE_TO_MOVE
         uint non_blue = tables.nr_deep_red();
         if (blue_jump_only) {
@@ -585,53 +586,55 @@ Statistics NAME(uint thid,
                               SLIDABLE:;
                             }
 
-                            array<Coord, MAX_ARMY> reachable;
-                            array<Color, MAX_ARMY> old_color;
-                            int j = tables.nr_deep_red();
                             bool escape = true;
-                            while (--j >= 0) {
-                                reachable[0] = tables.deep_red_base(j);
-                                Color color = image.get(reachable[0]);
-                                if (color == BLUE) continue;
-                                old_color[0] = color;
-                                image.set(reachable[0], COLORS);
-                                uint nr_reachable = 1;
-                                for (uint i=0; i<nr_reachable; ++i) {
-                                    auto slide_targets = reachable[i].slide_targets();
-                                    auto jump_targets = reachable[i].jump_targets();
-                                    for (uint r = 0; r < RULES; ++r, slide_targets.next(), jump_targets.next()) {
-                                        auto const slide_target = slide_targets.current();
-                                        color = image.get(slide_target);
-                                        if (color != BLUE) {
-                                            if (!slide_target.deep_red()) goto ESCAPE;
-                                            if (color != COLORS) {
-                                                image.set(slide_target, COLORS);
-                                                old_color[nr_reachable] = color;
-                                                reachable[nr_reachable] = slide_target;
-                                                ++nr_reachable;
+                            if (maybe_surround) {
+                                array<Coord, MAX_ARMY> reachable;
+                                array<Color, MAX_ARMY> old_color;
+                                int j = tables.nr_deep_red();
+                                while (--j >= 0) {
+                                    reachable[0] = tables.deep_red_base(j);
+                                    Color color = image.get(reachable[0]);
+                                    if (color == BLUE) continue;
+                                    old_color[0] = color;
+                                    image.set(reachable[0], COLORS);
+                                    uint nr_reachable = 1;
+                                    for (uint i=0; i<nr_reachable; ++i) {
+                                        auto slide_targets = reachable[i].slide_targets();
+                                        auto jump_targets = reachable[i].jump_targets();
+                                        for (uint r = 0; r < RULES; ++r, slide_targets.next(), jump_targets.next()) {
+                                            auto const slide_target = slide_targets.current();
+                                            color = image.get(slide_target);
+                                            if (color != BLUE) {
+                                                if (!slide_target.deep_red()) goto ESCAPE;
+                                                if (color != COLORS) {
+                                                    image.set(slide_target, COLORS);
+                                                    old_color[nr_reachable] = color;
+                                                    reachable[nr_reachable] = slide_target;
+                                                    ++nr_reachable;
+                                                }
                                             }
-                                        }
-                                        auto const jump_target = jump_targets.current();
-                                        color = image.get(jump_target);
-                                        if (color != BLUE) {
-                                            if (!jump_target.deep_red()) goto ESCAPE;
-                                            if (color != COLORS) {
-                                                image.set(jump_target, COLORS);
-                                                old_color[nr_reachable] = color;
-                                                reachable[nr_reachable] = jump_target;
-                                                ++nr_reachable;
+                                            auto const jump_target = jump_targets.current();
+                                            color = image.get(jump_target);
+                                            if (color != BLUE) {
+                                                if (!jump_target.deep_red()) goto ESCAPE;
+                                                if (color != COLORS) {
+                                                    image.set(jump_target, COLORS);
+                                                    old_color[nr_reachable] = color;
+                                                    reachable[nr_reachable] = jump_target;
+                                                    ++nr_reachable;
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                for (uint i=0; i<nr_reachable; ++i)
-                                    image.set(reachable[i], old_color[i]);
-                                escape = false;
-                                break;
+                                    for (uint i=0; i<nr_reachable; ++i)
+                                        image.set(reachable[i], old_color[i]);
+                                    escape = false;
+                                    break;
 
-                              ESCAPE:;
-                                for (uint i=0; i<nr_reachable; ++i)
-                                    image.set(reachable[i], old_color[i]);
+                                  ESCAPE:;
+                                    for (uint i=0; i<nr_reachable; ++i)
+                                        image.set(reachable[i], old_color[i]);
+                                }
                             }
 
                             image.set(val, EMPTY);
