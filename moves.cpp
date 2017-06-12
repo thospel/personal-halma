@@ -488,103 +488,163 @@ Statistics NAME(uint thid,
                             continue;
                         }
 #if BLUE_TO_MOVE
-                        if (blue_base_only &&
-                            // soldier is off base so can't be shallow
-                            red_empty - val.shallow_red() == 0) {
-                            // The red base is full. Can any red soldier
-                            // leave in such a way that blue is able to fill
-                            // the hole?
-                            // logger << "Full:\n" << image.str(soldier, val, BLUE);
-                            array<Coord, MAX_X*MAX_Y/4+1> reachable;
-                            uint nr_reachable = 0;
-                            for (uint i=0; i<a; ++i) {
-                                // army == blue
-                                auto b = army[i];
-                                reachable[nr_reachable] = b;
-                                nr_reachable += 1-b.base_red();
-                            }
-                            for (uint i=a+1; i<ARMY; ++i) {
-                                // army == blue
-                                auto b = army[i];
-                                reachable[nr_reachable] = b;
-                                nr_reachable += 1-b.base_red();
-                            }
-                            uint blues = nr_reachable;
-
-                            if (slides)
-                                // We could preprocess this quite a bit
-                                for (uint i = 0; i < nr_reachable; ++i) {
-                                    Coord const pos = reachable[i];
-                                    if (!pos.edge_red()) continue;
-                                    auto targets = pos.slide_targets();
-                                    for (uint r = 0; r < RULES; ++r, targets.next()) {
-                                        auto const target = targets.current();
-                                        if (!target.shallow_red()) continue;
-                                        if (image.get(target) == RED)
-                                            goto SLIDABLE;
-                                    }
-                                }
-
-                            // BLUE cannot slide onto the base. How about jumps?
-                            // Consider all places BLUE can reach by jumping
+                        if (blue_base_only) {
                             image.set(soldier, EMPTY);
                             image.set(val, BLUE);
-                            for (uint i = 0; i < nr_reachable; ++i) {
-                                auto jumpees      = reachable[i].jumpees();
-                                auto jump_targets = reachable[i].jump_targets();
-                                for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
-                                    auto const jumpee = jumpees.current();
-                                    auto const target = jump_targets.current();
-                                    if (!image.red_jumpable(jumpee, target))
-                                        continue;
-                                    Color c = image.get(target);
-                                    // If blue can hit RED on base we assume
-                                    // that RED soldier is able to leave on
-                                    // the next move making room for BLUE
-                                    if (c == RED) {
-                                        if (target.base_red()) {
-                                            // logger << "Reach:\n" << image << flush;
+                            // soldier is off base so can't be shallow
+                            if (red_empty - val.shallow_red() == 0) {
+                                // The red base is full. Can any red soldier
+                                // leave in such a way that blue is able to fill
+                                // the hole?
+                                // logger << "Full:\n" << image.str(soldier, val, BLUE);
+                                array<Coord, MAX_X*MAX_Y/4+1> reachable;
+                                uint nr_reachable = 0;
+                                for (uint i=0; i<a; ++i) {
+                                    // army == blue
+                                    auto b = army[i];
+                                    reachable[nr_reachable] = b;
+                                    nr_reachable += 1-b.base_red();
+                                }
+                                for (uint i=a+1; i<ARMY; ++i) {
+                                    // army == blue
+                                    auto b = army[i];
+                                    reachable[nr_reachable] = b;
+                                    nr_reachable += 1-b.base_red();
+                                }
+                                uint blues = nr_reachable;
+
+                                if (slides)
+                                    // We could preprocess this quite a bit
+                                    for (uint i = 0; i < nr_reachable; ++i) {
+                                        Coord const pos = reachable[i];
+                                        if (!pos.edge_red()) continue;
+                                        auto targets = pos.slide_targets();
+                                        for (uint r = 0; r < RULES; ++r, targets.next()) {
+                                            auto const target = targets.current();
+                                            if (!target.shallow_red()) continue;
+                                            if (image.get(target) == RED)
+                                                goto SLIDABLE;
+                                        }
+                                    }
+
+                                // BLUE cannot slide onto the base. How about jumps?
+                                // Consider all places BLUE can reach by jumping
+                                for (uint i = 0; i < nr_reachable; ++i) {
+                                    auto jumpees      = reachable[i].jumpees();
+                                    auto jump_targets = reachable[i].jump_targets();
+                                    for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                                        auto const jumpee = jumpees.current();
+                                        auto const target = jump_targets.current();
+                                        if (!image.red_jumpable(jumpee, target))
+                                            continue;
+                                        Color c = image.get(target);
+                                        // If blue can hit RED on base we assume
+                                        // that RED soldier is able to leave on
+                                        // the next move making room for BLUE
+                                        if (c == RED) {
+                                            if (target.base_red()) {
+                                                // logger << "Reach:\n" << image << flush;
+                                                goto ACCEPTABLE;
+                                            }
+                                            continue;
+                                        }
+                                        // Getting here means target is EMPTY
+                                        image.set(target, COLORS);
+                                        reachable[nr_reachable++] = target;
+                                    }
+                                }
+                                // Check if any of the positions reachable for
+                                // BLUE can use a RED soldier sliding off base
+                                // to jump into the resulting hole
+                                for (uint i = 0; i < nr_reachable; ++i) {
+                                    auto pos = reachable[i];
+                                    uint n = pos.nr_slide_jumps_red();
+                                    for (uint j=0; j<n; ++j) {
+                                        auto slider = pos.slide_jumps_red()[j];
+                                        if (image.get(slider) == RED) {
+                                            // logger << "Slide:\n" << image << flush;
                                             goto ACCEPTABLE;
                                         }
-                                        continue;
-                                    }
-                                    // Getting here means target is EMPTY
-                                    image.set(target, COLORS);
-                                    reachable[nr_reachable++] = target;
-                                }
-                            }
-                            // Check if any of the positions reachable for
-                            // BLUE can use a RED soldier sliding off base
-                            // to jump into the resulting hole
-                            for (uint i = 0; i < nr_reachable; ++i) {
-                                auto pos = reachable[i];
-                                uint n = pos.nr_slide_jumps_red();
-                                for (uint j=0; j<n; ++j) {
-                                    auto slider = pos.slide_jumps_red()[j];
-                                    if (image.get(slider) == RED) {
-                                        // logger << "Slide:\n" << image << flush;
-                                        goto ACCEPTABLE;
                                     }
                                 }
+                                // logger << "Fail:\n" << image << flush;
+                                for (uint i = blues; i < nr_reachable; ++i)
+                                    image.set(reachable[i], EMPTY);
+                                image.set(val, EMPTY);
+                                image.set(soldier, BLUE);
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune deep red base is full and red cannot move away fast enough\n";
+                                    logger.flush();
+                                }
+                                continue;
+                              ACCEPTABLE:
+                                for (uint i = blues; i < nr_reachable; ++i)
+                                    image.set(reachable[i], EMPTY);
+
+                              SLIDABLE:;
                             }
-                            // logger << "Fail:\n" << image << flush;
-                            for (uint i = blues; i < nr_reachable; ++i)
-                                image.set(reachable[i], EMPTY);
-                            image.set(val, EMPTY);
-                            image.set(soldier, BLUE);
-                            if (VERBOSE) {
-                                logger << "   Move " << soldier << " to " << val << "\n";
-                                logger << "   Red base is full and red cannot move away fast enough\n";
-                                logger.flush();
+
+                            array<Coord, MAX_ARMY> reachable;
+                            array<Color, MAX_ARMY> old_color;
+                            int j = tables.nr_deep_red();
+                            bool escape = true;
+                            while (--j >= 0) {
+                                reachable[0] = tables.deep_red_base(j);
+                                Color color = image.get(reachable[0]);
+                                if (color == BLUE) continue;
+                                old_color[0] = color;
+                                image.set(reachable[0], COLORS);
+                                uint nr_reachable = 1;
+                                for (uint i=0; i<nr_reachable; ++i) {
+                                    auto slide_targets = reachable[i].slide_targets();
+                                    auto jump_targets = reachable[i].jump_targets();
+                                    for (uint r = 0; r < RULES; ++r, slide_targets.next(), jump_targets.next()) {
+                                        auto const slide_target = slide_targets.current();
+                                        color = image.get(slide_target);
+                                        if (color != BLUE) {
+                                            if (!slide_target.deep_red()) goto ESCAPE;
+                                            if (color != COLORS) {
+                                                image.set(slide_target, COLORS);
+                                                old_color[nr_reachable] = color;
+                                                reachable[nr_reachable] = slide_target;
+                                                ++nr_reachable;
+                                            }
+                                        }
+                                        auto const jump_target = jump_targets.current();
+                                        color = image.get(jump_target);
+                                        if (color != BLUE) {
+                                            if (!jump_target.deep_red()) goto ESCAPE;
+                                            if (color != COLORS) {
+                                                image.set(jump_target, COLORS);
+                                                old_color[nr_reachable] = color;
+                                                reachable[nr_reachable] = jump_target;
+                                                ++nr_reachable;
+                                            }
+                                        }
+                                    }
+                                }
+                                for (uint i=0; i<nr_reachable; ++i)
+                                    image.set(reachable[i], old_color[i]);
+                                escape = false;
+                                break;
+
+                              ESCAPE:;
+                                for (uint i=0; i<nr_reachable; ++i)
+                                    image.set(reachable[i], old_color[i]);
                             }
-                            continue;
-                          ACCEPTABLE:
-                            for (uint i = blues; i < nr_reachable; ++i)
-                                image.set(reachable[i], EMPTY);
 
                             image.set(val, EMPTY);
                             image.set(soldier, BLUE);
-                          SLIDABLE:;
+
+                            if (!escape) {
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune deep red base is surrounded\n";
+                                    logger.flush();
+                                }
+                                continue;
+                            }
                         }
 #else  // BLUE_TO_MOVE
                         if (blue_base_only) {
