@@ -2199,8 +2199,6 @@ void Tables::init() {
         }
         if (nr_medium > min_surround_) min_surround_ = nr_medium;
     }
-    // Since we will compare with off_base_from *BEFORE* doing the BLUE move
-    ++min_surround_;
     sort(&deep_red_base_[nr_deep_red_], &deep_red_base_[ARMY],
          [this](Coord left, Coord right) {
              return deepness_[left] > deepness_[right];

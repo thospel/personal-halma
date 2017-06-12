@@ -152,9 +152,7 @@ Statistics NAME(uint thid,
         // All blue moves must now be jumps from off base to on_base:
         bool const blue_jump_only = blue_base_only && !slides;
 
-#if BLUE_TO_MOVE
-        bool maybe_surround = off_base_from <= tables.min_surround();
-#else // BLUE_TO_MOVE
+#if !BLUE_TO_MOVE
         uint non_blue = tables.nr_deep_red();
         if (blue_jump_only) {
             int i = non_blue;
@@ -239,7 +237,7 @@ Statistics NAME(uint thid,
 
             array<Coord, MAX_X*MAX_Y/4+1> reachable;
             uint red_empty = 0;
-            if (blue_base_only) {
+            if (available_moves <= off_base_from*2+3) {
                 for (uint i=tables.nr_deep_red(); i<ARMY; ++i) {
                     Coord const pos = tables.deep_red_base(i);
                     red_empty += image.is_EMPTY(pos);
@@ -489,14 +487,13 @@ Statistics NAME(uint thid,
                             continue;
                         }
 #if BLUE_TO_MOVE
-                        if (blue_base_only) {
+                        if (available_moves <= off*2+1) {
                             image.set(soldier, EMPTY);
                             image.set(val, BLUE);
-                            // soldier is off base so can't be shallow
-                            if (red_empty - val.shallow_red() == 0) {
-                                // The red base is full. Can any red soldier
-                                // leave in such a way that blue is able to fill
-                                // the hole?
+                            if (red_empty + soldier.shallow_red() - val.shallow_red() == 0) {
+                                // The shallow red base is full. Can any red
+                                // soldier leave in such a way that blue is able
+                                // to fill the hole?
                                 // logger << "Full:\n" << image.str(soldier, val, BLUE);
                                 array<Coord, MAX_X*MAX_Y/4+1> reachable;
                                 uint nr_reachable = 0;
@@ -512,6 +509,8 @@ Statistics NAME(uint thid,
                                     reachable[nr_reachable] = b;
                                     nr_reachable += 1-b.base_red();
                                 }
+                                reachable[nr_reachable] = val;
+                                nr_reachable += 1-val.base_red();
                                 uint blues = nr_reachable;
 
                                 if (slides)
@@ -587,7 +586,7 @@ Statistics NAME(uint thid,
                             }
 
                             bool escape = true;
-                            if (maybe_surround) {
+                            if (off <= tables.min_surround()) {
                                 array<Coord, MAX_ARMY> reachable;
                                 array<Color, MAX_ARMY> old_color;
                                 int j = tables.nr_deep_red();
