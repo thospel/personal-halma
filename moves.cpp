@@ -152,7 +152,22 @@ Statistics NAME(uint thid,
         // All blue moves must now be jumps from off base to on_base:
         bool const blue_jump_only = blue_base_only && !slides;
 
-#if !BLUE_TO_MOVE
+#if BLUE_TO_MOVE
+        array<ParityCount, 3> non_blue_count;
+        if (available_moves <= off_base_from*2+3) {
+            non_blue_count[0].fill(0);
+            non_blue_count[1].fill(0);
+            int i = tables.nr_deep_red();
+            while(--i >= 0) {
+                Coord const pos = tables.deep_red_base(i);
+                non_blue_count[0][pos.parity()] += image_normal.get(pos) != BLUE;
+            }
+            for (uint i=tables.medium_red(); i<ARMY; ++i) {
+                Coord const pos = tables.deep_red_base(i);
+                non_blue_count[1][pos.parity()] += image_normal.get(pos) != BLUE;
+            }
+        }
+#else // BLUE_TO_MOVE
         uint non_blue = tables.nr_deep_red();
         if (blue_jump_only) {
             int i = non_blue;
@@ -488,8 +503,6 @@ Statistics NAME(uint thid,
                         }
 #if BLUE_TO_MOVE
                         if (available_moves <= off*2+1) {
-                            image.set(soldier, EMPTY);
-                            image.set(val, BLUE);
                             if (red_empty + soldier.shallow_red() - val.shallow_red() == 0) {
                                 // The shallow red base is full. Can any red
                                 // soldier leave in such a way that blue is able
@@ -529,6 +542,8 @@ Statistics NAME(uint thid,
 
                                 // BLUE cannot slide onto the base. How about jumps?
                                 // Consider all places BLUE can reach by jumping
+                                image.set(soldier, EMPTY);
+                                image.set(val, BLUE);
                                 for (uint i = 0; i < nr_reachable; ++i) {
                                     auto jumpees      = reachable[i].jumpees();
                                     auto jump_targets = reachable[i].jump_targets();
@@ -581,72 +596,33 @@ Statistics NAME(uint thid,
                               ACCEPTABLE:
                                 for (uint i = blues; i < nr_reachable; ++i)
                                     image.set(reachable[i], EMPTY);
+                                image.set(val, EMPTY);
+                                image.set(soldier, BLUE);
 
                               SLIDABLE:;
                             }
 
-                            bool escape = true;
-                            if (off <= tables.min_surround()) {
-                                array<Coord, MAX_ARMY> reachable;
-                                array<Color, MAX_ARMY> old_color;
-                                int j = tables.nr_deep_red();
-                                while (--j >= 0) {
-                                    reachable[0] = tables.deep_red_base(j);
-                                    Color color = image.get(reachable[0]);
-                                    if (color == BLUE) continue;
-                                    old_color[0] = color;
-                                    image.set(reachable[0], COLORS);
-                                    uint nr_reachable = 1;
-                                    for (uint i=0; i<nr_reachable; ++i) {
-                                        auto slide_targets = reachable[i].slide_targets();
-                                        auto jump_targets = reachable[i].jump_targets();
-                                        for (uint r = 0; r < RULES; ++r, slide_targets.next(), jump_targets.next()) {
-                                            auto const slide_target = slide_targets.current();
-                                            color = image.get(slide_target);
-                                            if (color != BLUE) {
-                                                if (!slide_target.deep_red()) goto ESCAPE;
-                                                if (color != COLORS) {
-                                                    image.set(slide_target, COLORS);
-                                                    old_color[nr_reachable] = color;
-                                                    reachable[nr_reachable] = slide_target;
-                                                    ++nr_reachable;
-                                                }
-                                            }
-                                            auto const jump_target = jump_targets.current();
-                                            color = image.get(jump_target);
-                                            if (color != BLUE) {
-                                                if (!jump_target.deep_red()) goto ESCAPE;
-                                                if (color != COLORS) {
-                                                    image.set(jump_target, COLORS);
-                                                    old_color[nr_reachable] = color;
-                                                    reachable[nr_reachable] = jump_target;
-                                                    ++nr_reachable;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    for (uint i=0; i<nr_reachable; ++i)
-                                        image.set(reachable[i], old_color[i]);
-                                    escape = false;
-                                    break;
-
-                                  ESCAPE:;
-                                    for (uint i=0; i<nr_reachable; ++i)
-                                        image.set(reachable[i], old_color[i]);
-                                }
-                            }
-
-                            image.set(val, EMPTY);
-                            image.set(soldier, BLUE);
-
-                            if (!escape) {
+                            // In principle slides are still allowed, but all
+                            // blue moves must be from off base to on_base so
+                            // deep red is only accessable by blue jumps
+                            Coord sval     = symmetry ? val.symmetric() : val;
+                            Coord ssoldier = symmetry ? soldier.symmetric() : soldier;
+                            ++non_blue_count[tables.deepness(ssoldier)][ssoldier.parity()];
+                            --non_blue_count[tables.deepness(sval)][sval.parity()];
+                            if ((non_blue_count[0][0]&&!non_blue_count[1][0]) ||
+                                (non_blue_count[0][1]&&!non_blue_count[1][1]) ||
+                                (non_blue_count[0][2]&&!non_blue_count[1][2]) ||
+                                (non_blue_count[0][3]&&!non_blue_count[1][3])) {
+                                ++non_blue_count[tables.deepness(sval)][sval.parity()];
                                 if (VERBOSE) {
                                     logger << "   Move " << soldier << " to " << val << "\n";
-                                    logger << "   Prune deep red base is surrounded\n";
+                                    logger << "   Prune deep red\n";
                                     logger.flush();
                                 }
                                 continue;
                             }
+                            ++non_blue_count[tables.deepness(sval)][sval.parity()];
+                            --non_blue_count[tables.deepness(ssoldier)][ssoldier.parity()];
                         }
 #else  // BLUE_TO_MOVE
                         if (blue_base_only) {

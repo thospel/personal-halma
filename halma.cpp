@@ -2142,7 +2142,6 @@ void Tables::init() {
                         break;
                     }
                 }
-                if (shallow_red_[pos]) continue;
 
                 deep_red_base_[nr_deep_red_++] = pos;
             } else {
@@ -2173,31 +2172,17 @@ void Tables::init() {
     }
     if (nr_deep_red_ != shallow_red) throw_logic("Inconsistent deep_red_base");
     medium_red_ = ARMY;
-    min_surround_ = 0;
     for (uint i=0; i<nr_deep_red_; ++i) {
-        uint nr_medium = ARMY;
         Coord pos = deep_red_base_[i];
-        auto s_targets = slide_targets(pos);
-        for (uint r = 0; r < RULES; ++r, s_targets.next()) {
-            auto const target = s_targets.current();
-            if (target == pos) break;
-            --nr_medium;
-            if (deepness_[target] == 2) {
-                deepness_[target] = 1;
-                --medium_red_;
-            }
-        }
         auto j_targets = jump_targets(pos);
         for (uint r = 0; r < RULES; ++r, j_targets.next()) {
             auto const target = j_targets.current();
             if (target == pos) break;
-            --nr_medium;
             if (deepness_[target] == 2) {
                 deepness_[target] = 1;
                 --medium_red_;
             }
         }
-        if (nr_medium > min_surround_) min_surround_ = nr_medium;
     }
     sort(&deep_red_base_[nr_deep_red_], &deep_red_base_[ARMY],
          [this](Coord left, Coord right) {
