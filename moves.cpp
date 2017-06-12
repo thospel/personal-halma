@@ -381,8 +381,8 @@ Statistics NAME(uint thid,
                                 }
                                 continue;
                             }
-                            if (image.get(target) != EMPTY) continue;
-                            reachable[nr_reachable++] = target;
+                            reachable[nr_reachable] = target;
+                            nr_reachable += image.is_EMPTY(target);
                         }
                     } else if (VERBOSE) {
                         logger << "   Prune all blue sides (target parity reached)\n" << flush;
@@ -392,8 +392,8 @@ Statistics NAME(uint thid,
                     auto slide_targets = soldier.slide_targets();
                     for (uint r = 0; r < RULES; ++r, slide_targets.next()) {
                         auto const target = slide_targets.current();
-                        if (image.get(target) != EMPTY) continue;
-                        reachable[nr_reachable++] = target;
+                        reachable[nr_reachable] = target;
+                        nr_reachable += image.is_EMPTY(target);
                     }
                 }
 
