@@ -112,6 +112,8 @@ extern thread_local ssize_t allocated_;
 extern bool MEMORY_REPORT;
 
 extern int NR_CPU;
+extern size_t SYSTEM_MEMORY;
+extern size_t SYSTEM_SWAP;
 extern size_t PAGE_SIZE;
 extern size_t PAGE_SIZE1;
 extern uint64_t PID;

@@ -187,6 +187,7 @@ Statistics NAME(uint thid,
         for (auto const red_value: red_armies) {
 #if !BLUE_TO_MOVE
 # if BACKTRACK
+            // We already did a sort_compress() so no duplicates
             stats.boardset_unique();
 # else // BACKTRACK
             if (red_value == red_value_previous) continue;

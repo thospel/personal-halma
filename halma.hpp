@@ -2381,7 +2381,9 @@ class Svg {
     static string const failures_file(uint nr_moves) FUNCTIONAL {
         return file("failures", nr_moves);
     }
-    Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {}
+    Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {
+        out_ << fixed << setprecision(3);
+    }
     void write(time_t start_time, time_t stop_time,
                int solution_moves, BoardList const& boards,
                StatisticsList const& stats_list_solve, Sec::rep solve_duration,

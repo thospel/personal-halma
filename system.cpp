@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/sysinfo.h>
 
 #include <fstream>
 #include <mutex>
@@ -48,6 +49,8 @@ std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
 size_t PAGE_SIZE;
 size_t PAGE_SIZE1;
+size_t SYSTEM_MEMORY;
+size_t SYSTEM_SWAP;
 int NR_CPU;
 
 // Linux specific
@@ -666,6 +669,12 @@ void init_system() {
     if (sched_getaffinity(0, sizeof(cs), &cs))
         throw_errno("Could not determine number of CPUs");
     NR_CPU = CPU_COUNT(&cs);
+
+    struct sysinfo s_info;
+    if (sysinfo(&s_info))
+        throw_errno("Could not determine memory");
+    SYSTEM_MEMORY = static_cast<size_t>(s_info.totalram ) * s_info.mem_unit;
+    SYSTEM_SWAP   = static_cast<size_t>(s_info.totalswap) * s_info.mem_unit;
 
     raise_limit(RLIMIT_MEMLOCK, RLIM_INFINITY);
 }

@@ -3,6 +3,7 @@
 #include "halma.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <fstream>
 
 #include <random>
@@ -2780,6 +2781,8 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
         "</td>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
         "      <tr class='cpus'><th>CPUs</th><td>" << NR_CPU << "</td></tr>\n"
+        "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp2(30) << " GiB</td></tr>\n"
+        "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp2(30) << " GiB</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
         "      <tr class='stop_time'><th>Stop</th><td>"  << time_string(stop_time) << "</td></tr>\n"
@@ -2885,7 +2888,7 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         Statistics::Counter nr_boards = i+1 < stats_size && stats_list[i+1].boardset_uniques() ? stats_list[i+1].boardset_uniques() : st.boardset_size();
         out_ <<
             "      <tr class='" << st.css_color() << "'>\n"
-            "        <td class='available_moves'>" << st.available_moves() << "</td>\n"
+            "        <td class='available_moves'>" << st.available_moves()-1 << "</td>\n"
             "        <td class='duration'>" << st.duration() << "</td>\n"
             "        <td class='boards'>" << nr_boards << "</td>\n"
             "        <td class='armies'>" << st.armyset_size() << "</td>\n"
