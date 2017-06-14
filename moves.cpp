@@ -91,7 +91,7 @@ Statistics NAME(uint thid,
 
         if (thread_data.signalled()) {
             if (tid == 0) {
-                logger << time_string() << ": Processing blue " << setw(6) << blue_id << " (" << get_memory() / 1000000 << " MB)\n" << setw(10) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(10) << boards_to.size() << " boards, " << setw(9) << moved_armies.size() << " armies\n";
+                logger << time_string() << ": Processing blue " << setw(8) << blue_id << " (" << get_memory() / 1000000 << " MB)\n" << setw(13) << boards_from.size() + subset_from.armies().size() << " boards ->  " << setw(13) << boards_to.size() << " boards, " << setw(12) << moved_armies.size() << " armies\n";
                 if (MEMORY_REPORT) {
                     if (STATISTICS && !BLUE_TO_MOVE)
                         logger << "Largest subset: " << stats.largest_subset() << "\n";
@@ -341,7 +341,7 @@ Statistics NAME(uint thid,
                 int nr_reachable = 1;
                 if (!(BLUE_TO_MOVE && blue_jump_only) || !soldier.base_red()) {
                     reachable[0] = soldier;
-                    image.set(soldier, CLOSED_LOOP ? EMPTY : COLORS);
+                    image.set(soldier, CLOSED_LOOP && !PASS ? EMPTY : COLORS);
                     for (int i=0; i < nr_reachable; ++i) {
                         auto jumpees      = reachable[i].jumpees();
                         auto jump_targets = reachable[i].jump_targets();

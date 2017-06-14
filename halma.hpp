@@ -1809,12 +1809,14 @@ class BoardSubsetRedBuilder {
   public:
     using Uptr = unique_ptr<BoardSubsetRedBuilder>;
 
-    static size_t const INITIAL_SIZE = 32;
+    static size_t const _INITIAL_SIZE = 32;
     static size_t const BLOCK_BYTES = 1 << 20;
     // static size_t const BLOCK_BYTES = 1 << 6;
     static size_t const BLOCK = BLOCK_BYTES / sizeof(ArmyId);
+    static size_t const INITIAL_SIZE = max(_INITIAL_SIZE, BLOCK);
+    static size_t const INITIAL_BYTES = INITIAL_SIZE * sizeof(ArmyId);
 
-    BoardSubsetRedBuilder(uint t, size_t allocate = max(INITIAL_SIZE, BLOCK));
+    BoardSubsetRedBuilder(uint t, size_t allocate = INITIAL_SIZE);
     ~BoardSubsetRedBuilder();
     size_t allocated() const PURE { return allocated_; }
     size_t size()      const PURE { return allocated() - (armies_end_ - armies_) - begin_; }
@@ -2294,9 +2296,7 @@ class Svg {
     static string const failures_file(uint nr_moves) FUNCTIONAL {
         return file("failures", nr_moves);
     }
-    Svg(uint scale = SCALE) : scale_{scale}, margin_{scale/2} {
-        out_ << fixed << setprecision(3);
-    }
+    Svg(uint scale = SCALE);
     void write(time_t start_time, time_t stop_time,
                int solution_moves, BoardList const& boards,
                StatisticsList const& stats_list_solve, Sec::rep solve_duration,

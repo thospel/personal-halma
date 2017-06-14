@@ -38,6 +38,7 @@ bool prune_jump  = false;
 
 bool statistics = false;
 bool hash_statistics = false;
+bool change_locale = true;
 bool verbose = false;
 bool attempt = true;
 char const* sample_subset_red = nullptr;
@@ -329,11 +330,11 @@ void StatisticsE::print(ostream& os) const {
         os << "\t" << boardset_size() << " / " << boardset_tries() << "\n";
 
         os << "\tBlue on red base edge: ";
-        if (boardset_size())
-            os << setw(3) << edges()*100 / boardset_size() << "%";
+        if (boardset_tries())
+            os << setw(3) << edges()*100 / boardset_tries() << "%";
         else
             os << "----";
-        os << "\t" << edges() << " / " << boardset_size() << "\n";
+        os << "\t" << edges() << " / " << boardset_tries() << "\n";
 
         os << "\tMemory: " << allocated()/ 1000000  << " plain + " << mmapped()/1000000 << " mmapped (" << mmaps() << " mmaps) = " << (allocated() + mmapped()) / 1000000 << " MB\n";
         os << "\tMlocks: " << mlocked()/ 1000000  << " MB in " << mlocks() << " ranges\n";
@@ -356,9 +357,8 @@ void StatisticsE::print(ostream& os) const {
         os << "\t" << armyset_probes() << " / " << probes << " +1" << "\n";
     }
 
-    os << setw(6) << duration() << " s, set " << setw(2) << available_moves()-1 << "," << setw(10) << boardset_size() << " boards/" << setw(9) << armyset_size() << " armies " << setw(7);
-    os << boardset_size()/(blue_armies_size() ? blue_armies_size() : 1);
-    os << " (" << setw(6) << (allocated()+mmapped()) / 1000000 << "/" << setw(6) << memory() / 1000000 << " MB)\n";
+    os << setw(7) << duration() << " s, set " << setw(2) << available_moves()-1 << "," << setw(13) << boardset_size() << " boards," << setw(12) << armyset_size() << " armies";
+    os << " (" << setw(8) << (allocated()+mmapped()) / 1000000 << "/" << setw(8) << memory() / 1000000 << " MB)\n";
 }
 
 Move::Move(Army const& army_from, Army const& army_to): from{-1,-1}, to{-1, -1} {
@@ -669,7 +669,7 @@ BoardSubsetRed BoardSubsetRedBuilder::extract(Statistics& stats) {
         offset += b;
         begin_ = b;
         armies_ = base + b;
-        munneeded(armies_, end - armies_);
+        munneeded(armies_, PAGE_ROUND(end - base) - b);
         auto old_offset = offset_;
         auto sz = offset - old_offset;
         offset_ = offset;
@@ -688,7 +688,7 @@ BoardSubsetRed BoardSubsetRedBuilder::extract(Statistics& stats) {
         ArmyId* new_list = mallocate<ArmyId>(new_sz);
         // logger << "Extract BoardSubsetRed " << static_cast<void const*>(new_list) << ": size " << sz << "\n" << flush;
         std::copy(from, to, new_list);
-        munneeded(from, sz);
+        munneeded(from, PAGE_ROUND(sz));
 
         return BoardSubsetRed(new_list, new_sz);
     }
@@ -699,7 +699,7 @@ void BoardSubsetRedBuilder::flush() {
     if (begin_) {
         size_t sz0 = begin_ * sizeof(armies_[0]);
         size_t sz = PAGE_ROUND(sz0);
-        std::memset(&base[sz0], 0, sz-sz0);
+        std::memset(&base[begin_], 0, sz-sz0);
         Write(fd_, base, sz, filename_);
     }
 
@@ -1927,7 +1927,7 @@ void FullMove::move_expand(Board const& board, Move const& move) {
 
     // Must be a jump
     Image image{board};
-    if (CLOSED_LOOP) image.set(move.from, EMPTY);
+    if (CLOSED_LOOP && !PASS) image.set(move.from, EMPTY);
     array<Coord, MAX_X*MAX_Y/4+1> reachable;
     array<int,    MAX_X*MAX_Y/4+1> previous;
     reachable[0] = move.from;
@@ -2663,6 +2663,11 @@ void Board::do_move(Move const& move) {
     throw_logic("Move not found");
 }
 
+Svg::Svg(uint scale) : scale_{scale}, margin_{scale/2} {
+    out_ << fixed << setprecision(3);
+    if (change_locale) imbue(out_);
+}
+
 string const Svg::file(string const& prefix, uint nr_moves) {
     return string(prefix + "/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + "_" + to_string(nr_moves) + ".html";
 }
@@ -2888,10 +2893,10 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
                 out_ << nr_boards*100 / st.boardset_tries() << "%";
             out_ << "</td>\n"
                 "</td>\n"
-                "        <td>" << st.edges() << " / " << st.boardset_size() << "</td>\n"
+                "        <td>" << st.edges() << " / " << st.boardset_tries() << "</td>\n"
                 "        <td>";
-            if (st.boardset_size())
-                out_ << st.edges()*100 / st.boardset_size() << "%";
+            if (st.boardset_tries())
+                out_ << st.edges()*100 / st.boardset_tries() << "%";
             out_ << "</td>\n";
         }
         if (hash_statistics) {
@@ -3188,7 +3193,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
 int solve(Board const& board, int nr_moves, Army& red_army,
           StatisticsList& stats_list, Sec::rep& duration) {
     auto start_solve = chrono::steady_clock::now();
-    cout << setw(14) << "set " << setw(2) << nr_moves << " (" << HOSTNAME;
+    cout << setw(15) << "set " << setw(2) << nr_moves << " (" << HOSTNAME;
     bool heuristics = false;
     if (balance >= 0) {
         heuristics = true;
@@ -3278,7 +3283,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
         if (boards_to.size() == 0) {
             auto stop_solve = chrono::steady_clock::now();
             duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
-            cout << stats << setw(6) << duration << " s, no solution" << endl;
+            cout << stats << setw(7) << duration << " s, no solution" << endl;
             if (largest_red.size()) save_largest_red(largest_red);
             return -1;
         }
@@ -3307,7 +3312,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
     }
     auto stop_solve = chrono::steady_clock::now();
     duration = chrono::duration_cast<Sec>(stop_solve-start_solve).count();
-    cout << setw(6) << duration << " s, solved" << endl;
+    cout << setw(7) << duration << " s, solved" << endl;
 
     if (largest_red.size()) save_largest_red(largest_red);
 
@@ -3383,7 +3388,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
         }
     }
 
-    cout << setw(14) << "set " << setw(2) << nr_moves << endl;
+    cout << setw(15) << "set " << setw(2) << nr_moves << endl;
     for (uint i=0; solution_moves>0; --nr_moves, --solution_moves, ++i) {
         auto& boards_blue = boardset_pairs.blue(solution_moves);
         auto& boards_red  = boardset_pairs.red (solution_moves);
@@ -3449,7 +3454,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
     auto stop_backtrack = chrono::steady_clock::now();
     duration = chrono::duration_cast<Sec>(stop_backtrack-start_backtrack).count();
-    cout << setw(6) << duration << " s, backtrack tables built" << endl;
+    cout << setw(7) << duration << " s, backtrack tables built" << endl;
 
     // Do some sanity checking
     BoardSetBlue const& final_board_set = boardset_pairs.blue(1);
@@ -3548,7 +3553,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
             // Jumps
             reachable[0] = soldier;
             int nr_reachable = 1;
-            image.set(soldier, CLOSED_LOOP ? EMPTY : COLORS);
+            image.set(soldier, CLOSED_LOOP && !PASS ? EMPTY : COLORS);
             for (int i=0; i < nr_reachable; ++i) {
                 auto jumpees      = reachable[i].jumpees();
                 auto jump_targets = reachable[i].jump_targets();
@@ -3614,7 +3619,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:iT", argv);
+    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:LiT", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
@@ -3641,6 +3646,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'v': verbose     = true; break;
             case 'V': verbose_move = atoi(options.arg()); break;
             case 'i': input       = true; break;
+            case 'L': change_locale = false; break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -3688,6 +3694,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
               exit(EXIT_FAILURE);
         }
     if (batch) sched_batch();
+    cout << fixed << setprecision(3);
+    if (change_locale) imbue(cout);
 
     if (X == 0)
         if (Y == 0) X = Y = 9;
@@ -3824,8 +3832,8 @@ int main(int argc, char const* const* argv) COLD;
 int main(int argc, char const* const* argv) {
     try {
         init_system();
-        if (BoardSubsetRedBuilder::BLOCK_BYTES % PAGE_SIZE)
-            throw_logic("BoardSubsetRedBuilder::BLOCK_BYTES must be a multiple of PAGE_SIZE");
+        if (BoardSubsetRedBuilder::INITIAL_BYTES % PAGE_SIZE)
+            throw_logic("BoardSubsetRedBuilder::INITIAL_BYTES must be a multiple of PAGE_SIZE");
 
         my_main(argc, argv);
         cout << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << "), mlocks " << total_mlocked() << "(" << total_mlocks() << ")\n";

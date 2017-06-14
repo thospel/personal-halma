@@ -116,7 +116,7 @@ extern size_t SYSTEM_MEMORY;
 extern size_t SYSTEM_SWAP;
 extern size_t PAGE_SIZE;
 extern size_t PAGE_SIZE1;
-extern uint64_t PID;
+extern const std::string PID;
 extern std::string HOSTNAME;
 extern std::string const VCS_COMMIT;
 extern std::string const VCS_COMMIT_TIME;
@@ -147,6 +147,7 @@ ssize_t total_mmaps() PURE;
 ssize_t total_mlocked() PURE;
 ssize_t total_mlocks() PURE;
 void update_allocated();
+void imbue(std::ostream& os);
 void init_system();
 
 inline uint thread_id() PURE;

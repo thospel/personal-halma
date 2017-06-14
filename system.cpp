@@ -13,6 +13,7 @@
 #include <sys/sysinfo.h>
 
 #include <fstream>
+#include <locale>
 #include <mutex>
 #include <system_error>
 
@@ -42,7 +43,7 @@ std::atomic<ssize_t> total_mmaps_;
 std::atomic<ssize_t> total_mlocked_;
 std::atomic<ssize_t> total_mlocks_;
 
-uint64_t PID;
+std::string const PID{std::to_string(getpid())};
 std::string HOSTNAME;
 std::string const VCS_COMMIT{STRINGIFY(COMMIT)};
 std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
@@ -52,6 +53,18 @@ size_t PAGE_SIZE1;
 size_t SYSTEM_MEMORY;
 size_t SYSTEM_SWAP;
 int NR_CPU;
+
+struct separator: std::numpunct<char> {
+  protected:
+    virtual string_type do_grouping() const
+        { return "\003"; } // groups of 3
+};
+
+std::locale my_locale{std::locale{""}, new separator()};
+
+void imbue(std::ostream& os) {
+    os.imbue(my_locale);
+}
 
 // Linux specific
 size_t get_memory(bool set_base_mem) {
@@ -653,7 +666,6 @@ void init_system() {
     int rc = gethostname(hostname, sizeof(hostname)-1);
     if (rc) throw_errno("Could not determine host name");
     HOSTNAME.assign(hostname);
-    PID = static_cast<uint64_t>(getpid());
 
     long tmp = sysconf(_SC_PAGE_SIZE);
     if (tmp == -1)
