@@ -697,7 +697,9 @@ BoardSubsetRed BoardSubsetRedBuilder::extract(Statistics& stats) {
 void BoardSubsetRedBuilder::flush() {
     auto base = armies_end_ - allocated();
     if (begin_) {
-        size_t sz = PAGE_ROUND(begin_ * sizeof(armies_[0]));
+        size_t sz0 = begin_ * sizeof(armies_[0]);
+        size_t sz = PAGE_ROUND(sz0);
+        std::memset(&base[sz0], 0, sz-sz0);
         Write(fd_, base, sz, filename_);
     }
 
@@ -3822,6 +3824,8 @@ int main(int argc, char const* const* argv) COLD;
 int main(int argc, char const* const* argv) {
     try {
         init_system();
+        if (BoardSubsetRedBuilder::BLOCK_BYTES % PAGE_SIZE)
+            throw_logic("BoardSubsetRedBuilder::BLOCK_BYTES must be a multiple of PAGE_SIZE");
 
         my_main(argc, argv);
         cout << "Final memory " << total_allocated() << "+" << total_mmapped() << "(" << total_mmaps() << "), mlocks " << total_mlocked() << "(" << total_mlocks() << ")\n";
