@@ -13,6 +13,7 @@
 #include <sys/sysinfo.h>
 
 #include <fstream>
+#include <iomanip>
 #include <locale>
 #include <mutex>
 #include <system_error>
@@ -31,6 +32,7 @@ uint nr_threads = 0;
 uint signal_counter;
 std::atomic<uint> signal_generation;
 bool MEMORY_REPORT = false;
+bool change_locale = true;
 
 thread_local ssize_t allocated_ = 0;
 thread_local ssize_t mmapped_   = 0;
@@ -52,7 +54,7 @@ size_t PAGE_SIZE;
 size_t PAGE_SIZE1;
 size_t SYSTEM_MEMORY;
 size_t SYSTEM_SWAP;
-int NR_CPU;
+uint NR_CPU;
 
 struct separator: std::numpunct<char> {
   protected:
@@ -63,7 +65,8 @@ struct separator: std::numpunct<char> {
 std::locale my_locale{std::locale{""}, new separator()};
 
 void imbue(std::ostream& os) {
-    os.imbue(my_locale);
+    os << std::fixed << std::setprecision(3);
+    if (change_locale) os.imbue(my_locale);
 }
 
 // Linux specific
@@ -146,6 +149,10 @@ int LogBuffer::sync() {
         pbump(size);
     }
     return 0;
+}
+
+LogStream::LogStream(): std::ostream{&buffer_} {
+    ::imbue(*this);
 }
 
 thread_local LogStream logger;
@@ -263,6 +270,13 @@ void sched_batch() {
     param.sched_priority = 0;
     if (sched_setscheduler(0, SCHED_BATCH, &param))
         throw_errno("Could not sched_setscheduler");
+}
+
+uint64_t usage() {
+    struct rusage u;
+    if (getrusage(RUSAGE_SELF, &u))
+        throw_errno("Could not getrusage");
+    return (UINT64_C(1000000)*u.ru_utime.tv_sec + u.ru_utime.tv_usec) + (UINT64_C(1000000)*u.ru_stime.tv_sec + u.ru_stime.tv_usec);
 }
 
 void _madv_free(void* ptr, size_t length) {

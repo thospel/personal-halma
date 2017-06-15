@@ -787,10 +787,10 @@ StatisticsE ALL_NAME(
     stats.boardset_untry(boards_to.size());
 
     boards_from.pre_read();
-    uint n = boards_to.pre_write();
+    boards_to.pre_write(stats.nr_threads());
     vector<future<Statistics>> results;
 
-    for (uint i=1; i < n; ++i)
+    for (uint i=1; i < stats.nr_threads(); ++i)
         results.emplace_back
             (async
              (launch::async, NAME,

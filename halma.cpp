@@ -13,6 +13,8 @@ uint Y = 0;
 uint RULES = 6;
 uint ARMY = 10;
 
+double const MIN_DURATION = 0.001;
+
 size_t Element::SIZE;
 
 Align ARMY_MASK;
@@ -38,7 +40,6 @@ bool prune_jump  = false;
 
 bool statistics = false;
 bool hash_statistics = false;
-bool change_locale = true;
 bool verbose = false;
 bool attempt = true;
 char const* sample_subset_red = nullptr;
@@ -282,9 +283,32 @@ void Statistics::_largest_subset_size(BoardSetBlue const& boards) {
         subset_size(subset.size());
 }
 
+void StatisticsE::start() {
+    nr_threads_ = ::nr_threads;
+    start_ = chrono::steady_clock::now();
+    usage_ = ::usage();
+}
+
+void StatisticsE::stop() {
+    usage_ = ::usage() - usage_;
+    stop_  = chrono::steady_clock::now();
+    memory_ = get_memory();
+    allocated_ = total_allocated();
+    mmapped_ = total_mmapped();
+    mmaps_ = total_mmaps();
+    mlocked_ = total_mlocked();
+    mlocks_ = total_mlocks();
+}
+
 void StatisticsE::print(ostream& os) const {
-    if (statistics || hash_statistics)
-        os << "\t" << time_string() << "\n";
+    if (statistics || hash_statistics) {
+        os << "\t" << time_string() << " (" << static_cast<uint>(usage()) << " CPU sec, ";
+        if (double_duration() < MIN_DURATION)
+            os << "-----";
+        else
+            os << efficiency() * 100 << "%";
+        os << " busy)\n";
+    }
 
     if (statistics) {
         os << "\tLargest subset: " << largest_subset() << "\n";
@@ -357,7 +381,7 @@ void StatisticsE::print(ostream& os) const {
         os << "\t" << armyset_probes() << " / " << probes << " +1" << "\n";
     }
 
-    os << setw(7) << duration() << " s, set " << setw(2) << available_moves()-1 << "," << setw(13) << boardset_size() << " boards," << setw(12) << armyset_size() << " armies";
+    os << setw(7) << duration() << " s, set " << setw(2) << available_moves()-1 << "," << setw(15) << boardset_size() << " boards," << setw(14) << armyset_size() << " armies";
     os << " (" << setw(8) << (allocated()+mmapped()) / 1000000 << "/" << setw(8) << memory() / 1000000 << " MB)\n";
 }
 
@@ -830,11 +854,10 @@ BoardSetRed::~BoardSetRed() {
     demallocate(subsets_, capacity());
 }
 
-uint BoardSetRed::pre_write(uint n) {
+void BoardSetRed::pre_write(uint n) {
     builders_.reserve(n);
     for (uint t=0; t<n; ++t)
         builders_.emplace_back(make_unique<BoardSubsetRedBuilder>(t));
-    return n;
 }
 
 void BoardSetRed::post_write() {
@@ -1533,7 +1556,6 @@ void ArmySetSparse::resize() {
             // logger << "Miss\n";
         }
     }
-
 
     if (CHECK) check(0, __FILE__, __LINE__);
     //print(logger, false);
@@ -2664,8 +2686,7 @@ void Board::do_move(Move const& move) {
 }
 
 Svg::Svg(uint scale) : scale_{scale}, margin_{scale/2} {
-    out_ << fixed << setprecision(3);
-    if (change_locale) imbue(out_);
+    imbue(out_);
 }
 
 string const Svg::file(string const& prefix, uint nr_moves) {
@@ -2748,9 +2769,9 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
     out_ <<
         "</td>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
-        "      <tr class='cpus'><th>CPUs</th><td>" << NR_CPU << "</td></tr>\n"
         "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp2(30) << " GiB</td></tr>\n"
         "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp2(30) << " GiB</td></tr>\n"
+        "      <tr class='cpus'><th>CPUs</th><td>" << NR_CPU << "</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
         "      <tr class='stop_time'><th>Stop</th><td>"  << time_string(stop_time) << "</td></tr>\n"
@@ -2810,16 +2831,18 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "    <table class='stats " << cls << "'>\n"
         "      <tr>\n"
         "        <th>Moves<br/>left</th>\n"
-        "        <th>Seconds</th>\n"
         "        <th>Boards</th>\n"
         "        <th>Armies</th>\n"
+        "        <th>Boards per<br/>blue army</th>\n"
+        "        <th>Seconds</th>\n"
+        "        <th>CPU<br/>seconds</th>\n"
+        "        <th>CPU<br/>busy</th>\n"
         "        <th>Memory<br/>(MB)</th>\n"
         "        <th>Allocated<br/>(MB)</th>\n"
         "        <th>Mmapped<br/>(MB)</th>\n"
         "        <th>Mmaps</th>\n"
         "        <th>Mlocked<br/>(MB)</th>\n"
-        "        <th>Mlocks</th>\n"
-        "        <th>Boards per<br/>blue army</th>\n";
+        "        <th>Mlocks</th>\n";
     if (statistics) {
         out_ <<
             "        <th>Largest<br/>subset</th>\n"
@@ -2854,16 +2877,21 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         out_ <<
             "      <tr class='" << st.css_color() << "'>\n"
             "        <td class='available_moves'>" << st.available_moves()-1 << "</td>\n"
-            "        <td class='duration'>" << st.duration() << "</td>\n"
             "        <td class='boards'>" << nr_boards << "</td>\n"
             "        <td class='armies'>" << st.armyset_size() << "</td>\n"
+            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n"
+            "        <td class='duration'>" << st.duration() << "</td>\n"
+            "        <td class='CPUsec'>" << static_cast<uint>(st.usage()) << "</td>\n"
+            "        <td class='CPUbusy'>";
+        if (st.double_duration() >= MIN_DURATION)
+            out_ << st.efficiency()*100 << "%";
+        out_ << "</td>\n"
             "        <td class='memory'>" << st.memory()    / 1000000 << "</td>\n"
             "        <td class='allocated'>" << st.allocated() / 1000000 << "</td>\n"
             "        <td class='mmapped'>" << st.mmapped() / 1000000 << "</td>\n"
             "        <td class='mmaps'>" << st.mmaps() << "</td>\n"
             "        <td class='mlocked'>" << st.mlocked() / 1000000 << "</td>\n"
-            "        <td class='mlocks'>" << st.mlocks() << "</td>\n"
-            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n";
+            "        <td class='mlocks'>" << st.mlocks() << "</td>\n";
         if (statistics) {
             out_ <<
                 "        <td>" << st.largest_subset() << "</td>\n"
@@ -3694,8 +3722,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
               exit(EXIT_FAILURE);
         }
     if (batch) sched_batch();
-    cout << fixed << setprecision(3);
-    if (change_locale) imbue(cout);
+    imbue(cout);
 
     if (X == 0)
         if (Y == 0) X = Y = 9;

@@ -110,8 +110,9 @@ extern thread_local uint tid;
 extern std::atomic<uint> signal_generation;
 extern thread_local ssize_t allocated_;
 extern bool MEMORY_REPORT;
+extern bool change_locale;
 
-extern int NR_CPU;
+extern uint NR_CPU;
 extern size_t SYSTEM_MEMORY;
 extern size_t SYSTEM_SWAP;
 extern size_t PAGE_SIZE;
@@ -140,6 +141,7 @@ time_t now();
 size_t get_memory(bool set_base_mem = false);
 void set_signals();
 void sched_batch();
+uint64_t usage();
 bool is_terminated();
 ssize_t total_allocated() PURE;
 ssize_t total_mmapped() PURE;
@@ -187,7 +189,6 @@ uint ctz64(uint64_t value) {
     return __builtin_ctzll(value);
 }
 
-
 class LogBuffer: public std::streambuf {
   public:
     size_t const BLOCK = 80;
@@ -206,7 +207,7 @@ class LogBuffer: public std::streambuf {
 
 class LogStream: public std::ostream {
   public:
-    LogStream(): std::ostream{&buffer_} {}
+    LogStream();
   private:
     LogBuffer buffer_;
 };

@@ -9,6 +9,7 @@
 #include <mutex>
 #include <sstream>
 #include <thread>
+#include <tuple>
 
 #include "xxhash64.h"
 
@@ -148,7 +149,8 @@ const char letters[] = "abcdefghijklmnopqrstuvwxyz";
 
 uint64_t const SEED = 123456789;
 
-using Sec      = chrono::seconds;
+using Sec       = chrono::seconds;
+using SecDouble = chrono::duration<double>;
 
 uint64_t const murmur_multiplier = UINT64_C(0xc6a4a7935bd1e995);
 
@@ -1608,16 +1610,8 @@ class StatisticsE: public Statistics {
     StatisticsE(int available_moves, Counter opponent_armies_size):
         opponent_armies_size_{opponent_armies_size},
         available_moves_{available_moves} {}
-    void start() { start_ = chrono::steady_clock::now(); }
-    void stop () {
-        stop_  = chrono::steady_clock::now();
-        memory_ = get_memory();
-        allocated_ = total_allocated();
-        mmapped_ = total_mmapped();
-        mmaps_ = total_mmaps();
-        mlocked_ = total_mlocked();
-        mlocks_ = total_mlocks();
-    }
+    void start();
+    void stop();
     size_t memory()    const PURE { return memory_; }
     size_t allocated() const PURE { return allocated_; }
     size_t mmapped() const PURE { return mmapped_; }
@@ -1627,7 +1621,11 @@ class StatisticsE: public Statistics {
     Sec::rep duration() const PURE {
         return chrono::duration_cast<Sec>(stop_-start_).count();
     }
+    SecDouble::rep double_duration() const PURE {
+        return chrono::duration_cast<SecDouble>(stop_-start_).count();
+    }
     int available_moves() const PURE { return available_moves_; }
+    uint nr_threads() const PURE { return nr_threads_; }
     bool blue_move() const PURE { return available_moves() & 1; }
     string css_color() const PURE { return blue_move() ? "blue" : "red"; }
     Counter blue_armies_size() const PURE {
@@ -1640,6 +1638,14 @@ class StatisticsE: public Statistics {
     }
     Board const& example_board() const FUNCTIONAL { return example_board_; }
     bool example() const FUNCTIONAL { return example_; }
+    double usage() const FUNCTIONAL { return usage_ / 1000000.; }
+    double efficiency() const FUNCTIONAL {
+        auto dd = double_duration();
+        if (dd < 5e-7) return 1;
+        // For now clip to 1
+        // (because duration uses a different clock from usage)
+        return min(usage() / dd / min(NR_CPU, nr_threads()), 1.0);
+    }
   private:
     size_t memory_;
     ssize_t allocated_;
@@ -1649,7 +1655,9 @@ class StatisticsE: public Statistics {
     ssize_t mlocks_;
     chrono::steady_clock::time_point start_, stop_;
     Counter opponent_armies_size_;
+    uint64_t usage_;
     int available_moves_;
+    uint nr_threads_;
     bool example_ = false;
     Board example_board_;
 };
@@ -1915,7 +1923,7 @@ class BoardSetBlue: public BoardSetBase {
   public:
     BoardSetBlue(bool keep = false, ArmyId size = INITIAL_SIZE);
     ~BoardSetBlue();
-    inline uint pre_write(uint n = nr_threads) { return n; }
+    inline void pre_write(uint n) { std::ignore = n; }
     inline void post_write() {}
     inline void pre_read() { }
     inline void post_read() {}
@@ -1979,7 +1987,7 @@ class BoardSetRed: public BoardSetBase {
     BoardSetRed(bool keep = false, ArmyId size = INITIAL_SIZE);
     ~BoardSetRed();
     void clear(ArmyId size);
-    uint pre_write(uint n = nr_threads);
+    void pre_write(uint n);
     void post_write();
     void pre_read();
     void post_read();
