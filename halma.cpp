@@ -2695,8 +2695,10 @@ string const Svg::file(string const& prefix, uint nr_moves) {
 
 void Svg::html_header(uint nr_moves, int target_moves, bool terminated) {
     out_ <<
+        "<!DOCTYPE html>\n"
         "<html>\n"
         "  <head>\n"
+        "    <title>Size " << X << "x" << Y << ", army " << ARMY << ", ruleset " << RULES << "</title>\n"
         "    <style>\n"
         "      span.blue { color: blue; }\n"
         "      span.red  { color: red; }\n"
@@ -2765,12 +2767,12 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
         out_ << "prune jumps";
     }
     if (!heuristics)
-        out_ << "None\n";
+        out_ << "None";
     out_ <<
-        "</td>\n"
+        "</td></tr>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
-        "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp2(30) << " GiB</td></tr>\n"
-        "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp2(30) << " GiB</td></tr>\n"
+        "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp10(9) << " GB (" << SYSTEM_MEMORY / exp2(30) << " GiB)</td></tr>\n"
+        "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp10(9) << " GB (" << SYSTEM_SWAP / exp2(30) << " GiB)</td></tr>\n"
         "      <tr class='cpus'><th>CPUs</th><td>" << NR_CPU << "</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
@@ -2837,7 +2839,7 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Seconds</th>\n"
         "        <th>CPU<br/>seconds</th>\n"
         "        <th>CPU<br/>busy</th>\n"
-        "        <th>Memory<br/>(MB)</th>\n"
+        "        <th>Virtual<br/>Memory<br/>(MB)</th>\n"
         "        <th>Allocated<br/>(MB)</th>\n"
         "        <th>Mmapped<br/>(MB)</th>\n"
         "        <th>Mmaps</th>\n"
@@ -2920,7 +2922,6 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             if (st.boardset_tries())
                 out_ << nr_boards*100 / st.boardset_tries() << "%";
             out_ << "</td>\n"
-                "</td>\n"
                 "        <td>" << st.edges() << " / " << st.boardset_tries() << "</td>\n"
                 "        <td>";
             if (st.boardset_tries())

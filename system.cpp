@@ -74,9 +74,10 @@ size_t get_memory(bool set_base_mem) {
     static size_t base_mem = 0;
 
     size_t mem = 0;
+    size_t dummy;
     std::ifstream statm;
     statm.open("/proc/self/statm");
-    statm >> mem;
+    statm >> dummy >> dummy >> dummy >> dummy >> dummy >> mem;
     mem *= PAGE_SIZE;
     if (set_base_mem) {
         base_mem = mem;
