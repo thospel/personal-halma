@@ -37,6 +37,8 @@ int example = 0;
 int verbose_move = 0;
 bool prune_slide = false;
 bool prune_jump  = false;
+uint64_t cut = 0;
+uint64_t use_cut = 0;
 
 bool MLOCK = true;
 bool statistics = false;
@@ -2753,19 +2755,24 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
         "      <tr class='heuristics'><th>Heuristics</th><td>";
     bool heuristics = false;
     if (balance >= 0) {
-        if (heuristics) out_ << "<br />\n";
+        if (heuristics) out_ << "<br />";
         heuristics = true;
         out_ << "balance=" << balance << ", delay=" << balance_delay;
     }
     if (prune_slide) {
-        if (heuristics) out_ << "<br />\n";
+        if (heuristics) out_ << "<br />";
         heuristics = true;
         out_ << "prune slides";
     }
     if (prune_jump) {
-        if (heuristics) out_ << "<br />\n";
+        if (heuristics) out_ << "<br />";
         heuristics = true;
         out_ << "prune jumps";
+    }
+    if (cut) {
+        if (heuristics) out_ << "<br />";
+        heuristics = true;
+        out_ << "cut=0x" << hex << cut << dec;
     }
     if (!heuristics)
         out_ << "None";
@@ -3237,6 +3244,10 @@ int solve(Board const& board, int nr_moves, Army& red_army,
         heuristics = true;
         cout << ", prune jumps";
     }
+    if (cut) {
+        heuristics = true;
+        cout << ", cut=0x" << hex << cut << dec;
+    }
     if (!heuristics)
         cout << ", no heuristics";
     cout << ")" << endl;
@@ -3254,6 +3265,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
     army_set[0].drop_hash();
     army_set[1].drop_hash();
 
+    use_cut = cut;
     ArmyId red_id = 0;
     int i;
     for (i=0; nr_moves>0; --nr_moves, ++i) {
@@ -3262,6 +3274,8 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             return -1;
         }
         if (nr_moves == verbose_move) verbose = !verbose;
+        // Avoid cutting the actual solution we found
+        if (nr_moves == 1) use_cut = 0;
 
         auto& moving_armies         = army_set[ i    % 3];
         auto const& opponent_armies = army_set[(i+1) % 3];
@@ -3418,6 +3432,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
         }
     }
 
+    use_cut = cut;
     cout << setw(15) << "set " << setw(2) << nr_moves << endl;
     for (uint i=0; solution_moves>0; --nr_moves, --solution_moves, ++i) {
         auto& boards_blue = boardset_pairs.blue(solution_moves);
@@ -3427,6 +3442,9 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
         auto& moving_armies         = *army_set[i];
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies          = *army_set[i+2];
+
+        // Avoid cutting the actual solution we found
+        if (nr_moves == 1) use_cut = 0;
 
         bool blue_to_move = solution_moves & 1;
         if (blue_to_move) {
@@ -3649,7 +3667,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:LMiT", argv);
+    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:c:LMiT", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
@@ -3678,6 +3696,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'i': input       = true; break;
             case 'M': MLOCK       = false; break;
             case 'L': change_locale = false; break;
+            case 'c': cut        = strtol(options.arg(), NULL, 0); break;
             case 't':
               val = atoll(options.arg());
               if (val < 0)
@@ -3726,6 +3745,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
         }
     if (batch) sched_batch();
     imbue(cout);
+    cut <<= 32;
 
     if (X == 0)
         if (Y == 0) X = Y = 9;

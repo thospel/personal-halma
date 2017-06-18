@@ -723,7 +723,17 @@ Statistics NAME(uint thid,
                     armyESymmetric.store(val.symmetric());
                     if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
                     int result_symmetry = cmp(armyE, armyESymmetric);
-                    auto moved_id = moved_armies.insert(result_symmetry >= 0 ? armyE : armyESymmetric, stats);
+                    ArmyPos const& armyE1 = result_symmetry >= 0 ? armyE : armyESymmetric;
+                    auto hash = armyE1.hash();
+                    if (!BLUE_TO_MOVE && hash < use_cut) {
+                        if (VERBOSE) {
+                            logger << "   Move " << soldier << " to " << val << "\n";
+                            logger << "   Cut " << hex << hash << dec << "\n";
+                            logger.flush();
+                        }
+                        continue;
+                    }
+                    auto moved_id = moved_armies.insert(armyE1, hash, stats);
                     if (CHECK && UNLIKELY(moved_id == 0))
                         throw_logic("Army Insert returns 0", __FILE__, __LINE__);
 #if BLUE_TO_MOVE
