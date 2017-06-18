@@ -335,6 +335,8 @@ inline uint64_t army_hash(Coord const* base) {
 
 using ArmyId = uint32_t;
 ArmyId const SYMMETRIC = 1;
+extern uint64_t cut;
+extern uint64_t use_cut;
 
 class Tables;
 struct Move;
