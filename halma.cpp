@@ -38,6 +38,7 @@ int verbose_move = 0;
 bool prune_slide = false;
 bool prune_jump  = false;
 
+bool MLOCK = true;
 bool statistics = false;
 bool hash_statistics = false;
 bool verbose = false;
@@ -3648,7 +3649,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:LiT", argv);
+    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:LMiT", argv);
     long long int val;
     bool replay = false;
     bool show_tables = false;
@@ -3675,6 +3676,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'v': verbose     = true; break;
             case 'V': verbose_move = atoi(options.arg()); break;
             case 'i': input       = true; break;
+            case 'M': MLOCK       = false; break;
             case 'L': change_locale = false; break;
             case 't':
               val = atoll(options.arg());

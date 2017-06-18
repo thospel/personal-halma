@@ -80,6 +80,7 @@ extern uint ARMY_SUBSET_BITS;
 extern uint ARMY_SUBSETS;
 extern uint ARMY_SUBSETS_MASK;
 
+extern bool MLOCK;
 extern bool statistics;
 extern bool hash_statistics;
 extern bool verbose;
@@ -97,7 +98,6 @@ bool const PASS = false;
 // bool const DOUBLE_CROSS = true;
 bool const BALANCE  = true;
 
-bool const MLOCK = true;
 bool const ARMYSET_CACHE = true;
 
 #ifndef CHECK
