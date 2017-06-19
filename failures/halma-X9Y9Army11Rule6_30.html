@@ -1,5 +1,7 @@
+<!DOCTYPE html>
 <html>
   <head>
+    <title>Size 9x9, army 11, ruleset 6</title>
     <style>
       span.blue { color: blue; }
       span.red  { color: red; }
@@ -21,379 +23,1723 @@
       <tr class='rule'><th>Rule</th><td>6-move</td></tr>
       <tr class='lower_bound'><th>Bound</th><td> &ge; 27 moves</td></tr>
       <tr class='heuristics'><th>Heuristics</th><td>None</td></tr>
-      <tr class='host'><th>Host</th><td>hp</td></tr>
-      <tr class='threads'><th>Threads</th><td>4</td></tr>
-      <tr class='start_time'><th>Start</th><td>2017-05-08 21:17:43 +0200</td></tr>
-      <tr class='stop_time'><th>Stop</th><td>2017-05-08 21:19:17 +0200</td></tr>
-      <tr class='commit_id'><th>Commit id</th><td>002a58c34bf8e9958823b4ec49aac0c7cedbebbf</td></tr>
-      <tr class='commit_time'><th>Commit time</th><td>2017-05-08 17:54:13 +0200</td></tr>
+      <tr class='host'><th>Host</th><td>iffyiron</td></tr>
+      <tr class='memory'><th>Main memory</th><td>16.802 GB (15.648 GiB)</td></tr>
+      <tr class='swap'><th>Swap space</th><td>250.058 GB (232.885 GiB)</td></tr>
+      <tr class='cpus'><th>CPUs</th><td>8</td></tr>
+      <tr class='threads'><th>Threads</th><td>8</td></tr>
+      <tr class='start_time'><th>Start</th><td>2017-06-20 00:03:41 +0200</td></tr>
+      <tr class='stop_time'><th>Stop</th><td>2017-06-20 00:04:13 +0200</td></tr>
+      <tr class='commit_id'><th>Commit id</th><td>d4191d004f0effbdc6bfe709c907576348e8fc40</td></tr>
+      <tr class='commit_time'><th>Commit time</th><td>2017-06-19 00:52:57 +0200</td></tr>
     </table>
-<h3>Solve (94 seconds)</h3>
+<h3>Solve (32 seconds)</h3>
     <table class='stats Solve'>
       <tr>
         <th>Moves<br/>left</th>
-        <th>Seconds</th>
         <th>Boards</th>
         <th>Armies</th>
-        <th>Memory<br/>(MB)</th>
+        <th>Boards per<br/>blue army</th>
+        <th>Seconds</th>
+        <th>CPU<br/>seconds</th>
+        <th>CPU<br/>busy</th>
+        <th>Virtual<br/>Memory<br/>(MB)</th>
         <th>Allocated<br/>(MB)</th>
         <th>Mmapped<br/>(MB)</th>
         <th>Mmaps</th>
         <th>Mlocked<br/>(MB)</th>
         <th>Mlocks</th>
-        <th>Boards per<br/>blue army</th>
+        <th>Largest<br/>subset</th>
+        <th>Late<br/>prunes</th>
+        <th>Late<br/>prune<br/>ratio</th>
+        <th>Army<br/>resize<br/>overflow</th>
+        <th>Army<br/>front<br/>inserts</th>
+        <th>Army<br/>front<br/>ratio</th>
+        <th>Army inserts</th>
+        <th>Army<br/>ratio</th>
+        <th>Board inserts</th>
+        <th>Board<br/>ratio</th>
+        <th>Red base edge</th>
+        <th>Edge<br/>ratio</th>
+        <th>Army immediate</th>
+        <th>Army<br/>immediate<br/>ratio</th>
+        <th>Army<br/>probes</th>
       </tr>
       <tr class='red'>
-        <td class='available_moves'>30</td>
-        <td class='duration'>0</td>
+        <td class='available_moves'>29</td>
         <td class='boards'>8</td>
         <td class='armies'>8</td>
-        <td class='memory'>376</td>
-        <td class='allocated'>0</td>
-        <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
         <td>8</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>29</td>
         <td class='duration'>0</td>
-        <td class='boards'>128</td>
-        <td class='armies'>8</td>
-        <td class='memory'>376</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'></td>
+        <td class='memory'>168</td>
         <td class='allocated'>0</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,024</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
         <td>16</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>0</td>
+        <td>7 / 16</td>
+        <td>43</td>
+        <td>8 / 9</td>
+        <td>88%</td>
+        <td>8 / 16</td>
+        <td>50%</td>
+        <td>0 / 16</td>
+        <td>0%</td>
+        <td>9 / 9</td>
+        <td>100%</td>
+        <td>1.00</td>
       </tr>
-      <tr class='red'>
+      <tr class='blue'>
         <td class='available_moves'>28</td>
+        <td class='boards'>128</td>
+        <td class='armies'>8</td>
+        <td>16</td>
         <td class='duration'>0</td>
-        <td class='boards'>1712</td>
-        <td class='armies'>111</td>
-        <td class='memory'>376</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'></td>
+        <td class='memory'>168</td>
         <td class='allocated'>0</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,024</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>214</td>
+        <td>16</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>0</td>
+        <td>120 / 128</td>
+        <td>93</td>
+        <td>8 / 8</td>
+        <td>100%</td>
+        <td>128 / 128</td>
+        <td>100%</td>
+        <td>0 / 128</td>
+        <td>0%</td>
+        <td>8 / 8</td>
+        <td>100%</td>
+        <td>1.00</td>
       </tr>
-      <tr class='blue'>
+      <tr class='red'>
         <td class='available_moves'>27</td>
-        <td class='duration'>0</td>
-        <td class='boards'>18908</td>
+        <td class='boards'>1,712</td>
         <td class='armies'>111</td>
-        <td class='memory'>376</td>
+        <td>214</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'>96.031%</td>
+        <td class='memory'>169</td>
         <td class='allocated'>0</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,024</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>170</td>
+        <td>390</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>0</td>
+        <td>2,330 / 3,120</td>
+        <td>74</td>
+        <td>111 / 790</td>
+        <td>14%</td>
+        <td>1,712 / 3,120</td>
+        <td>54%</td>
+        <td>0 / 3,120</td>
+        <td>0%</td>
+        <td>754 / 790</td>
+        <td>95%</td>
+        <td>1.05</td>
       </tr>
-      <tr class='red'>
+      <tr class='blue'>
         <td class='available_moves'>26</td>
+        <td class='boards'>18,908</td>
+        <td class='armies'>111</td>
+        <td>294</td>
         <td class='duration'>0</td>
-        <td class='boards'>139220</td>
-        <td class='armies'>1073</td>
-        <td class='memory'>377</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'>80.485%</td>
+        <td class='memory'>169</td>
         <td class='allocated'>0</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,024</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>1254</td>
+        <td>1,160</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>0</td>
+        <td>14,539 / 32,709</td>
+        <td>44</td>
+        <td>111 / 18,170</td>
+        <td>0%</td>
+        <td>18,908 / 32,709</td>
+        <td>57%</td>
+        <td>0 / 32,709</td>
+        <td>0%</td>
+        <td>16,711 / 18,170</td>
+        <td>92%</td>
+        <td>1.12</td>
       </tr>
-      <tr class='blue'>
+      <tr class='red'>
         <td class='available_moves'>25</td>
+        <td class='boards'>139,220</td>
+        <td class='armies'>1,073</td>
+        <td>1,254</td>
         <td class='duration'>0</td>
-        <td class='boards'>671602</td>
-        <td class='armies'>837</td>
-        <td class='memory'>378</td>
-        <td class='allocated'>6</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'>88.205%</td>
+        <td class='memory'>169</td>
+        <td class='allocated'>0</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,024</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>802</td>
+        <td>6,380</td>
+        <td>238</td>
+        <td>0%</td>
+        <td>0</td>
+        <td>157,150 / 343,608</td>
+        <td>45</td>
+        <td>1,073 / 186,458</td>
+        <td>0%</td>
+        <td>139,220 / 343,608</td>
+        <td>40%</td>
+        <td>0 / 343,608</td>
+        <td>0%</td>
+        <td>145,266 / 186,458</td>
+        <td>78%</td>
+        <td>1.34</td>
       </tr>
-      <tr class='red'>
+      <tr class='blue'>
         <td class='available_moves'>24</td>
+        <td class='boards'>671,602</td>
+        <td class='armies'>837</td>
+        <td>1,847</td>
         <td class='duration'>0</td>
-        <td class='boards'>2917569</td>
-        <td class='armies'>8888</td>
-        <td class='memory'>380</td>
-        <td class='allocated'>11</td>
-        <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>3485</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>23</td>
-        <td class='duration'>1</td>
-        <td class='boards'>1562933</td>
-        <td class='armies'>2279</td>
-        <td class='memory'>383</td>
-        <td class='allocated'>13</td>
-        <td class='mmapped'>135</td>
-        <td class='mmaps'>1035</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>685</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>22</td>
-        <td class='duration'>1</td>
-        <td class='boards'>818287</td>
-        <td class='armies'>32185</td>
-        <td class='memory'>381</td>
-        <td class='allocated'>3</td>
-        <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>359</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>21</td>
-        <td class='duration'>0</td>
-        <td class='boards'>972761</td>
-        <td class='armies'>10059</td>
-        <td class='memory'>382</td>
+        <td class='CPUsec'>2</td>
+        <td class='CPUbusy'>88.150%</td>
+        <td class='memory'>179</td>
         <td class='allocated'>8</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1026</td>
+        <td class='mmaps'>1,026</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>96</td>
+        <td>20,325</td>
+        <td>5,775</td>
+        <td>4%</td>
+        <td>0</td>
+        <td>645,692 / 1,546,211</td>
+        <td>41</td>
+        <td>837 / 900,519</td>
+        <td>0%</td>
+        <td>671,602 / 1,546,211</td>
+        <td>43%</td>
+        <td>0 / 1,546,211</td>
+        <td>0%</td>
+        <td>645,547 / 900,519</td>
+        <td>72%</td>
+        <td>1.52</td>
       </tr>
       <tr class='red'>
+        <td class='available_moves'>23</td>
+        <td class='boards'>2,917,569</td>
+        <td class='armies'>8,888</td>
+        <td>3,485</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>4</td>
+        <td class='CPUbusy'>96.673%</td>
+        <td class='memory'>182</td>
+        <td class='allocated'>11</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>65,125</td>
+        <td>34,028</td>
+        <td>2%</td>
+        <td>7</td>
+        <td>4,865,070 / 7,647,809</td>
+        <td>63</td>
+        <td>8,888 / 2,782,739</td>
+        <td>0%</td>
+        <td>2,917,569 / 7,647,809</td>
+        <td>38%</td>
+        <td>0 / 7,647,809</td>
+        <td>0%</td>
+        <td>2,118,331 / 2,782,739</td>
+        <td>76%</td>
+        <td>1.42</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>22</td>
+        <td class='boards'>1,557,833</td>
+        <td class='armies'>2,279</td>
+        <td>1,702</td>
+        <td class='duration'>1</td>
+        <td class='CPUsec'>7</td>
+        <td class='CPUbusy'>96.479%</td>
+        <td class='memory'>195</td>
+        <td class='allocated'>15</td>
+        <td class='mmapped'>140</td>
+        <td class='mmaps'>1,060</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>91,223</td>
+        <td>211,551</td>
+        <td>7%</td>
+        <td>2</td>
+        <td>3,464,191 / 3,880,253</td>
+        <td>89</td>
+        <td>2,279 / 416,062</td>
+        <td>0%</td>
+        <td>1,557,833 / 3,880,253</td>
+        <td>40%</td>
+        <td>7,192 / 3,880,253</td>
+        <td>0%</td>
+        <td>287,616 / 416,062</td>
+        <td>69%</td>
+        <td>1.53</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>21</td>
+        <td class='boards'>803,829</td>
+        <td class='armies'>31,962</td>
+        <td>352</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>5</td>
+        <td class='CPUbusy'>95.915%</td>
+        <td class='memory'>189</td>
+        <td class='allocated'>3</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>98,200</td>
+        <td>124,368</td>
+        <td>3%</td>
+        <td>6</td>
+        <td>990,152 / 1,566,447</td>
+        <td>63</td>
+        <td>31,962 / 576,295</td>
+        <td>5%</td>
+        <td>803,829 / 1,566,447</td>
+        <td>51%</td>
+        <td>220,964 / 1,566,447</td>
+        <td>14%</td>
+        <td>472,348 / 576,295</td>
+        <td>82%</td>
+        <td>1.32</td>
+      </tr>
+      <tr class='blue'>
         <td class='available_moves'>20</td>
-        <td class='duration'>2</td>
-        <td class='boards'>4324529</td>
-        <td class='armies'>150279</td>
-        <td class='memory'>382</td>
-        <td class='allocated'>17</td>
-        <td class='mmapped'>134</td>
-        <td class='mmaps'>1027</td>
+        <td class='boards'>954,327</td>
+        <td class='armies'>10,059</td>
+        <td>151</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>2</td>
+        <td class='CPUbusy'>94.196%</td>
+        <td class='memory'>189</td>
+        <td class='allocated'>8</td>
+        <td class='mmapped'>135</td>
+        <td class='mmaps'>1,028</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>429</td>
+        <td>26,016</td>
+        <td>51</td>
+        <td>0%</td>
+        <td>7</td>
+        <td>1,457,966 / 1,528,716</td>
+        <td>95</td>
+        <td>10,059 / 70,750</td>
+        <td>14%</td>
+        <td>954,327 / 1,528,716</td>
+        <td>62%</td>
+        <td>83,001 / 1,528,716</td>
+        <td>5%</td>
+        <td>42,470 / 70,750</td>
+        <td>60%</td>
+        <td>1.89</td>
       </tr>
-      <tr class='blue'>
+      <tr class='red'>
         <td class='available_moves'>19</td>
-        <td class='duration'>2</td>
-        <td class='boards'>3982294</td>
-        <td class='armies'>21042</td>
-        <td class='memory'>392</td>
-        <td class='allocated'>28</td>
-        <td class='mmapped'>141</td>
-        <td class='mmaps'>1065</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>189</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>18</td>
-        <td class='duration'>8</td>
-        <td class='boards'>16329274</td>
-        <td class='armies'>750894</td>
-        <td class='memory'>404</td>
-        <td class='allocated'>55</td>
-        <td class='mmapped'>147</td>
-        <td class='mmaps'>1072</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>776</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>17</td>
-        <td class='duration'>7</td>
-        <td class='boards'>9993228</td>
-        <td class='armies'>25228</td>
-        <td class='memory'>431</td>
-        <td class='allocated'>54</td>
-        <td class='mmapped'>172</td>
-        <td class='mmaps'>1172</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>396</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>16</td>
-        <td class='duration'>20</td>
-        <td class='boards'>28084709</td>
-        <td class='armies'>2413815</td>
-        <td class='memory'>476</td>
-        <td class='allocated'>78</td>
-        <td class='mmapped'>213</td>
-        <td class='mmaps'>1122</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>1113</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>15</td>
-        <td class='duration'>12</td>
-        <td class='boards'>11231872</td>
-        <td class='armies'>17920</td>
-        <td class='memory'>466</td>
-        <td class='allocated'>52</td>
-        <td class='mmapped'>203</td>
-        <td class='mmaps'>1136</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>626</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>14</td>
-        <td class='duration'>19</td>
-        <td class='boards'>17538882</td>
-        <td class='armies'>2373758</td>
-        <td class='memory'>478</td>
-        <td class='allocated'>51</td>
-        <td class='mmapped'>215</td>
-        <td class='mmaps'>1108</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>978</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>13</td>
-        <td class='duration'>6</td>
-        <td class='boards'>4940694</td>
-        <td class='armies'>8121</td>
-        <td class='memory'>439</td>
-        <td class='allocated'>21</td>
-        <td class='mmapped'>181</td>
-        <td class='mmaps'>1102</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>608</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>12</td>
-        <td class='duration'>7</td>
-        <td class='boards'>3660171</td>
-        <td class='armies'>1054088</td>
-        <td class='memory'>422</td>
-        <td class='allocated'>10</td>
-        <td class='mmapped'>165</td>
-        <td class='mmaps'>1048</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>450</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>11</td>
+        <td class='boards'>3,818,629</td>
+        <td class='armies'>142,057</td>
+        <td>379</td>
         <td class='duration'>1</td>
-        <td class='boards'>829566</td>
-        <td class='armies'>2493</td>
-        <td class='memory'>406</td>
-        <td class='allocated'>4</td>
-        <td class='mmapped'>148</td>
-        <td class='mmaps'>1042</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>332</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>10</td>
-        <td class='duration'>1</td>
-        <td class='boards'>391763</td>
-        <td class='armies'>219510</td>
-        <td class='memory'>403</td>
-        <td class='allocated'>1</td>
-        <td class='mmapped'>146</td>
-        <td class='mmaps'>1026</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>157</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>9</td>
-        <td class='duration'>0</td>
-        <td class='boards'>74783</td>
-        <td class='armies'>599</td>
-        <td class='memory'>385</td>
-        <td class='allocated'>0</td>
-        <td class='mmapped'>136</td>
-        <td class='mmaps'>1026</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>124</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>8</td>
-        <td class='duration'>0</td>
-        <td class='boards'>11876</td>
-        <td class='armies'>8637</td>
-        <td class='memory'>385</td>
-        <td class='allocated'>0</td>
-        <td class='mmapped'>136</td>
-        <td class='mmaps'>1025</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
-        <td>19</td>
-      </tr>
-      <tr class='blue'>
-        <td class='available_moves'>7</td>
-        <td class='duration'>0</td>
-        <td class='boards'>1165</td>
-        <td class='armies'>99</td>
-        <td class='memory'>379</td>
-        <td class='allocated'>0</td>
+        <td class='CPUsec'>8</td>
+        <td class='CPUbusy'>97.874%</td>
+        <td class='memory'>190</td>
+        <td class='allocated'>15</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,027</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>11</td>
-      </tr>
-      <tr class='red'>
-        <td class='available_moves'>6</td>
-        <td class='duration'>0</td>
-        <td class='boards'>925</td>
-        <td class='armies'>655</td>
-        <td class='memory'>379</td>
-        <td class='allocated'>0</td>
-        <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
-        <td class='mlocked'>0</td>
-        <td class='mlocks'>0</td>
+        <td>68,327</td>
+        <td>24,302</td>
+        <td>1%</td>
         <td>9</td>
+        <td>4,332,373 / 6,360,134</td>
+        <td>68</td>
+        <td>142,057 / 2,027,761</td>
+        <td>7%</td>
+        <td>3,818,629 / 6,360,134</td>
+        <td>60%</td>
+        <td>1,617,999 / 6,360,134</td>
+        <td>25%</td>
+        <td>1,619,033 / 2,027,761</td>
+        <td>80%</td>
+        <td>1.38</td>
       </tr>
       <tr class='blue'>
-        <td class='available_moves'>5</td>
-        <td class='duration'>0</td>
-        <td class='boards'>21</td>
-        <td class='armies'>2</td>
-        <td class='memory'>379</td>
-        <td class='allocated'>0</td>
-        <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='available_moves'>18</td>
+        <td class='boards'>3,181,394</td>
+        <td class='armies'>18,458</td>
+        <td>259</td>
+        <td class='duration'>1</td>
+        <td class='CPUsec'>9</td>
+        <td class='CPUbusy'>96.566%</td>
+        <td class='memory'>201</td>
+        <td class='allocated'>23</td>
+        <td class='mmapped'>141</td>
+        <td class='mmaps'>1,054</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
-        <td>10</td>
+        <td>94,698</td>
+        <td>8</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>4,699,550 / 4,789,350</td>
+        <td>98</td>
+        <td>18,458 / 89,800</td>
+        <td>20%</td>
+        <td>3,181,394 / 4,789,350</td>
+        <td>66%</td>
+        <td>357,550 / 4,789,350</td>
+        <td>7%</td>
+        <td>52,294 / 89,800</td>
+        <td>58%</td>
+        <td>2.00</td>
       </tr>
       <tr class='red'>
-        <td class='available_moves'>4</td>
+        <td class='available_moves'>17</td>
+        <td class='boards'>10,552,557</td>
+        <td class='armies'>600,934</td>
+        <td>571</td>
+        <td class='duration'>3</td>
+        <td class='CPUsec'>27</td>
+        <td class='CPUbusy'>98.740%</td>
+        <td class='memory'>216</td>
+        <td class='allocated'>39</td>
+        <td class='mmapped'>140</td>
+        <td class='mmaps'>1,048</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>180,761</td>
+        <td>76,662</td>
+        <td>1%</td>
+        <td>10</td>
+        <td>13,255,435 / 18,626,128</td>
+        <td>71</td>
+        <td>600,934 / 5,370,693</td>
+        <td>11%</td>
+        <td>10,552,557 / 18,626,128</td>
+        <td>56%</td>
+        <td>5,291,648 / 18,626,128</td>
+        <td>28%</td>
+        <td>4,051,426 / 5,370,693</td>
+        <td>75%</td>
+        <td>1.48</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>16</td>
+        <td class='boards'>6,378,576</td>
+        <td class='armies'>17,986</td>
+        <td>573</td>
+        <td class='duration'>3</td>
+        <td class='CPUsec'>23</td>
+        <td class='CPUbusy'>97.362%</td>
+        <td class='memory'>244</td>
+        <td class='allocated'>42</td>
+        <td class='mmapped'>159</td>
+        <td class='mmaps'>1,130</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>75,674</td>
+        <td>15</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>10,188,139 / 10,322,301</td>
+        <td>98</td>
+        <td>17,986 / 134,162</td>
+        <td>13%</td>
+        <td>6,378,576 / 10,322,301</td>
+        <td>61%</td>
+        <td>544,751 / 10,322,301</td>
+        <td>5%</td>
+        <td>82,398 / 134,162</td>
+        <td>61%</td>
+        <td>1.80</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>15</td>
+        <td class='boards'>13,911,337</td>
+        <td class='armies'>1,424,872</td>
+        <td>773</td>
+        <td class='duration'>6</td>
+        <td class='CPUsec'>50</td>
+        <td class='CPUbusy'>98.745%</td>
+        <td class='memory'>244</td>
+        <td class='allocated'>41</td>
+        <td class='mmapped'>158</td>
+        <td class='mmaps'>1,094</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>438,070</td>
+        <td>95,309</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>17,955,437 / 25,970,487</td>
+        <td>69</td>
+        <td>1,424,872 / 8,015,050</td>
+        <td>17%</td>
+        <td>13,911,337 / 25,970,487</td>
+        <td>53%</td>
+        <td>6,393,554 / 25,970,487</td>
+        <td>24%</td>
+        <td>5,674,500 / 8,015,050</td>
+        <td>71%</td>
+        <td>1.63</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>14</td>
+        <td class='boards'>6,481,572</td>
+        <td class='armies'>10,814</td>
+        <td>1,020</td>
+        <td class='duration'>3</td>
+        <td class='CPUsec'>27</td>
+        <td class='CPUbusy'>97.548%</td>
+        <td class='memory'>268</td>
+        <td class='allocated'>33</td>
+        <td class='mmapped'>180</td>
+        <td class='mmaps'>1,127</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>204,456</td>
+        <td>18</td>
+        <td>0%</td>
+        <td>10</td>
+        <td>10,869,847 / 11,040,359</td>
+        <td>98</td>
+        <td>10,814 / 170,512</td>
+        <td>6%</td>
+        <td>6,481,572 / 11,040,359</td>
+        <td>58%</td>
+        <td>238,729 / 11,040,359</td>
+        <td>2%</td>
+        <td>103,063 / 170,512</td>
+        <td>60%</td>
+        <td>1.84</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>13</td>
+        <td class='boards'>6,713,694</td>
+        <td class='armies'>1,071,703</td>
+        <td>620</td>
+        <td class='duration'>5</td>
+        <td class='CPUsec'>44</td>
+        <td class='CPUbusy'>97.236%</td>
+        <td class='memory'>243</td>
+        <td class='allocated'>23</td>
+        <td class='mmapped'>155</td>
+        <td class='mmaps'>1,043</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>489,813</td>
+        <td>118,487</td>
+        <td>1%</td>
+        <td>9</td>
+        <td>7,946,044 / 12,464,509</td>
+        <td>63</td>
+        <td>1,071,703 / 4,518,465</td>
+        <td>23%</td>
+        <td>6,713,694 / 12,464,509</td>
+        <td>53%</td>
+        <td>1,769,009 / 12,464,509</td>
+        <td>14%</td>
+        <td>3,259,975 / 4,518,465</td>
+        <td>72%</td>
+        <td>1.58</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>12</td>
+        <td class='boards'>2,963,468</td>
+        <td class='armies'>4,475</td>
+        <td>1,122</td>
+        <td class='duration'>1</td>
+        <td class='CPUsec'>10</td>
+        <td class='CPUbusy'>96.984%</td>
+        <td class='memory'>251</td>
+        <td class='allocated'>11</td>
+        <td class='mmapped'>163</td>
+        <td class='mmaps'>1,077</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>372,903</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>4,970,435 / 5,024,291</td>
+        <td>98</td>
+        <td>4,475 / 53,856</td>
+        <td>8%</td>
+        <td>2,963,468 / 5,024,291</td>
+        <td>58%</td>
+        <td>33,952 / 5,024,291</td>
+        <td>0%</td>
+        <td>32,087 / 53,856</td>
+        <td>60%</td>
+        <td>1.99</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>11</td>
+        <td class='boards'>910,554</td>
+        <td class='armies'>252,233</td>
+        <td>203</td>
+        <td class='duration'>2</td>
+        <td class='CPUsec'>17</td>
+        <td class='CPUbusy'>86.473%</td>
+        <td class='memory'>233</td>
+        <td class='allocated'>4</td>
+        <td class='mmapped'>146</td>
+        <td class='mmaps'>1,027</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>72,188</td>
+        <td>42,575</td>
+        <td>0%</td>
+        <td>10</td>
+        <td>730,154 / 1,501,477</td>
+        <td>48</td>
+        <td>252,233 / 771,323</td>
+        <td>32%</td>
+        <td>910,554 / 1,501,477</td>
+        <td>60%</td>
+        <td>179,704 / 1,501,477</td>
+        <td>11%</td>
+        <td>526,007 / 771,323</td>
+        <td>68%</td>
+        <td>1.70</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>10</td>
+        <td class='boards'>553,307</td>
+        <td class='armies'>1,171</td>
+        <td>676</td>
         <td class='duration'>0</td>
+        <td class='CPUsec'>1</td>
+        <td class='CPUbusy'>95.287%</td>
+        <td class='memory'>225</td>
+        <td class='allocated'>2</td>
+        <td class='mmapped'>138</td>
+        <td class='mmaps'>1,036</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>54,651</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>740,227 / 792,646</td>
+        <td>93</td>
+        <td>1,171 / 52,419</td>
+        <td>2%</td>
+        <td>553,307 / 792,646</td>
+        <td>69%</td>
+        <td>2,896 / 792,646</td>
+        <td>0%</td>
+        <td>43,817 / 52,419</td>
+        <td>84%</td>
+        <td>1.31</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>9</td>
+        <td class='boards'>53,042</td>
+        <td class='armies'>27,783</td>
+        <td>45</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>3</td>
+        <td class='CPUbusy'>97.129%</td>
+        <td class='memory'>222</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>136</td>
+        <td class='mmaps'>1,025</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>11,967</td>
+        <td>12,777</td>
+        <td>1%</td>
+        <td>9</td>
+        <td>22,300 / 72,898</td>
+        <td>30</td>
+        <td>27,783 / 50,598</td>
+        <td>54%</td>
+        <td>53,042 / 72,898</td>
+        <td>72%</td>
+        <td>10,465 / 72,898</td>
+        <td>14%</td>
+        <td>30,229 / 50,598</td>
+        <td>60%</td>
+        <td>1.95</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>8</td>
+        <td class='boards'>37,637</td>
+        <td class='armies'>280</td>
+        <td>181</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'>64.131%</td>
+        <td class='memory'>220</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,026</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>16,495</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>10</td>
+        <td>49,335 / 50,809</td>
+        <td>97</td>
+        <td>280 / 1,474</td>
+        <td>18%</td>
+        <td>37,637 / 50,809</td>
+        <td>74%</td>
+        <td>4 / 50,809</td>
+        <td>0%</td>
+        <td>1,140 / 1,474</td>
+        <td>77%</td>
+        <td>1.26</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>7</td>
+        <td class='boards'>730</td>
+        <td class='armies'>428</td>
+        <td>2</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'>44.957%</td>
+        <td class='memory'>220</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,025</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>87</td>
+        <td>6,598</td>
+        <td>12%</td>
+        <td>9</td>
+        <td>224 / 805</td>
+        <td>27</td>
+        <td>428 / 581</td>
+        <td>73%</td>
+        <td>730 / 805</td>
+        <td>90%</td>
+        <td>0 / 805</td>
+        <td>0%</td>
+        <td>455 / 581</td>
+        <td>78%</td>
+        <td>1.31</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>6</td>
+        <td class='boards'>271</td>
+        <td class='armies'>29</td>
+        <td>12</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'></td>
+        <td class='memory'>220</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>107</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>315 / 369</td>
+        <td>85</td>
+        <td>29 / 54</td>
+        <td>53%</td>
+        <td>271 / 369</td>
+        <td>73%</td>
+        <td>0 / 369</td>
+        <td>0%</td>
+        <td>54 / 54</td>
+        <td>100%</td>
+        <td>1.00</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>5</td>
+        <td class='boards'>49</td>
+        <td class='armies'>49</td>
+        <td>1</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'></td>
+        <td class='memory'>220</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>28</td>
+        <td>3</td>
+        <td>0%</td>
+        <td>10</td>
+        <td>2 / 51</td>
+        <td>3</td>
+        <td>49 / 49</td>
+        <td>100%</td>
+        <td>49 / 51</td>
+        <td>96%</td>
+        <td>0 / 51</td>
+        <td>0%</td>
+        <td>47 / 49</td>
+        <td>96%</td>
+        <td>1.04</td>
+      </tr>
+      <tr class='blue'>
+        <td class='available_moves'>4</td>
+        <td class='boards'>5</td>
+        <td class='armies'>1</td>
+        <td>5</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'></td>
+        <td class='memory'>220</td>
+        <td class='allocated'>0</td>
+        <td class='mmapped'>134</td>
+        <td class='mmaps'>1,024</td>
+        <td class='mlocked'>0</td>
+        <td class='mlocks'>0</td>
+        <td>5</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>4 / 5</td>
+        <td>80</td>
+        <td>1 / 1</td>
+        <td>100%</td>
+        <td>5 / 5</td>
+        <td>100%</td>
+        <td>0 / 5</td>
+        <td>0%</td>
+        <td>1 / 1</td>
+        <td>100%</td>
+        <td>1.00</td>
+      </tr>
+      <tr class='red'>
+        <td class='available_moves'>3</td>
         <td class='boards'>0</td>
         <td class='armies'>0</td>
-        <td class='memory'>379</td>
+        <td>0</td>
+        <td class='duration'>0</td>
+        <td class='CPUsec'>0</td>
+        <td class='CPUbusy'></td>
+        <td class='memory'>220</td>
         <td class='allocated'>0</td>
         <td class='mmapped'>134</td>
-        <td class='mmaps'>1024</td>
+        <td class='mmaps'>1,024</td>
         <td class='mlocked'>0</td>
         <td class='mlocks'>0</td>
         <td>0</td>
+        <td>0</td>
+        <td>0%</td>
+        <td>9</td>
+        <td>0 / 0</td>
+        <td></td>
+        <td>0 / 0</td>
+        <td></td>
+        <td>0 / 0</td>
+        <td></td>
+        <td>0 / 0</td>
+        <td></td>
+        <td>0 / 0</td>
+        <td></td>
+        <td></td>
       </tr>
     </table>
+<h4>Sample boards</h4>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='80' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='100' cy='180' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='120' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='100' cy='180' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='80' cy='160' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='turquoise' />
+      <circle cx='20' cy='100' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='120' cy='80' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='100' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='100' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='120' cy='80' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='80' cy='60' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='80' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='100' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='turquoise' />
+      <circle cx='80' cy='100' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='100' cy='40' r='7' fill='red' />
+      <circle cx='100' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='100' cy='180' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='120' cy='80' r='7' fill='red' />
+      <circle cx='80' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='100' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='100' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='100' cy='80' r='7' fill='red' />
+      <circle cx='60' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='120' cy='80' r='7' fill='red' />
+      <circle cx='80' cy='100' r='7' fill='red' />
+      <circle cx='100' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='140' cy='60' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='140' cy='60' r='7' fill='red' />
+      <circle cx='100' cy='80' r='7' fill='red' />
+      <circle cx='160' cy='80' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='160' r='7' fill='red' />
+      <circle cx='180' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='20' cy='100' r='7' fill='red' />
+      <circle cx='40' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='100' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='180' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='80' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='60' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='80' cy='140' r='7' fill='red' />
+      <circle cx='180' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='100' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='180' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='red' />
+      <circle cx='60' cy='40' r='7' fill='red' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='120' cy='60' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='100' cy='100' r='7' fill='red' />
+      <circle cx='160' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='180' r='7' fill='red' />
+      <circle cx='180' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='80' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='180' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='100' cy='40' r='7' fill='red' />
+      <circle cx='40' cy='80' r='7' fill='red' />
+      <circle cx='60' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='100' r='7' fill='turquoise' />
+      <circle cx='180' cy='120' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='180' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='red' />
+      <circle cx='100' cy='60' r='7' fill='red' />
+      <circle cx='100' cy='80' r='7' fill='red' />
+      <circle cx='120' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='100' r='7' fill='red' />
+      <circle cx='100' cy='120' r='7' fill='red' />
+      <circle cx='160' cy='120' r='7' fill='red' />
+      <circle cx='120' cy='140' r='7' fill='red' />
+      <circle cx='100' cy='160' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+      <circle cx='160' cy='180' r='7' fill='red' />
+    </svg>
+    <svg height='200' width='200'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 190 M 30 10 L 30 190 M 50 10 L 50 190 M 70 10 L 70 190 M 90 10 L 90 190 M 110 10 L 110 190 M 130 10 L 130 190 M 150 10 L 150 190 M 170 10 L 170 190 M 190 10 L 190 190 M 10 10 L 190 10 M 10 30 L 190 30 M 10 50 L 190 50 M 10 70 L 190 70 M 10 90 L 190 90 M 10 110 L 190 110 M 10 130 L 190 130 M 10 150 L 190 150 M 10 170 L 190 170 M 10 190 L 190 190 '
+            stroke='black' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='140' cy='140' r='7' fill='turquoise' />
+      <circle cx='180' cy='140' r='7' fill='turquoise' />
+      <circle cx='140' cy='160' r='7' fill='turquoise' />
+      <circle cx='160' cy='160' r='7' fill='turquoise' />
+      <circle cx='180' cy='160' r='7' fill='turquoise' />
+      <circle cx='120' cy='180' r='7' fill='turquoise' />
+      <circle cx='140' cy='180' r='7' fill='turquoise' />
+      <circle cx='160' cy='180' r='7' fill='turquoise' />
+      <circle cx='180' cy='180' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='red' />
+      <circle cx='140' cy='80' r='7' fill='red' />
+      <circle cx='60' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='100' r='7' fill='red' />
+      <circle cx='120' cy='100' r='7' fill='red' />
+      <circle cx='180' cy='100' r='7' fill='red' />
+      <circle cx='80' cy='120' r='7' fill='red' />
+      <circle cx='140' cy='120' r='7' fill='red' />
+      <circle cx='180' cy='120' r='7' fill='red' />
+      <circle cx='100' cy='140' r='7' fill='red' />
+      <circle cx='120' cy='160' r='7' fill='red' />
+    </svg>
   </body>
 </html>
