@@ -2199,7 +2199,7 @@ class Image {
     inline bool red_jumpable(Coord const jumpee, Coord const target) const PURE {
         return ((get(target) + 3) & get(jumpee) & 4) != 0;
     }
-    NOINLINE string str() const PURE;
+    NOINLINE string str(size_t n=1) const PURE;
     NOINLINE string str(Coord from, Coord to, Color c);
     Image& operator=(Image const& image) {
         std::copy(image.begin(), image.end(), begin());
@@ -2211,7 +2211,7 @@ class Image {
     Color* end  () PURE       { return image_.end(); }
     Color const* begin() const FUNCTIONAL { return image_.begin(); }
     Color const* end  () const FUNCTIONAL { return image_.end(); }
-    inline string _str() const PURE;
+    inline string _str(size_t n=1) const PURE;
 
     BoardTable<Color> image_;
 };
@@ -2317,7 +2317,7 @@ class Svg {
     void board(Board const& board) { board.svg(out_, scale_, margin_); }
     void move(FullMove const& move);
     void html(FullMoves const& full_moves);
-    void html_header(uint nr_moves, int tatget_moves, bool terminated = false);
+    void html_header(uint nr_moves, int tatget_moves, bool terminated = false, bool solved=false);
     void html_footer();
     void header();
     void footer();

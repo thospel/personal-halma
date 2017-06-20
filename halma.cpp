@@ -14,6 +14,7 @@ uint RULES = 6;
 uint ARMY = 10;
 
 double const MIN_DURATION = 0.001;
+uint const EXAMPLE_IMAGES = 3;
 
 size_t Element::SIZE;
 
@@ -314,6 +315,12 @@ void StatisticsE::print(ostream& os) const {
     }
 
     if (statistics) {
+        os << "\tBoards per blue army: ";
+        if (blue_armies_size())
+            os << boardset_size()/blue_armies_size();
+        else
+            os << "-----";
+        os << "\n";
         os << "\tLargest subset: " << largest_subset() << "\n";
         os << "\tLargest army resize overflow: " << overflow_max() << "\n";
 
@@ -916,34 +923,50 @@ void BoardSetRed::print(ostream& os) const {
     os << "-----\n";
 }
 
-string Image::_str() const {
+string Image::_str(size_t n) const {
+    uint const SEP = 3;
     string result;
-    result.reserve((2*X+3)*(Y+2));
-    result += "+";
-    for (uint x=0; x < X; ++x) result += "--";
-    result += "+\n";
 
-    for (uint y=0; y < Y; ++y) {
-        result += "|";
-        for (uint x=0; x < X; ++x) {
-            auto c = get(x, y);
-            result += (c == EMPTY ? ". " :
-                       c == RED   ? "X " :
-                       c == BLUE  ? "O " :
-                       "? ");
-        }
-        result += "|\n";
+    if (UNLIKELY(n == 0)) {
+        result.append(Y+2, '\n');
+        return result;
     }
 
+    result.reserve((Y+2) * ((2*X+2) * n + SEP * (n-1) + 1));
     result += "+";
     for (uint x=0; x < X; ++x) result += "--";
-    result += "+\n";
+    result += "+";
+    string edge{result};
+    for (uint i=1; i<n; ++i) {
+        result.append(SEP, ' ');
+        result += edge;
+    }
+    result += "\n";
+    edge = result;
+
+    for (uint y=0; y < Y; ++y) {
+        for (uint i=0; i<n; ++i) {
+            if (i > 0) result.append(SEP, ' ');
+            result += "|";
+            for (uint x=0; x < X; ++x) {
+                auto c = this[i].get(x, y);
+                result += (c == EMPTY ? ". " :
+                           c == RED   ? "X " :
+                           c == BLUE  ? "O " :
+                           "? ");
+            }
+            result += "|";
+        }
+        result += "\n";
+    }
+
+    result += edge;
 
     return result;
 }
 
-string Image::str() const {
-    return _str();
+string Image::str(size_t n) const {
+    return _str(n);
 }
 
 string Image::str(Coord from, Coord to, Color color) {
@@ -2696,12 +2719,20 @@ string const Svg::file(string const& prefix, uint nr_moves) {
     return string(prefix + "/halma-X") + to_string(X) + "Y" + to_string(Y) + "Army" + to_string(ARMY) + "Rule" + to_string(RULES) + "_" + to_string(nr_moves) + ".html";
 }
 
-void Svg::html_header(uint nr_moves, int target_moves, bool terminated) {
+void Svg::html_header(uint nr_moves, int target_moves, bool terminated, bool solved) {
     out_ <<
         "<!DOCTYPE html>\n"
         "<html>\n"
         "  <head>\n"
-        "    <title>Size " << X << "x" << Y << ", army " << ARMY << ", ruleset " << RULES << "</title>\n"
+        "    <title>Size " << X << "x" << Y << ", Army " << ARMY << ", Ruleset " << RULES << ": ";
+    if (solved)
+        out_ << "Solved in " << nr_moves << " moves";
+    else if (terminated)
+        out_ << "Terminated run";
+    else
+        out_ << "Failed after " << nr_moves << " moves";
+    out_ <<
+        "</title>\n"
         "    <style>\n"
         "      span.blue { color: blue; }\n"
         "      span.red  { color: red; }\n"
@@ -2843,7 +2874,11 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Moves<br/>left</th>\n"
         "        <th>Boards</th>\n"
         "        <th>Armies</th>\n"
-        "        <th>Boards per<br/>blue army</th>\n"
+        "        <th>Boards per<br/>blue army</th>\n";
+    if (statistics)
+        out_ <<
+            "        <th>Largest<br/>subset</th>\n";
+    out_ <<
         "        <th>Seconds</th>\n"
         "        <th>CPU<br/>seconds</th>\n"
         "        <th>CPU<br/>busy</th>\n"
@@ -2855,7 +2890,6 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
         "        <th>Mlocks</th>\n";
     if (statistics) {
         out_ <<
-            "        <th>Largest<br/>subset</th>\n"
             "        <th>Late<br/>prunes</th>\n"
             "        <th>Late<br/>prune<br/>ratio</th>\n"
             "        <th>Army<br/>resize<br/>overflow</th>\n";
@@ -2889,7 +2923,11 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <td class='available_moves'>" << st.available_moves()-1 << "</td>\n"
             "        <td class='boards'>" << nr_boards << "</td>\n"
             "        <td class='armies'>" << st.armyset_size() << "</td>\n"
-            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n"
+            "        <td>" << st.boardset_size()/(st.blue_armies_size() ? st.blue_armies_size() : 1) << "</td>\n";
+        if (statistics)
+            out_ <<
+                "        <td>" << st.largest_subset() << "</td>\n";
+        out_ <<
             "        <td class='duration'>" << st.duration() << "</td>\n"
             "        <td class='CPUsec'>" << static_cast<uint>(st.usage()) << "</td>\n"
             "        <td class='CPUbusy'>";
@@ -2904,7 +2942,6 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
             "        <td class='mlocks'>" << st.mlocks() << "</td>\n";
         if (statistics) {
             out_ <<
-                "        <td>" << st.largest_subset() << "</td>\n"
                 "        <td>" << st.late_prunes() << "</td>\n"
                 "        <td>" << st.late_prunes() * 100 / old_boards << "%</td>\n"
                 "        <td>" << st.overflow_max() << "</td>\n";
@@ -2980,7 +3017,7 @@ void Svg::write(time_t start_time, time_t stop_time,
     bool terminated = is_terminated();
     int target_moves = stats_list_solve.size() ? stats_list_solve[0].available_moves() : solution_moves;
     if (solution_moves >= 0) {
-        html_header(boards.size()-1, target_moves, terminated);
+        html_header(boards.size()-1, target_moves, terminated, true);
         parameters(start_time, stop_time);
         game(boards);
     } else {
@@ -3332,17 +3369,26 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             return -1;
         }
         if (example) {
-            if (blue_to_move)
-                stats.example_board
-                    (example > 0 ?
-                     boards_blue.example(opponent_armies, moved_armies, true) :
-                     boards_blue.random_example(opponent_armies, moved_armies, true));
-            else
-                stats.example_board
-                    (example > 0 ?
-                     boards_red.example(opponent_armies, moved_armies, false) :
-                     boards_red.random_example(opponent_armies, moved_armies, false));
-            cout << stats.example_board();
+            vector<Image> images;
+            if (example > 0) {
+                if (blue_to_move)
+                    stats.example_board(boards_blue.example(opponent_armies, moved_armies, true));
+                else
+                    stats.example_board(boards_red.example(opponent_armies, moved_armies, false));
+                images.emplace_back(stats.example_board());
+            } else {
+                if (blue_to_move)
+                    stats.example_board(boards_blue.random_example(opponent_armies, moved_armies, true));
+                else
+                    stats.example_board(boards_red.random_example(opponent_armies, moved_armies, false));
+                images.emplace_back(stats.example_board());
+                for (uint i=1; i<EXAMPLE_IMAGES; ++i)
+                    images.emplace_back
+                        (blue_to_move ?
+                         boards_blue.random_example(opponent_armies, moved_armies, true) :
+                         boards_red.random_example(opponent_armies, moved_armies, false));
+            }
+            cout << images[0].str(images.size());
         }
         cout << stats << flush;
         if (boards_to.solution_id()) {
@@ -3479,21 +3525,37 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
             if (boards_blue.size() == 0)
                 throw_logic("No solution while backtracking");
             if (example) {
-                stats.example_board
-                    (example > 0 ?
-                     boards_blue.example(opponent_armies, moved_armies, solution_moves & 1) :
-                     boards_blue.random_example(opponent_armies, moved_armies, solution_moves & 1));
-                cout << stats.example_board();
+                vector<Image> images;
+                if (example > 0) {
+                    stats.example_board(boards_blue.example(opponent_armies, moved_armies, solution_moves & 1));
+                    images.emplace_back(stats.example_board());
+                } else {
+                    stats.example_board(boards_blue.random_example(opponent_armies, moved_armies, solution_moves & 1));
+
+                    images.emplace_back(stats.example_board());
+                    for (uint i=1; i<EXAMPLE_IMAGES; ++i)
+                        images.emplace_back(boards_blue.random_example(opponent_armies, moved_armies, solution_moves & 1));
+                }
+                cout << images[0].str(images.size());
             }
         } else {
             if (boards_red.size() == 0)
                 throw_logic("No solution while backtracking");
             if (example) {
-                stats.example_board
-                    (example > 0 ?
-                     boards_red.example(opponent_armies, moved_armies, solution_moves & 1) :
-                     boards_red.random_example(opponent_armies, moved_armies, solution_moves & 1));
-                cout << stats.example_board();
+                vector<Image> images;
+                if (example > 0) {
+                    stats.example_board(boards_red.example(opponent_armies, moved_armies, solution_moves & 1));
+                    images.emplace_back(stats.example_board());
+                } else {
+                    stats.example_board(boards_red.random_example(opponent_armies, moved_armies, solution_moves & 1));
+
+                    images.emplace_back(stats.example_board());
+                    for (uint i=1; i<EXAMPLE_IMAGES; ++i)
+                        images.emplace_back
+                            (boards_red.random_example(opponent_armies, moved_armies, solution_moves & 1));
+                }
+
+                cout << images[0].str(images.size());
             }
         }
         cout << stats << flush;

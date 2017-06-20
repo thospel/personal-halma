@@ -277,7 +277,8 @@ uint64_t usage() {
     struct rusage u;
     if (getrusage(RUSAGE_SELF, &u))
         throw_errno("Could not getrusage");
-    return (UINT64_C(1000000)*u.ru_utime.tv_sec + u.ru_utime.tv_usec) + (UINT64_C(1000000)*u.ru_stime.tv_sec + u.ru_stime.tv_usec);
+    // return (UINT64_C(1000000)*u.ru_utime.tv_sec + u.ru_utime.tv_usec) + (UINT64_C(1000000)*u.ru_stime.tv_sec + u.ru_stime.tv_usec);
+    return UINT64_C(1000000)*u.ru_utime.tv_sec + u.ru_utime.tv_usec;
 }
 
 void _madv_free(void* ptr, size_t length) {
