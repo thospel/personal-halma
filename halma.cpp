@@ -2778,6 +2778,8 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated, bool sol
         "      .blue td { border: 1px solid blue; }\n"
         "      .stats td { text-align: right; }\n"
         "      .parameters th { text-align: left; }\n"
+        "      div.outer { overflow: hidden; }\n"
+        "      div.inner { float: left; }\n"
         "    </style>\n"
         "  </head>\n"
         "  <body>\n";
@@ -2785,61 +2787,74 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated, bool sol
         out_ << "    <h1>Warning: Terminated run</h1>\n";
     if (show_tables) {
         out_ <<
-            "    <h1>Internal Tables</h1>\n";
+            "    <h1>Internal Tables</h1>\n"
+            "    <div class='outer'>\n";
 
         out_ <<
-            "    <table>\n"
-            "    <tr><th><strong>Base Red</th></tr>\n"
-            "    <tr><td>\n";
+            "    <div class='inner'>\n"
+            "    <strong>Base Blue</strong><br/>\n";
+        header();
+        tables.svg_base_blue(out_, scale_, margin_);
+        footer();
+        out_ << "    </div>\n";
+
+        out_ <<
+            "    <div class='inner'>\n"
+            "    <strong>Base Red</strong><br/>\n";
         header();
         tables.svg_base_red(out_, scale_, margin_);
         footer();
-        out_ << "    </tr></table>\n";
+        out_ << "    </div>\n";
 
         out_ <<
-            "    <table>\n"
-            "    <tr><th>Edge Red</th></tr>\n"
-            "    <tr><td>\n";
+            "    <div class='inner'>\n"
+            "    <strong>Edge Red</strong><br/>\n";
         header();
         tables.svg_edge_red(out_, scale_, margin_);
         footer();
-        out_ << "    </tr></table>\n";
+        out_ << "    </div>\n";
 
         out_ <<
-            "    <table>\n"
-            "    <tr><th>Deep Red</th></tr>\n"
-            "    <tr><td>\n";
+            "    <div class='inner'>\n"
+            "    <strong>Deep Red</strong><br/>\n";
         header();
         tables.svg_deep_red(out_, scale_, margin_);
         footer();
-        out_ << "    </tr></table>\n";
+        out_ << "    </div>\n";
 
         out_ <<
-            "    <table>\n"
-            "    <tr><th>Shallow Red</th></tr>\n"
-            "    <tr><td>\n";
+            "    <div class='inner'>\n"
+            "    <strong>Shallow Red</strong><br/>\n";
         header();
         tables.svg_shallow_red(out_, scale_, margin_);
         footer();
-        out_ << "    </tr></table>\n";
+        out_ << "    </div>\n";
 
         out_ <<
-            "    <table>\n"
-            "    <tr><th>Deepness</th></tr>\n"
-            "    <tr><td>\n";
+            "    <div class='inner'>\n"
+            "    <strong>Deepness</strong><br/>\n";
         header();
         tables.svg_deepness(out_, scale_, margin_);
         footer();
-        out_ << "    </tr></table>\n";
+        out_ << "    </div>\n";
 
         out_ <<
-            "    <table>\n"
-            "    <tr><th>Parity</th></tr>\n"
-            "    <tr><td>\n";
+            "    <div class='inner'>\n"
+            "    <strong>Parity</strong><br/>\n";
         header();
         tables.svg_parity(out_, scale_, margin_);
         footer();
-        out_ << "    </tr></table>\n";
+        out_ << "    </div>\n";
+
+        out_ <<
+            "    <div class='inner'>\n"
+            "    <strong>Nr blue jumps to base<br/>after red evacuation</strong><br/>\n";
+        header();
+        tables.svg_nr_slide_jumps_red(out_, scale_, margin_);
+        footer();
+        out_ << "    </div>\n";
+
+        out_ << "    </div>\n";
     }
     out_ <<
         "    <h1>" << nr_moves << " / " << target_moves << " moves</h1>\n";

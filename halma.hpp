@@ -2486,6 +2486,9 @@ class Tables {
     void print_nr_slide_jumps_red() const {
         print_nr_slide_jumps_red(cout);
     }
+    void svg_base_blue(ostream& os, uint scale, uint margin) {
+        base_blue_.svg(os, scale, margin);
+    }
     void svg_base_red(ostream& os, uint scale, uint margin) {
         base_red_.svg(os, scale, margin);
     }
@@ -2502,6 +2505,9 @@ class Tables {
         deepness_.svg(os, scale, margin);
     }
     void svg_parity(ostream& os, uint scale, uint margin);
+    void svg_nr_slide_jumps_red(ostream& os, uint scale, uint margin) {
+        nr_slide_jumps_red_.svg(os, scale, margin);
+    }
   private:
     BoardTable<Coords>  slide_targets_;
     BoardTable<Coords>  jumpees_;
