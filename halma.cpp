@@ -46,6 +46,7 @@ bool statistics = false;
 bool hash_statistics = false;
 bool verbose = false;
 bool attempt = true;
+bool show_tables = false;
 char const* sample_subset_red = nullptr;
 char const* red_file = nullptr;
 
@@ -280,6 +281,29 @@ ostream& operator<<(ostream& os, ArmyZconst const& armyZ) {
     for (uint i=0; i<ARMY; ++i)
         os << army[i] << "\n";
     return os;
+}
+
+template<class T>
+void BoardTable<T>::svg(ostream& os, uint scale, uint margin) const {
+    os << "      <path d='";
+    for (uint x=0; x<=X; ++x) {
+        os << "M " << margin + x * scale << " " << margin << " ";
+        os << "L " << margin + x * scale << " " << margin + Y * scale << " ";
+    }
+    for (uint y=0; y<=Y; ++y) {
+        os << "M " << margin             << " " << margin + y * scale << " ";
+        os << "L " << margin + X * scale << " " << margin + y * scale << " ";
+    }
+    os << "'\n            stroke='black' />\n";
+
+    for (uint y=0; y<Y; ++y) {
+        uint y0 = margin + y * scale + scale/2;
+        for (uint x=0; x<X; ++x) {
+            uint x0 = margin + x * scale + scale/2;
+            Coord const pos{x, y};
+            os << "      <text x='" << x0 << "' y='" << y0 << "' dy='0.4em' text-anchor='middle'>" << static_cast<uint>((*this)[pos]) << "</text>\n";
+        }
+    }
 }
 
 void Statistics::_largest_subset_size(BoardSetBlue const& boards) {
@@ -543,7 +567,7 @@ void Board::svg(ostream& os, uint scale, uint margin) const {
         os << "M " << margin + x * scale << " " << margin << " ";
         os << "L " << margin + x * scale << " " << margin + Y * scale << " ";
     }
-    for (uint y=0; y<=X; ++y) {
+    for (uint y=0; y<=Y; ++y) {
         os << "M " << margin             << " " << margin + y * scale << " ";
         os << "L " << margin + X * scale << " " << margin + y * scale << " ";
     }
@@ -2393,6 +2417,17 @@ void Tables::print_red_parity_count(ostream& os) const {
     os << "\n";
 }
 
+void Tables::svg_parity(ostream& os, uint scale, uint margin) {
+    BoardTable<Parity> parity;
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            Coord const pos{x, y};
+            parity[pos] = pos.parity();
+        }
+    }
+    parity.svg(os, scale, margin);
+}
+
 Tables tables;
 
 size_t BoardSubsetBlue::memory_report() const {
@@ -2748,6 +2783,64 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated, bool sol
         "  <body>\n";
     if (terminated)
         out_ << "    <h1>Warning: Terminated run</h1>\n";
+    if (show_tables) {
+        out_ <<
+            "    <h1>Internal Tables</h1>\n";
+
+        out_ <<
+            "    <table>\n"
+            "    <tr><th><strong>Base Red</th></tr>\n"
+            "    <tr><td>\n";
+        header();
+        tables.svg_base_red(out_, scale_, margin_);
+        footer();
+        out_ << "    </tr></table>\n";
+
+        out_ <<
+            "    <table>\n"
+            "    <tr><th>Edge Red</th></tr>\n"
+            "    <tr><td>\n";
+        header();
+        tables.svg_edge_red(out_, scale_, margin_);
+        footer();
+        out_ << "    </tr></table>\n";
+
+        out_ <<
+            "    <table>\n"
+            "    <tr><th>Deep Red</th></tr>\n"
+            "    <tr><td>\n";
+        header();
+        tables.svg_deep_red(out_, scale_, margin_);
+        footer();
+        out_ << "    </tr></table>\n";
+
+        out_ <<
+            "    <table>\n"
+            "    <tr><th>Shallow Red</th></tr>\n"
+            "    <tr><td>\n";
+        header();
+        tables.svg_shallow_red(out_, scale_, margin_);
+        footer();
+        out_ << "    </tr></table>\n";
+
+        out_ <<
+            "    <table>\n"
+            "    <tr><th>Deepness</th></tr>\n"
+            "    <tr><td>\n";
+        header();
+        tables.svg_deepness(out_, scale_, margin_);
+        footer();
+        out_ << "    </tr></table>\n";
+
+        out_ <<
+            "    <table>\n"
+            "    <tr><th>Parity</th></tr>\n"
+            "    <tr><td>\n";
+        header();
+        tables.svg_parity(out_, scale_, margin_);
+        footer();
+        out_ << "    </tr></table>\n";
+    }
     out_ <<
         "    <h1>" << nr_moves << " / " << target_moves << " moves</h1>\n";
 }
@@ -3732,7 +3825,6 @@ void my_main(int UNUSED argc, char const* const* argv) {
     GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:c:LMiT", argv);
     long long int val;
     bool replay = false;
-    bool show_tables = false;
     bool batch = true;
     bool input = false;
     while (options.next())
@@ -3888,7 +3980,6 @@ void my_main(int UNUSED argc, char const* const* argv) {
 
     int needed_moves = tables.min_nr_moves();
     cout << "Minimum possible number of moves: " << needed_moves << "\n";
-    if (show_tables) return;
     int nr_moves = needed_moves;
     auto arg = options.next_arg();
     if (arg) {

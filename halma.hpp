@@ -635,6 +635,7 @@ class BoardTable {
     void set(Army const& army, T value) {
         for (auto const pos: army) (*this)[pos] = value;
     }
+    void svg(ostream& os, uint scale, uint margin) const;
   private:
     Array data_;
 };
@@ -2485,6 +2486,22 @@ class Tables {
     void print_nr_slide_jumps_red() const {
         print_nr_slide_jumps_red(cout);
     }
+    void svg_base_red(ostream& os, uint scale, uint margin) {
+        base_red_.svg(os, scale, margin);
+    }
+    void svg_edge_red(ostream& os, uint scale, uint margin) {
+        edge_red_.svg(os, scale, margin);
+    }
+    void svg_shallow_red(ostream& os, uint scale, uint margin) {
+        shallow_red_.svg(os, scale, margin);
+    }
+    void svg_deep_red(ostream& os, uint scale, uint margin) {
+        deep_red_.svg(os, scale, margin);
+    }
+    void svg_deepness(ostream& os, uint scale, uint margin) {
+        deepness_.svg(os, scale, margin);
+    }
+    void svg_parity(ostream& os, uint scale, uint margin);
   private:
     BoardTable<Coords>  slide_targets_;
     BoardTable<Coords>  jumpees_;
