@@ -38,6 +38,10 @@ int example = 0;
 int verbose_move = 0;
 bool prune_slide = false;
 bool prune_jump  = false;
+// Once you reach your base you can never leave
+bool california_red  = false;
+bool california_blue = false;
+bool unidirectional_red = false;
 uint64_t cut = 0;
 uint64_t use_cut = 0;
 
@@ -148,7 +152,7 @@ Align AlignFill(uint8_t byte) {
 }
 
 inline bool heuristics() {
-    return balance >= 0 || prune_slide || prune_jump;
+    return balance >= 0 || prune_slide || prune_jump || cut || unidirectional_red || california_blue || california_red;
 }
 
 std::random_device rnd;
@@ -2919,6 +2923,21 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
         heuristics = true;
         out_ << "cut=0x" << hex << cut << dec;
     }
+    if (unidirectional_red) {
+        if (heuristics) out_ << "<br />";
+        heuristics = true;
+        out_ << "red can only go forward";
+    }
+    if (california_blue) {
+        if (heuristics) out_ << "<br />";
+        heuristics = true;
+        out_ << "blue cannot leave red base";
+    }
+    if (california_red) {
+        if (heuristics) out_ << "<br />";
+        heuristics = true;
+        out_ << "red cannot leave blue base";
+    }
     if (!heuristics)
         out_ << "None";
     out_ <<
@@ -3399,6 +3418,18 @@ int solve(Board const& board, int nr_moves, Army& red_army,
         heuristics = true;
         cout << ", cut=0x" << hex << cut << dec;
     }
+    if (unidirectional_red) {
+        heuristics = true;
+        cout << ", red can only go forward";
+    }
+    if (california_blue) {
+        heuristics = true;
+        cout << ", blue cannot leave red base";
+    }
+    if (california_red) {
+        heuristics = true;
+        cout << ", red cannot leave blue base";
+    }
     if (!heuristics)
         cout << ", no heuristics";
     cout << ")" << endl;
@@ -3843,7 +3874,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:c:LMiT", argv);
+    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:c:LMiTuzZ", argv);
     long long int val;
     bool replay = false;
     bool batch = true;
@@ -3863,6 +3894,9 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'b': balance     = atoi(options.arg()); break;
             case 'e': example     =  1; break;
             case 'j': prune_jump  = true; break;
+            case 'u': unidirectional_red  = true; break;
+            case 'z': california_red  = true; break;
+            case 'Z': california_blue = true; break;
             case 'p': replay      = true; break;
             case 'q': testq       = true; break;
             case 's': prune_slide = true; break;

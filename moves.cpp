@@ -441,6 +441,14 @@ Statistics NAME(uint thid,
                                 goto SOLUTION;
                             }
                         } else {
+                            if (california_blue && soldier.base_red()) {
+                                if (VERBOSE) {
+                                    logger << "   Move " << soldier << " to " << val << "\n";
+                                    logger << "   Prune BLUE cannot leave RED base\n";
+                                    logger.flush();
+                                }
+                                continue;
+                            }
                             edge_c += val.edge_red();
                             Ndistance_r |=  val.Ndistance_base_red();
                             for (auto const r: red)
@@ -709,6 +717,22 @@ Statistics NAME(uint thid,
                                     continue;
                                 }
                             }
+                        }
+                        if (unidirectional_red && val.progress() >= soldier.progress() && val.progress() != 0) {
+                            if (VERBOSE) {
+                                logger << "   Move " << soldier << " to " << val << "\n";
+                                logger << "   Prune RED makes no progress\n";
+                                logger.flush();
+                            }
+                            continue;
+                        }
+                        if (california_red && soldier.base_blue() > val.base_blue()) {
+                            if (VERBOSE) {
+                                logger << "   Move " << soldier << " to " << val << "\n";
+                                logger << "   Prune RED cannot leave BLUE base\n";
+                                logger.flush();
+                            }
+                            continue;
                         }
 #endif // BLUE_TO_MOVE
                     }

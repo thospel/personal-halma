@@ -140,6 +140,9 @@ extern int balance_min, balance_max;
 
 extern bool prune_slide;
 extern bool prune_jump;
+extern bool california_red;
+extern bool california_blue;
+extern bool unidirectional_red;
 extern int example;
 
 // There is no fundamental limit. Just make up *SOME* bound
