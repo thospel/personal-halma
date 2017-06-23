@@ -284,26 +284,36 @@ ostream& operator<<(ostream& os, ArmyZconst const& armyZ) {
 }
 
 template<class T>
-void BoardTable<T>::svg(ostream& os, uint scale, uint margin) const {
-    os << "      <path d='";
+void BoardTable<T>::svg(Svg& svg, Tables UNUSED & tables, string const& title) const {
+    svg <<
+        "      <div class='inner'>\n"
+        "        <strong>" << title << "</strong><br/>\n";
+    svg.header("          ");
+
+    auto scale = svg.scale();
+    auto margin = svg.margin();
+    svg << "          <path d='";
     for (uint x=0; x<=X; ++x) {
-        os << "M " << margin + x * scale << " " << margin << " ";
-        os << "L " << margin + x * scale << " " << margin + Y * scale << " ";
+        svg << "M " << margin + x * scale << " " << margin << " ";
+        svg << "L " << margin + x * scale << " " << margin + Y * scale << " ";
     }
     for (uint y=0; y<=Y; ++y) {
-        os << "M " << margin             << " " << margin + y * scale << " ";
-        os << "L " << margin + X * scale << " " << margin + y * scale << " ";
+        svg << "M " << margin             << " " << margin + y * scale << " ";
+        svg << "L " << margin + X * scale << " " << margin + y * scale << " ";
     }
-    os << "'\n            stroke='black' />\n";
+    svg << "'\n                stroke='black' />\n";
 
     for (uint y=0; y<Y; ++y) {
         uint y0 = margin + y * scale + scale/2;
         for (uint x=0; x<X; ++x) {
             uint x0 = margin + x * scale + scale/2;
             Coord const pos{x, y};
-            os << "      <text x='" << x0 << "' y='" << y0 << "' dy='0.4em' text-anchor='middle'>" << static_cast<uint>((*this)[pos]) << "</text>\n";
+            svg << "          <text x='" << x0 << "' y='" << y0 << "' dy='0.4em' text-anchor='middle'>" << static_cast<int>((*this)[pos]) << "</text>\n";
         }
     }
+
+    svg.footer("          ");
+    svg << "      </div>\n";
 }
 
 void Statistics::_largest_subset_size(BoardSetBlue const& boards) {
@@ -2197,23 +2207,30 @@ void Tables::init() {
 
     // Set up edge, distance and parity tables
     for (uint y=0; y < Y; ++y) {
-        Norm d = infinity_;
 #if !__BMI2__
         Parity y_parity = y%2;
 #endif // !__BMI2__
         for (uint x=0; x < X; ++x) {
+            Norm d_red = infinity_;
+            Norm d_blue = infinity_;
             Coord const pos{x, y};
             for (uint i=0; i<ARMY; ++i) {
                 uint dy = (Y-1)+y-red[i].y();
                 uint dx = (X-1)+x-red[i].x();
                 Norm d1 = norm[dy][dx];
-                if (d1 < d) d = d1;
+                if (d1 < d_red) d_red = d1;
+
+                dy = (Y-1)+y-blue[i].y();
+                dx = (X-1)+x-blue[i].x();
+                d1 = norm[dy][dx];
+                if (d1 < d_blue) d_blue = d1;
             }
             Ndistance_base_red_[pos] =
-                d == 0 ? Ninfinity_ :
-                d > 2  ? NLEFT >> (d-2) :
+                d_red == 0 ? Ninfinity_ :
+                d_red > 2  ? NLEFT >> (d_red-2) :
                 NLEFT;
-            edge_red_[pos] = d == 1;
+            edge_red_[pos] = d_red == 1;
+            progress_[pos] = d_blue;
 #if !__BMI2__
             Parity x_parity = x % 2;
             parity_[pos]  = 2*y_parity + x_parity;
@@ -2405,6 +2422,16 @@ void Tables::print_nr_slide_jumps_red(ostream& os) const {
     }
 }
 
+void Tables::print_progress(ostream& os) const {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << setw(2) << static_cast<int>(progress(pos));
+        }
+        os << "\n";
+    }
+}
+
 void Tables::print_blue_parity_count(ostream& os) const {
     for (auto c: parity_count())
         os << " " << c;
@@ -2417,7 +2444,31 @@ void Tables::print_red_parity_count(ostream& os) const {
     os << "\n";
 }
 
-void Tables::svg_parity(ostream& os, uint scale, uint margin) {
+void Tables::svg_base_blue(Svg& svg) {
+    base_blue_.svg(svg, *this, "Base Blue");
+}
+
+void Tables::svg_base_red(Svg& svg) {
+    base_red_.svg(svg, *this, "Base Red");
+}
+
+void Tables::svg_edge_red(Svg& svg) {
+    edge_red_.svg(svg, *this, "Edge Red");
+}
+
+void Tables::svg_shallow_red(Svg& svg) {
+    shallow_red_.svg(svg, *this, "Shallow Red");
+}
+
+void Tables::svg_deep_red(Svg& svg) {
+    deep_red_.svg(svg, *this, "Deep Red");
+}
+
+void Tables::svg_deepness(Svg& svg) {
+    deepness_.svg(svg, *this, "Deepness");
+}
+
+void Tables::svg_parity(Svg& svg) {
     BoardTable<Parity> parity;
     for (uint y=0; y < Y; ++y) {
         for (uint x=0; x < X; ++x) {
@@ -2425,7 +2476,16 @@ void Tables::svg_parity(ostream& os, uint scale, uint margin) {
             parity[pos] = pos.parity();
         }
     }
-    parity.svg(os, scale, margin);
+    parity.svg(svg, *this, "Parity");
+}
+
+void Tables::svg_nr_slide_jumps_red(Svg& svg) {
+    nr_slide_jumps_red_.svg
+        (svg, *this, "Nr blue jumps to base<br/>after red evacuation");
+}
+
+void Tables::svg_progress(Svg& svg) {
+    progress_.svg(svg, *this, "Progress");
 }
 
 Tables tables;
@@ -2790,69 +2850,15 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated, bool sol
             "    <h1>Internal Tables</h1>\n"
             "    <div class='outer'>\n";
 
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Base Blue</strong><br/>\n";
-        header();
-        tables.svg_base_blue(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Base Red</strong><br/>\n";
-        header();
-        tables.svg_base_red(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Edge Red</strong><br/>\n";
-        header();
-        tables.svg_edge_red(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Deep Red</strong><br/>\n";
-        header();
-        tables.svg_deep_red(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Shallow Red</strong><br/>\n";
-        header();
-        tables.svg_shallow_red(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Deepness</strong><br/>\n";
-        header();
-        tables.svg_deepness(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Parity</strong><br/>\n";
-        header();
-        tables.svg_parity(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
-
-        out_ <<
-            "    <div class='inner'>\n"
-            "    <strong>Nr blue jumps to base<br/>after red evacuation</strong><br/>\n";
-        header();
-        tables.svg_nr_slide_jumps_red(out_, scale_, margin_);
-        footer();
-        out_ << "    </div>\n";
+        tables.svg_base_blue(*this);
+        tables.svg_base_red(*this);
+        tables.svg_edge_red(*this);
+        tables.svg_deep_red(*this);
+        tables.svg_shallow_red(*this);
+        tables.svg_deepness(*this);
+        tables.svg_parity(*this);
+        tables.svg_nr_slide_jumps_red(*this);
+        tables.svg_progress(*this);
 
         out_ << "    </div>\n";
     }
@@ -2866,21 +2872,21 @@ void Svg::html_footer() {
         "</html>\n";
 }
 
-void Svg::header() {
-    out_ << "    <svg height='" << Y * scale_ + 2*margin_ << "' width='" << X * scale_ + 2*margin_ << "'>\n";
+void Svg::header(string const& indent) {
+    out_ << indent << "<svg height='" << Y * scale_ + 2*margin_ << "' width='" << X * scale_ + 2*margin_ << "'>\n";
     uint h = scale_ * 0.10;
     uint w = scale_ * 0.15;
-    out_ <<
-        "      <defs>\n"
-        "        <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "'\n"
-        "                refX='" << w << "' refY='" << h << "' orient='auto'>\n"
-        "          <polygon points='0 0, " << w << " " << h << ", 0 " << 2*h << "' />\n"
-        "        </marker>\n"
-        "      </defs>\n";
+    out_
+        << indent << "  <defs>\n"
+        << indent << "    <marker id='arrowhead' markerWidth='" << w << "' markerHeight='" << 2*h << "'\n"
+        << indent << "            refX='" << w << "' refY='" << h << "' orient='auto'>\n"
+        << indent << "      <polygon points='0 0, " << w << " " << h << ", 0 " << 2*h << "' />\n"
+        << indent << "    </marker>\n"
+        << indent << "  </defs>\n";
 }
 
-void Svg::footer() {
-    out_ << "    </svg>\n";
+void Svg::footer(string const& indent) {
+    out_ << indent << "</svg>\n";
 }
 
 void Svg::parameters(time_t start_time, time_t stop_time) {
@@ -3104,7 +3110,7 @@ void Svg::stats(string const& cls, StatisticsList const& stats_list) {
 
     if (any_of(stats_list.begin(), stats_list.end(),
                [](StatisticsE const& st) { return st.example(); })) {
-        out_ << "<h4>Sample boards</h4>\n";
+        out_ << "    <h4>Sample boards</h4>\n";
         header();
         board(tables.start());
         footer();
@@ -3133,11 +3139,11 @@ void Svg::write(time_t start_time, time_t stop_time,
         parameters(start_time, stop_time);
     }
     if (stats_list_solve.size()) {
-        out_ << "<h3>Solve (" << solve_duration << " seconds)</h3>\n";
+        out_ << "    <h3>Solve (" << solve_duration << " seconds)</h3>\n";
         stats("Solve", stats_list_solve);
     }
     if (stats_list_backtrack.size()) {
-        out_ << "<h3>Backtrack (" << backtrack_duration << " seconds)</h3>\n";
+        out_ << "    <h3>Backtrack (" << backtrack_duration << " seconds)</h3>\n";
         stats("Backtrack", stats_list_backtrack);
     }
     html_footer();
@@ -3983,6 +3989,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
         tables.print_shallow_red();
         cout << "Deepness:\n";
         tables.print_deepness();
+        cout << "Progress:\n";
+        tables.print_progress();
         cout << "Parity:\n";
         tables.print_parity();
         cout << "Blue Base parity count:\n";

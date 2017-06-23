@@ -251,6 +251,7 @@ class Coord {
     inline uint8_t deep_red() const PURE;
     inline uint8_t shallow_red() const PURE;
     inline uint8_t deepness() const PURE;
+    inline  int8_t progress() const PURE;
     inline Nbits Ndistance_base_red() const PURE;
     inline Coords slide_targets() const PURE;
     inline Coords jumpees() const PURE;
@@ -615,6 +616,7 @@ class ArmyZconst {
     Coord const& RESTRICT base_;
 };
 
+class Svg;
 template<class T>
 class BoardTable {
   public:
@@ -635,7 +637,7 @@ class BoardTable {
     void set(Army const& army, T value) {
         for (auto const pos: army) (*this)[pos] = value;
     }
-    void svg(ostream& os, uint scale, uint margin) const;
+    inline void svg(Svg& svg, Tables& tables, string const& title) const;
   private:
     Array data_;
 };
@@ -2308,6 +2310,8 @@ class Svg {
         return file("failures", nr_moves);
     }
     Svg(uint scale = SCALE);
+    inline uint scale() const { return scale_; }
+    inline uint margin() const { return margin_; }
     void write(time_t start_time, time_t stop_time,
                int solution_moves, BoardList const& boards,
                StatisticsList const& stats_list_solve, Sec::rep solve_duration,
@@ -2320,9 +2324,12 @@ class Svg {
     void html(FullMoves const& full_moves);
     void html_header(uint nr_moves, int tatget_moves, bool terminated = false, bool solved=false);
     void html_footer();
-    void header();
-    void footer();
+    void header(string const& indent = "    ");
+    void footer(string const& indent = "    ");
     string str() const PURE { return out_.str(); }
+
+    template<class T>
+    inline Svg& operator<<(T const& t) ALWAYS_INLINE;
 
   private:
     static string const file(string const& prefix, uint nr_moves) FUNCTIONAL;
@@ -2331,6 +2338,12 @@ class Svg {
     uint margin_;
     stringstream out_;
 };
+
+template<class T>
+Svg& Svg::operator<<(T const& t) {
+    out_ << t;
+    return *this;
+}
 
 inline ostream& operator<<(ostream& os, Svg const& svg) {
     os << svg.str();
@@ -2400,6 +2413,9 @@ class Tables {
     }
     inline Coord deep_red_base(uint i) const FUNCTIONAL {
         return deep_red_base_[i];
+    }
+    inline  int8_t progress(Coord const pos) const FUNCTIONAL {
+        return progress_[pos];
     }
     inline uint medium_red() const FUNCTIONAL {
         return medium_red_;
@@ -2486,28 +2502,19 @@ class Tables {
     void print_nr_slide_jumps_red() const {
         print_nr_slide_jumps_red(cout);
     }
-    void svg_base_blue(ostream& os, uint scale, uint margin) {
-        base_blue_.svg(os, scale, margin);
+    void print_progress(ostream& os) const COLD;
+    void print_progress() const {
+        print_progress(cout);
     }
-    void svg_base_red(ostream& os, uint scale, uint margin) {
-        base_red_.svg(os, scale, margin);
-    }
-    void svg_edge_red(ostream& os, uint scale, uint margin) {
-        edge_red_.svg(os, scale, margin);
-    }
-    void svg_shallow_red(ostream& os, uint scale, uint margin) {
-        shallow_red_.svg(os, scale, margin);
-    }
-    void svg_deep_red(ostream& os, uint scale, uint margin) {
-        deep_red_.svg(os, scale, margin);
-    }
-    void svg_deepness(ostream& os, uint scale, uint margin) {
-        deepness_.svg(os, scale, margin);
-    }
-    void svg_parity(ostream& os, uint scale, uint margin);
-    void svg_nr_slide_jumps_red(ostream& os, uint scale, uint margin) {
-        nr_slide_jumps_red_.svg(os, scale, margin);
-    }
+    NOINLINE void svg_base_blue(Svg& svg);
+    NOINLINE void svg_base_red(Svg& svg);
+    NOINLINE void svg_edge_red(Svg& svg);
+    NOINLINE void svg_shallow_red(Svg& svg);
+    NOINLINE void svg_deep_red(Svg& svg);
+    NOINLINE void svg_deepness(Svg& svg);
+    NOINLINE void svg_parity(Svg& svg);
+    NOINLINE void svg_nr_slide_jumps_red(Svg& svg);
+    NOINLINE void svg_progress(Svg& svg);
   private:
     BoardTable<Coords>  slide_targets_;
     BoardTable<Coords>  jumpees_;
@@ -2520,6 +2527,7 @@ class Tables {
     BoardTable<uint8_t> shallow_red_;
     BoardTable<uint8_t> deepness_;
     BoardTable<uint8_t> nr_slide_jumps_red_;
+    BoardTable< int8_t> progress_;
     BoardTable<Offsets> slide_jumps_red_;
 #if !__BMI2__
     BoardTable<Parity> parity_;
@@ -2571,6 +2579,10 @@ Nbits Coord::Ndistance_base_red() const {
 
 Coords Coord::slide_targets() const {
     return tables.slide_targets(*this);
+}
+
+int8_t Coord::progress() const {
+    return tables.progress(*this);
 }
 
 Coords Coord::jumpees() const {
