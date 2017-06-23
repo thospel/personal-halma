@@ -119,6 +119,7 @@ extern size_t PAGE_SIZE;
 extern size_t PAGE_SIZE1;
 extern const std::string PID;
 extern std::string HOSTNAME;
+extern std::string CPUS;
 extern std::string const VCS_COMMIT;
 extern std::string const VCS_COMMIT_TIME;
 
@@ -139,7 +140,7 @@ std::string time_string(time_t time);
 std::string time_string();
 time_t now();
 size_t get_memory(bool set_base_mem = false);
-void set_signals();
+void set_signals() COLD;
 void sched_batch();
 uint64_t usage();
 bool is_terminated();
@@ -149,8 +150,8 @@ ssize_t total_mmaps() PURE;
 ssize_t total_mlocked() PURE;
 ssize_t total_mlocks() PURE;
 void update_allocated();
-void imbue(std::ostream& os);
-void init_system();
+void imbue(std::ostream& os) COLD;
+void init_system() COLD;
 
 inline uint thread_id() PURE;
 uint thread_id() {

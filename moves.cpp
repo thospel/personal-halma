@@ -339,9 +339,15 @@ Statistics NAME(uint thid,
 
                 // Jumps
                 int nr_reachable = 1;
-                if (!(BLUE_TO_MOVE && blue_jump_only) || !soldier.base_red()) {
+                if (BLUE_TO_MOVE && blue_jump_only && soldier.base_red()) {
+                    if (VERBOSE) {
+                        logger << "   Prune all blue jumps by " << soldier << " (jump but already on red base)\n";
+                        if (a==0 && pass) logger << "   Prune pass\n";
+                        logger.flush();
+                    }
+                } else {
                     reachable[0] = soldier;
-                    image.set(soldier, CLOSED_LOOP && !PASS ? EMPTY : COLORS);
+                    image.set(soldier, closed_loop ? EMPTY : COLORS);
                     for (int i=0; i < nr_reachable; ++i) {
                         auto jumpees      = reachable[i].jumpees();
                         auto jump_targets = reachable[i].jump_targets();
@@ -375,13 +381,14 @@ Statistics NAME(uint thid,
                                 }
                             }
                         }
-                    }
+                    } else if (a==0 && pass)
+                        reachable[nr_reachable++] = soldier;
                 }
 
                 // Slides
                 if (BLUE_TO_MOVE && blue_jump_only) {
                     if (VERBOSE)
-                        logger << "   Prune all blue slides (jump only)\n" << flush;
+                        logger << "   Prune all blue slides by" << soldier << " (jump_only)\n" << flush;
                 } else if (BLUE_TO_MOVE && prune_slide) {
                     if (slides) {
                         // Either slide off base...

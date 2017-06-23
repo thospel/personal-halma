@@ -3,6 +3,7 @@
 #include "halma.hpp"
 
 #include <cctype>
+#include <cstring>
 #include <cmath>
 #include <fstream>
 
@@ -36,6 +37,8 @@ int balance_min, balance_max;
 
 int example = 0;
 int verbose_move = 0;
+bool pass = true;
+bool closed_loop = true;
 bool prune_slide = false;
 bool prune_jump  = false;
 // Once you reach your base you can never leave
@@ -151,8 +154,10 @@ Align AlignFill(uint8_t byte) {
     return val;
 }
 
-inline bool heuristics() {
-    return balance >= 0 || prune_slide || prune_jump || cut || unidirectional_red || california_blue || california_red;
+inline bool heuristics() ALWAYS_INLINE;
+bool heuristics() {
+    // Nominally should also have !closed_loop && !pass, but implied by !pass
+    return balance >= 0 || prune_slide || prune_jump || cut || unidirectional_red || california_blue || california_red || !pass;
 }
 
 std::random_device rnd;
@@ -507,6 +512,22 @@ Board::Board(string const& file) {
         throw;
     }
     if (fclose(fp)) throw_errno("Could not close '" + file + "'");
+}
+
+void Board::do_move(FullMove const& move_, bool blue_to_move) {
+    if (move_.empty()) {
+        if (!pass) throw_logic("Pass not allowed with the current options");
+        return;
+    }
+    do_move(move_.move(), blue_to_move);
+}
+
+void Board::do_move(FullMove const& move_) {
+    if (move_.empty()) {
+        if (!pass) throw_logic("Pass not allowed with the current options");
+        return;
+    }
+    do_move(move_.move());
 }
 
 void Board::read(FILE* fp) {
@@ -1963,7 +1984,10 @@ void ArmySetCache::resize() {
 
 FullMove::FullMove(char const* str): FullMove{} {
     auto ptr = str;
-    if (!ptr[0]) return;
+    if (!ptr[0] || strcmp(ptr, "pass") == 0) {
+        if (!pass) throw_logic("Pass is invalid with the current options");
+        return;
+    }
     while (true) {
         char ch = *ptr++;
         if (ch < letters[0] || ch >= letters[X]) break;
@@ -1979,24 +2003,36 @@ FullMove::FullMove(char const* str): FullMove{} {
         --y;
         if (y >= Y) break;
         emplace_back(x, y);
-        if (!ch) return;
+        if (!ch) {
+            if (size() == 1) throw_logic("Move cannot be a single coordinate");
+            return;
+        }
         if (ch != '-') break;
     }
     throw_logic("Could not parse full move '" + string(str) + "'");
 }
 
 Coord FullMove::from() const {
-    if (size() == 0) throw_logic("Empty full_move");
+    if (UNLIKELY(size() < 2)) {
+        if (empty()) throw_logic("Empty full_move");
+        throw_logic("Single coordinate full move");
+    }
     return (*this)[0];
 }
 
 Coord FullMove::to()   const {
-    if (size() == 0) throw_logic("Empty full_move");
+    if (UNLIKELY(size() < 2)) {
+        if (empty()) throw_logic("Empty full_move");
+        throw_logic("Single coordinate full move");
+    }
     return (*this)[size()-1];
 }
 
 Move FullMove::move() const {
-    if (size() == 0) throw_logic("Empty full_move");
+    if (UNLIKELY(size() < 2)) {
+        if (empty()) throw_logic("Empty full_move");
+        throw_logic("Single coordinate full move");
+    }
     return Move{(*this)[0], (*this)[size()-1]};
 }
 
@@ -2013,9 +2049,9 @@ void FullMove::move_expand(Board const& board, Move const& move) {
 
     // Must be a jump
     Image image{board};
-    if (CLOSED_LOOP && !PASS) image.set(move.from, EMPTY);
+    if (closed_loop) image.set(move.from, EMPTY);
     array<Coord, MAX_X*MAX_Y/4+1> reachable;
-    array<int,    MAX_X*MAX_Y/4+1> previous;
+    array<int,   MAX_X*MAX_Y/4+1> previous;
     reachable[0] = move.from;
     int nr_reachable = 1;
     for (int i=0; i < nr_reachable; ++i) {
@@ -2044,31 +2080,78 @@ void FullMove::move_expand(Board const& board, Move const& move) {
     throw_logic("Move is a not a jump but has the same parity");
 }
 
-FullMove::FullMove(Board const& board_from, Board const& board_to) : FullMove{} {
+void FullMove::loop_expand(Board const& board, bool blue_to_move) {
+    Army const& army = blue_to_move ? board.blue() : board.red();
+
+    Image image{board};
+    array<Coord, MAX_X*MAX_Y/4+1> reachable;
+    array<int,   MAX_X*MAX_Y/4+1> previous;
+    for (Coord const pos: army) {
+        image.set(pos, EMPTY);
+        reachable[0] = pos;
+        int nr_reachable = 1;
+        for (int i=0; i < nr_reachable; ++i) {
+            auto jumpees      = reachable[i].jumpees();
+            auto jump_targets = reachable[i].jump_targets();
+            for (uint r = 0; r < RULES; ++r, jumpees.next(), jump_targets.next()) {
+                auto const jumpee = jumpees.current();
+                auto const target = jump_targets.current();
+                if (!image.jumpable(jumpee, target)) continue;
+                image.set(target, COLORS);
+                previous [nr_reachable] = i;
+                reachable[nr_reachable] = target;
+                if (target == pos) {
+                    emplace_back(pos);
+                    array<Coord, MAX_X*MAX_Y/4+1> trace;
+                    int t = 0;
+                    while (nr_reachable) {
+                        trace[t++] = reachable[nr_reachable];
+                        nr_reachable = previous[nr_reachable];
+                    }
+                    while (t > 0) emplace_back(trace[--t]);
+                    return;
+                }
+                ++nr_reachable;
+            }
+        }
+        for (int i=1; i < nr_reachable; ++i) image.set(reachable[i], EMPTY);
+        image.set(pos, blue_to_move ? BLUE : RED);
+    }
+    throw_logic("Could not find loop");
+}
+
+FullMove::FullMove(Board const& board_from, Board const& board_to, bool blue_to_move) : FullMove{} {
     //bool blue_diff = board_from.blue() !=  board_to.blue();
     //bool red_diff  = board_from.red()  !=  board_to.red();
     // Temporary workaround until C++17 will support overallocated classes
     bool blue_diff = 0 != memcmp(&board_from.blue(), &board_to.blue(), sizeof(Coord) * ARMY);
     bool red_diff  = 0 != memcmp(&board_from.red(),  &board_to.red(), sizeof(Coord) * ARMY);
-    if (blue_diff && red_diff) throw_logic("Both players move");
 
-    if (blue_diff) {
-        Move move{board_from.blue(), board_to.blue()};
-        move_expand(board_from, move);
-        return;
+    if (blue_to_move) {
+        if (red_diff) throw_logic("Blue to move but red is different");
+        if (blue_diff) {
+            Move move{board_from.blue(), board_to.blue()};
+            move_expand(board_from, move);
+            return;
+        }
+        if (pass) return;
+        if (!closed_loop) throw_logic("Invalid null move");
+        loop_expand(board_from, true);
+    } else {
+        if (blue_diff) throw_logic("Red to move but blue is different");
+        if (red_diff) {
+            Move move{board_from.red(), board_to.red()};
+            move_expand(board_from, move);
+            return;
+        }
+        if (pass) return;
+        if (!closed_loop) throw_logic("Invalid null move");
+        loop_expand(board_from, false);
     }
-    if (red_diff) {
-        Move move{board_from.red(), board_to.red()};
-        move_expand(board_from, move);
-        return;
-    }
-    if (PASS) return;
-    if (!CLOSED_LOOP) throw_logic("Invalid null move");
-    // CLOSED LOOP also needs a color hint
-    throw_logic("closed loop analysis not implemented yet");
 }
 
 string FullMove::str() const {
+    if (empty()) return "pass";
     string result;
     for (auto const &move: *this) {
         result += move.str();
@@ -2234,7 +2317,8 @@ void Tables::init() {
                 d_red > 2  ? NLEFT >> (d_red-2) :
                 NLEFT;
             edge_red_[pos] = d_red == 1;
-            progress_[pos] = d_blue;
+            progress_ [pos] = 1 + d_blue;
+            progress0_[pos] = d_blue == 0 ? 0 : 1 + d_blue;
 #if !__BMI2__
             Parity x_parity = x % 2;
             parity_[pos]  = 2*y_parity + x_parity;
@@ -2436,6 +2520,16 @@ void Tables::print_progress(ostream& os) const {
     }
 }
 
+void Tables::print_progress0(ostream& os) const {
+    for (uint y=0; y < Y; ++y) {
+        for (uint x=0; x < X; ++x) {
+            auto pos = Coord{x, y};
+            os << " " << setw(2) << static_cast<int>(progress0(pos));
+        }
+        os << "\n";
+    }
+}
+
 void Tables::print_blue_parity_count(ostream& os) const {
     for (auto c: parity_count())
         os << " " << c;
@@ -2490,6 +2584,10 @@ void Tables::svg_nr_slide_jumps_red(Svg& svg) {
 
 void Tables::svg_progress(Svg& svg) {
     progress_.svg(svg, *this, "Progress");
+}
+
+void Tables::svg_progress0(Svg& svg) {
+    progress0_.svg(svg, *this, "Progress0");
 }
 
 Tables tables;
@@ -2863,6 +2961,7 @@ void Svg::html_header(uint nr_moves, int target_moves, bool terminated, bool sol
         tables.svg_parity(*this);
         tables.svg_nr_slide_jumps_red(*this);
         tables.svg_progress(*this);
+        tables.svg_progress0(*this);
 
         out_ << "    </div>\n";
     }
@@ -2938,14 +3037,27 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
         heuristics = true;
         out_ << "red cannot leave blue base";
     }
+    if (!pass) {
+        if (heuristics) out_ << "<br />";
+        heuristics = true;
+        out_ << "disallow pass";
+        // closed_loop is meaningless under pass
+        if (!closed_loop) {
+            if (heuristics) out_ << "<br />";
+            heuristics = true;
+            out_ << "disallow closed loops";
+        }
+    }
     if (!heuristics)
         out_ << "None";
+    if (red_file)
+        out_ << "<br />file";
     out_ <<
         "</td></tr>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
         "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp10(9) << " GB (" << SYSTEM_MEMORY / exp2(30) << " GiB)</td></tr>\n"
         "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp10(9) << " GB (" << SYSTEM_SWAP / exp2(30) << " GiB)</td></tr>\n"
-        "      <tr class='cpus'><th>CPUs</th><td>" << NR_CPU << "</td></tr>\n"
+        "      <tr class='cpus'><th>Logical CPUs</th><td>" << CPUS << "</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
         "      <tr class='stop_time'><th>Stop</th><td>"  << time_string(stop_time) << "</td></tr>\n"
@@ -2964,13 +3076,15 @@ void Svg::move(FullMove const& move) {
 
 void Svg::game(BoardList const& boards) {
     FullMoves full_moves;
+    bool blue_to_move = boards.size() & 1;
     for (size_t i = 0; i < boards.size(); ++i) {
+        blue_to_move = !blue_to_move;
         header();
         auto const& board_from = boards[i];
         board(board_from);
         if (i < boards.size()-1) {
             auto const& board_to = boards[i+1];
-            full_moves.emplace_back(board_from, board_to);
+            full_moves.emplace_back(board_from, board_to, blue_to_move);
             move(full_moves.back());
         }
         footer();
@@ -3357,7 +3471,7 @@ void play(bool print_moves) {
         }
         // cout << board;
         if (print_moves) {
-            moves.emplace_back(previous_board, board);
+            moves.emplace_back(previous_board, board, blue_to_move);
             previous_board = board;
         }
     }
@@ -3430,8 +3544,19 @@ int solve(Board const& board, int nr_moves, Army& red_army,
         heuristics = true;
         cout << ", red cannot leave blue base";
     }
+    if (!pass) {
+        heuristics = true;
+        cout << ", disallow pass";
+        // closed_loop is meaningless under pass
+        if (!closed_loop) {
+            heuristics = true;
+            cout << ", disallow closed loops";
+        }
+    }
     if (!heuristics)
         cout << ", no heuristics";
+    if (red_file)
+        cout << ", file";
     cout << ")" << endl;
 
     vector<ArmyId> largest_red;
@@ -3447,7 +3572,7 @@ int solve(Board const& board, int nr_moves, Army& red_army,
     army_set[0].drop_hash();
     army_set[1].drop_hash();
 
-    use_cut = cut;
+    use_cut = 0;
     ArmyId red_id = 0;
     int i;
     for (i=0; nr_moves>0; --nr_moves, ++i) {
@@ -3456,6 +3581,8 @@ int solve(Board const& board, int nr_moves, Army& red_army,
             return -1;
         }
         if (nr_moves == verbose_move) verbose = !verbose;
+        // Don't cut the first move
+        if (i == 1) use_cut = cut << 32;
         // Avoid cutting the actual solution we found
         if (nr_moves == 1) use_cut = 0;
 
@@ -3623,7 +3750,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
         }
     }
 
-    use_cut = cut;
+    use_cut = 0;
     cout << setw(15) << "set " << setw(2) << nr_moves << endl;
     for (uint i=0; solution_moves>0; --nr_moves, --solution_moves, ++i) {
         auto& boards_blue = boardset_pairs.blue(solution_moves);
@@ -3634,6 +3761,8 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
         auto const& opponent_armies = *army_set[i+1];
         auto& moved_armies          = *army_set[i+2];
 
+        // Don't cut the first move
+        if (i == 1) use_cut = cut << 32;
         // Avoid cutting the actual solution we found
         if (nr_moves == 1) use_cut = 0;
 
@@ -3808,7 +3937,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
             // Jumps
             reachable[0] = soldier;
             int nr_reachable = 1;
-            image.set(soldier, CLOSED_LOOP && !PASS ? EMPTY : COLORS);
+            image.set(soldier, closed_loop ? EMPTY : COLORS);
             for (int i=0; i < nr_reachable; ++i) {
                 auto jumpees      = reachable[i].jumpees();
                 auto jump_targets = reachable[i].jump_targets();
@@ -3874,7 +4003,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
 void my_main(int argc, char const* const* argv) COLD;
 void my_main(int UNUSED argc, char const* const* argv) {
-    GetOpt options("b:B:t:IsHSjpqQ:eEFf:vV:R:Ax:y:r:a:c:LMiTuzZ", argv);
+    GetOpt options("b:B:t:ICPsHSjpqQ:eEFf:vV:R:Ax:y:r:a:c:LMiTuzZ", argv);
     long long int val;
     bool replay = false;
     bool batch = true;
@@ -3893,6 +4022,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'T': show_tables = true; break;
             case 'b': balance     = atoi(options.arg()); break;
             case 'e': example     =  1; break;
+            case 'C': closed_loop = false; // Intential drop through to pass
+            case 'P': pass        = false; break;
             case 'j': prune_jump  = true; break;
             case 'u': unidirectional_red  = true; break;
             case 'z': california_red  = true; break;
@@ -3952,9 +4083,11 @@ void my_main(int UNUSED argc, char const* const* argv) {
               cerr << "usage: " << argv[0] << " [-A] [-x size] [-y size] [-r ruleset] [-a soldiers] [-v] [-V verbose_move] [-I] [-t threads] [-b balance] [-B balance_delay] [-s] [-j] [-p] [-T] [-F] [-f path_prefix] [-e] [-H] [-S] [-R sample_red_file]\n";
               exit(EXIT_FAILURE);
         }
+    if (closed_loop && pass)
+        closed_loop = false;
+
     if (batch) sched_batch();
     imbue(cout);
-    cut <<= 32;
 
     if (X == 0)
         if (Y == 0) X = Y = 9;
@@ -4025,6 +4158,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
         tables.print_deepness();
         cout << "Progress:\n";
         tables.print_progress();
+        cout << "Progress0:\n";
+        tables.print_progress0();
         cout << "Parity:\n";
         tables.print_parity();
         cout << "Blue Base parity count:\n";
@@ -4053,6 +4188,7 @@ void my_main(int UNUSED argc, char const* const* argv) {
     // get_memory(true);
 
     if (replay) {
+        // play(true);
         play();
         return;
     }

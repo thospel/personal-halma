@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <csignal>
+#include <cctype>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,6 +18,7 @@
 #include <locale>
 #include <mutex>
 #include <system_error>
+#include <map>
 
 // Needed to implement mlock2 as long as it's not in glibc
 #include <sys/syscall.h>
@@ -47,6 +49,7 @@ std::atomic<ssize_t> total_mlocks_;
 
 std::string const PID{std::to_string(getpid())};
 std::string HOSTNAME;
+std::string CPUS;
 std::string const VCS_COMMIT{STRINGIFY(COMMIT)};
 std::string const VCS_COMMIT_TIME{STRINGIFY(COMMIT_TIME)};
 
@@ -84,6 +87,55 @@ size_t get_memory(bool set_base_mem) {
         // std::cout << "Base mem=" << mem / 1000000 << " MB\n";
     } else mem -= base_mem;
     return mem;
+}
+
+// Linux specific
+void get_cpu_string() COLD;
+void get_cpu_string() {
+    FILE* fp = fopen("/proc/cpuinfo", "r");
+    if (!fp) throw_errno("Could not open '/proc/cpuinfo'");
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+    uint nr_cpu = 0;
+
+    static char const MODEL_NAME[] = "model name";
+    std::map<std::string, uint> cpus;
+    while ((nread = getline(&line, &len, fp)) != -1) {
+        char const* ptr = line;
+        while (isspace(*ptr)) ++ptr;
+        if (memcmp(ptr, MODEL_NAME, sizeof(MODEL_NAME)-1)) continue;
+        ptr += sizeof(MODEL_NAME)-1;
+        while (isspace(*ptr)) ++ptr;
+        if (*ptr != ':') continue;
+        ++ptr;
+        while (isspace(*ptr)) ++ptr;
+        char* end = line+nread;
+        while (end > ptr && isspace(end[-1])) --end;
+        if (end <= ptr) continue;
+        *end = '\0';
+        ++cpus[std::string{ptr, static_cast<size_t>(end-ptr)}];
+        ++nr_cpu;
+    }
+    free(line);
+    fclose(fp);
+
+    CPUS.clear();
+    if (nr_cpu == NR_CPU) {
+        for (auto& entry: cpus) {
+            if (!CPUS.empty()) CPUS.append("<br />");
+            CPUS.append(std::to_string(entry.second));
+            CPUS.append(" x ");
+            CPUS.append(entry.first);
+        }
+    } else if (cpus.size() == 1) {
+        for (auto& entry: cpus) {
+            CPUS.append(std::to_string(NR_CPU));
+            CPUS.append(" x ");
+            CPUS.append(entry.first);
+        }
+    } else
+        CPUS.append(std::to_string(NR_CPU));
 }
 
 void rm_file(std::string const& file) {
@@ -190,6 +242,7 @@ bool is_terminated() {
     return signal_counter & 1;
 }
 
+void signal_handler(int signum) COLD;
 void signal_handler(int signum) {
     switch(signum) {
         case SIGSYS:
@@ -239,6 +292,7 @@ void set_signals() {
         throw_errno("Could not set SIGTERM handler");
 }
 
+void raise_limit(int resource, rlim_t value) COLD;
 void raise_limit(int resource, rlim_t value) {
     struct rlimit rlim;
     if (getrlimit(resource, &rlim))
@@ -254,6 +308,7 @@ void raise_limit(int resource, rlim_t value) {
     // std::cerr << "Resource " << resource << " raised to " << value << std::endl;
 }
 
+long read_value(char const* filename) COLD;
 long read_value(char const* filename) {
     FILE* fp = fopen(filename, "r");
     if (!fp) throw_errno("Could not open '" + std::string{filename} + "'");
@@ -697,6 +752,7 @@ void init_system() {
     if (sched_getaffinity(0, sizeof(cs), &cs))
         throw_errno("Could not determine number of CPUs");
     NR_CPU = CPU_COUNT(&cs);
+    get_cpu_string();
 
     struct sysinfo s_info;
     if (sysinfo(&s_info))

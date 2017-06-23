@@ -92,8 +92,6 @@ extern int  testQ;
 #define HASH_STATISTICS (SLOW && UNLIKELY(hash_statistics))
 
 bool const SYMMETRY = true;
-bool const CLOSED_LOOP = false;
-bool const PASS = false;
 // For the moment it is always allowed to jump the same man multiple times
 // bool const DOUBLE_CROSS = true;
 bool const BALANCE  = true;
@@ -138,6 +136,8 @@ extern int balance;
 extern int balance_delay;
 extern int balance_min, balance_max;
 
+extern bool pass;
+extern bool closed_loop;
 extern bool prune_slide;
 extern bool prune_jump;
 extern bool california_red;
@@ -255,6 +255,7 @@ class Coord {
     inline uint8_t shallow_red() const PURE;
     inline uint8_t deepness() const PURE;
     inline  int8_t progress() const PURE;
+    inline  int8_t progress0() const PURE;
     inline Nbits Ndistance_base_red() const PURE;
     inline Coords slide_targets() const PURE;
     inline Coords jumpees() const PURE;
@@ -1588,8 +1589,8 @@ class Board {
         auto& army = blue_to_move ? blue() : red();
         army.do_move(move);
     }
-    inline void do_move(FullMove const& move_);
-    inline void do_move(FullMove const& move_, bool blue_to_move);
+    void do_move(FullMove const& move_);
+    void do_move(FullMove const& move_, bool blue_to_move);
     Army& blue() { return blue_; }
     Army& red()  { return red_; }
     Army const& blue() const FUNCTIONAL { return blue_; }
@@ -2256,7 +2257,7 @@ class FullMove: public vector<Coord> {
     FullMove() COLD {}
     FullMove(char const* str) COLD;
     FullMove(string const& str) COLD: FullMove{str.c_str()} {}
-    FullMove(Board const& from, Board const& to) COLD;
+    FullMove(Board const& from, Board const& to, bool blue_to_move) COLD;
     string str() const PURE COLD;
     Coord from() const PURE COLD;
     Coord to()   const PURE COLD;
@@ -2264,6 +2265,7 @@ class FullMove: public vector<Coord> {
 
   private:
     void move_expand(Board const& board, Move const& move) COLD;
+    void loop_expand(Board const& board, bool blue_to_move) COLD;
 };
 
 inline ostream& operator<<(ostream& os, FullMove const& move) {
@@ -2420,6 +2422,9 @@ class Tables {
     inline  int8_t progress(Coord const pos) const FUNCTIONAL {
         return progress_[pos];
     }
+    inline  int8_t progress0(Coord const pos) const FUNCTIONAL {
+        return progress0_[pos];
+    }
     inline uint medium_red() const FUNCTIONAL {
         return medium_red_;
     }
@@ -2509,6 +2514,10 @@ class Tables {
     void print_progress() const {
         print_progress(cout);
     }
+    void print_progress0(ostream& os) const COLD;
+    void print_progress0() const {
+        print_progress0(cout);
+    }
     NOINLINE void svg_base_blue(Svg& svg);
     NOINLINE void svg_base_red(Svg& svg);
     NOINLINE void svg_edge_red(Svg& svg);
@@ -2518,6 +2527,7 @@ class Tables {
     NOINLINE void svg_parity(Svg& svg);
     NOINLINE void svg_nr_slide_jumps_red(Svg& svg);
     NOINLINE void svg_progress(Svg& svg);
+    NOINLINE void svg_progress0(Svg& svg);
   private:
     BoardTable<Coords>  slide_targets_;
     BoardTable<Coords>  jumpees_;
@@ -2531,6 +2541,7 @@ class Tables {
     BoardTable<uint8_t> deepness_;
     BoardTable<uint8_t> nr_slide_jumps_red_;
     BoardTable< int8_t> progress_;
+    BoardTable< int8_t> progress0_;
     BoardTable<Offsets> slide_jumps_red_;
 #if !__BMI2__
     BoardTable<Parity> parity_;
@@ -2586,6 +2597,10 @@ Coords Coord::slide_targets() const {
 
 int8_t Coord::progress() const {
     return tables.progress(*this);
+}
+
+int8_t Coord::progress0() const {
+    return tables.progress0(*this);
 }
 
 Coords Coord::jumpees() const {
@@ -2688,14 +2703,6 @@ ArmyId ArmySetSparse::insert(ArmyPos const& army, uint64_t hash, atomic<ArmyId>&
         element.set(army_id, army);
         return army_id;
     }
-}
-
-void Board::do_move(FullMove const& move_, bool blue_to_move) {
-    do_move(move_.move(), blue_to_move);
-}
-
-void Board::do_move(FullMove const& move_) {
-    do_move(move_.move());
 }
 
 size_t memory_report
