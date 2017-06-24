@@ -75,9 +75,11 @@ Statistics NAME(uint thid,
 
     Statistics stats;
     Image image_normal, image_symmetric;
-#if !BLUE_TO_MOVE
+#if BLUE_TO_MOVE
+    BoardSubsetBlueBuilder subset_to;
+#else // !BLUE_TO_MOVE
     BoardSubsetRedBuilder& subset_to = boards_to.builder();
-#endif // !BLUE_TO_MOVE
+#endif // BLUE_TO_MOVE
     while (true) {
 #if BLUE_TO_MOVE
         BoardSubsetRedRef subset_from{boards_from};
@@ -111,7 +113,7 @@ Statistics NAME(uint thid,
                 moving_armies.cat(blue_id) :
                 opponent_armies.cat(blue_id)};
         if (CHECK) bZ.check(__FILE__, __LINE__);
-        Army const bZ_symmetric{bZ, SYMMETRIC};
+        ArmySymmetric const bZ_symmetric{bZ};
         if (CHECK) bZ_symmetric.check(__FILE__, __LINE__);
 #if BLUE_TO_MOVE
         ArmyMapperPair const b_mapper{bZ, bZ_symmetric};
@@ -249,7 +251,6 @@ Statistics NAME(uint thid,
 #if BLUE_TO_MOVE
             int const red_symmetry = red.symmetry();
             Army const& army           = blue;
-            Army const& army_symmetric = symmetry ? bZ : bZ_symmetric;
 
             array<Coord, MAX_X*MAX_Y/4+1> reachable;
             uint red_empty = 0;
@@ -261,7 +262,7 @@ Statistics NAME(uint thid,
             }
 #else  // BLUE_TO_MOVE
             Army const& army           = red;
-            Army const  army_symmetric{red, SYMMETRIC};
+            ArmySymmetric const army_symmetric{red};
             if (CHECK) army_symmetric.check(__FILE__, __LINE__);
             ArmyMapper const mapper{army_symmetric};
 
@@ -301,18 +302,15 @@ Statistics NAME(uint thid,
                     }
                 }
             }
+            ArmyPos armyE, armyESymmetric;
 #endif // BLUE_TO_MOVE
 
             // Finally, finally we are going to do the actual moves
-            ArmyPos armyE, armyESymmetric;
             for (uint a=0; a<ARMY; ++a) {
-                armyE.copy(army, a);
-                if (CHECK) armyE.check(__FILE__, __LINE__);
                 // The piece that is going to move
                 auto const soldier = army[a];
-                armyESymmetric.copy(army_symmetric, mapper.map(soldier));
-                if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
 #if BLUE_TO_MOVE
+                uint a_symmetric = mapper.map(soldier);
                 auto off_base = off_base_from;
                 off_base += soldier.base_red();
                 ParityCount parity_count = parity_count_from;
@@ -320,6 +318,11 @@ Statistics NAME(uint thid,
                 auto edge_count = edge_count_from;
                 edge_count -= soldier.edge_red();
 #else
+                armyE.copy(army, a);
+                if (CHECK) armyE.check(__FILE__, __LINE__);
+                armyESymmetric.copy(army_symmetric, mapper.map(soldier));
+                if (CHECK) armyESymmetric.check(__FILE__, __LINE__);
+
                 uint red_top = 0;
                 if (blue_base_only) {
                     reachable[red_top_from] = soldier;
@@ -745,7 +748,11 @@ Statistics NAME(uint thid,
                     }
 #if BLUE_TO_MOVE
                   SOLUTION:
-#endif // BLUE_TO_MOVE
+                    if (symmetry)
+                        subset_to.insert(a_symmetric, val.symmetric(), red_id, red_symmetry);
+                    else
+                        subset_to.insert(a, val, red_id, red_symmetry);
+#else // BLUE_TO_MOVE
                     armyE.store(val);
                     // logger << "   Final Set pos " << pos << armyE[pos] << "\n";
                     // logger << armyE << "----------------\n";
@@ -756,7 +763,7 @@ Statistics NAME(uint thid,
                     int result_symmetry = cmp(armyE, armyESymmetric);
                     ArmyPos const& armyE1 = result_symmetry >= 0 ? armyE : armyESymmetric;
                     auto hash = armyE1.hash();
-                    if (!BLUE_TO_MOVE && hash < use_cut) {
+                    if (hash < use_cut) {
                         if (VERBOSE) {
                             logger << "   Move " << soldier << " to " << val << "\n";
                             logger << "   Cut " << hex << hash << dec << "\n";
@@ -767,16 +774,6 @@ Statistics NAME(uint thid,
                     auto moved_id = moved_armies.insert(armyE1, hash, stats);
                     if (CHECK && UNLIKELY(moved_id == 0))
                         throw_logic("Army Insert returns 0", __FILE__, __LINE__);
-#if BLUE_TO_MOVE
-                    // The opponent is red and after this it is red's move
-                    result_symmetry *= red_symmetry;
-                    boards_to.insert(moved_id, red_id, result_symmetry);
-                    if (edge_c) stats.edge();
-                    if (VERBOSE) {
-                        // logger << "   symmetry=" << result_symmetry << "\n   armyE:\n" << armyE << "   armyESymmetric:\n" << armyESymmetric;
-                        logger << "   Inserted Blue id " << moved_id << "\n" << image.str(soldier, val, BLUE) << flush;
-                    }
-#else  // BLUE_TO_MOVE
                     // The opponent is blue and after this it is blue's move
                     result_symmetry *= blue_symmetry;
                     subset_to.insert(moved_id, result_symmetry);
@@ -790,11 +787,13 @@ Statistics NAME(uint thid,
             if (CHECK) image.check(__FILE__, __LINE__);
             END_GUARD;
         }
-#if !BLUE_TO_MOVE
+#if BLUE_TO_MOVE
+        boards_to.insert(subset_to, bZ, bZ_symmetric, stats);
+#else // BLUE_TO_MOVE
         if (edge_count_from) stats.edge(subset_to.size());
         stats.subset_size(subset_to.size());
         boards_to.insert(blue_id, subset_to, stats);
-#endif // !BLUE_TO_MOVE
+#endif // BLUE_TO_MOVE
         END_GUARD;
         END_GUARD;
     }

@@ -247,6 +247,10 @@ void Army::_import_symmetric(Coord const* RESTRICT from, Coord* RESTRICT to) {
     // logger << "After:\n" << ArmyZconst{*(to-ARMY)} << flush;
 }
 
+void ArmyUnsorted::check(const char* file, int line) const {
+    for (uint i=0; i<ARMY; ++i) (*this)[i].check(file, line);
+}
+
 void ArmyPos::check(char const* file, int line) const {
     for (uint i=0; i<ARMY; ++i) at(i).check(file, line);
     for (uint i=0; i<ARMY-1; ++i)
@@ -708,6 +712,34 @@ bool BoardSubsetRed::_find(ArmyId red_value) const {
     if (!armies_) return false;
     return any_of(armies_, armies_+size(),
                [red_value](ArmyId value) { return value == red_value; });
+}
+
+BoardSubsetBlueBuilder::BoardSubsetBlueBuilder() {
+    mallocate(armies_, INITIAL_SIZE);
+    ptr_ = armies_;
+    end_ = armies_ + INITIAL_SIZE;
+}
+
+BoardSubsetBlueBuilder::~BoardSubsetBlueBuilder() {
+    demallocate(armies_, allocated());
+}
+
+void BoardSubsetBlueBuilder::resize() {
+    size_t old_allocated = allocated();
+    size_t new_allocated = old_allocated * 2;
+    size_t sz = size();
+
+    remallocate(armies_, old_allocated, new_allocated);
+    ptr_ = armies_ + sz;
+    end_ = armies_ + new_allocated;
+}
+
+void BoardSubsetBlueBuilder::extract() {
+    auto armies = reinterpret_cast<uint64_t *>(armies_);
+    size_t sz = size();
+    lib_sort(armies, armies+sz);
+
+    ptr_ = armies_;
 }
 
 BoardSubsetRedBuilder::BoardSubsetRedBuilder(uint t, size_t size) :
@@ -2601,13 +2633,13 @@ void BoardSetBlue::insert(Board const& board, ArmySet& armies_blue, ArmySet& arm
     Statistics dummy_stats;
 
     Army const& blue = board.blue();
-    Army const blue_symmetric{blue, SYMMETRIC};
+    ArmySymmetric const blue_symmetric{blue};
     int blue_symmetry = cmp(blue, blue_symmetric);
     ArmyPos const blueE{blue_symmetry >= 0 ? blue : blue_symmetric};
     auto blue_id = armies_blue.insert(blueE, dummy_stats);
 
     Army const& red = board.red();
-    Army const red_symmetric{red, SYMMETRIC};
+    ArmySymmetric const red_symmetric{red};
     int red_symmetry = cmp(red, red_symmetric);
     ArmyPos const redE{red_symmetry >= 0 ? red : red_symmetric};
     auto red_id = armies_red.insert(redE, dummy_stats);
@@ -2621,13 +2653,13 @@ void BoardSetBlue::insert(Board const& board, ArmySet& armies_blue, ArmySet& arm
 
 bool BoardSetBlue::find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const {
     Army const& blue = board.blue();
-    Army const blue_symmetric{blue, SYMMETRIC};
+    ArmySymmetric const blue_symmetric{blue};
     int blue_symmetry = cmp(blue, blue_symmetric);
     auto blue_id = armies_blue.find(blue_symmetry >= 0 ? blue : blue_symmetric);
     if (blue_id == 0) return false;
 
     Army const& red = board.red();
-    Army const red_symmetric{red, SYMMETRIC};
+    ArmySymmetric const red_symmetric{red};
     int red_symmetry = cmp(red, red_symmetric);
     auto red_id = armies_red.find(red_symmetry >= 0 ? red : red_symmetric);
     if (red_id == 0) return false;
@@ -2736,13 +2768,13 @@ void BoardSetRed::insert(Board const& board, ArmySet& armies_blue, ArmySet& armi
     Statistics dummy_stats;
 
     Army const& blue = board.blue();
-    Army const blue_symmetric{blue, SYMMETRIC};
+    ArmySymmetric const blue_symmetric{blue};
     int blue_symmetry = cmp(blue, blue_symmetric);
     ArmyPos blueE{blue_symmetry >= 0 ? blue : blue_symmetric};
     auto blue_id = armies_blue.insert(blueE, dummy_stats);
 
     Army const& red = board.red();
-    Army const red_symmetric{red, SYMMETRIC};
+    ArmySymmetric const red_symmetric{red};
     int red_symmetry = cmp(red, red_symmetric);
     ArmyPos redE{red_symmetry >= 0 ? red : red_symmetric};
     auto red_id = armies_red.insert(redE, dummy_stats);
@@ -2759,13 +2791,13 @@ void BoardSetRed::insert(Board const& board, ArmySet& armies_blue, ArmySet& armi
 
 bool BoardSetRed::find(Board const& board, ArmySet const& armies_blue, ArmySet const& armies_red) const {
     Army const& blue = board.blue();
-    Army const blue_symmetric{blue, SYMMETRIC};
+    ArmySymmetric const blue_symmetric{blue};
     int blue_symmetry = cmp(blue, blue_symmetric);
     auto blue_id = armies_blue.find(blue_symmetry >= 0 ? blue : blue_symmetric);
     if (blue_id == 0) return false;
 
     Army const& red = board.red();
-    Army const red_symmetric{red, SYMMETRIC};
+    ArmySymmetric const red_symmetric{red};
     int red_symmetry = cmp(red, red_symmetric);
     auto red_id = armies_red.find(red_symmetry >= 0 ? red : red_symmetric);
     if (red_id == 0) return false;
@@ -3734,7 +3766,7 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
     red_backtrack.set(last_red_army, 2);
     BoardTable<uint8_t> red_backtrack_symmetric{};
     red_backtrack_symmetric.zero();
-    red_backtrack_symmetric.set(Army{last_red_army, SYMMETRIC}, 2);
+    red_backtrack_symmetric.set(ArmySymmetric{last_red_army}, 2);
     if (verbose) {
         cout << "red_backtrack:\n";
         for (uint y=0; y<Y; ++y) {
@@ -3903,8 +3935,8 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
 
     army_set.pop_back();
 
-    Army blueSymmetric{blue, SYMMETRIC};
-    Army redSymmetric {red , SYMMETRIC};
+    ArmySymmetric blueSymmetric{blue};
+    ArmySymmetric redSymmetric {red};
     int blue_symmetry = cmp(blue, blueSymmetric);
     int red_symmetry  = cmp(red , redSymmetric);
 
@@ -4131,6 +4163,8 @@ void my_main(int UNUSED argc, char const* const* argv) {
             " algnment " << setw(2) << alignof(Board) << "\n";
         cout << "Sizeof(Image)   =" << setw(3) << sizeof(Image) <<
             " algnment " << setw(2) << alignof(Image) << "\n";
+        cout << "Sizeof(Entry)   =" << setw(3) << BoardSubsetBlueBuilder::sizeofEntry() <<
+            " algnment " << setw(2) << BoardSubsetBlueBuilder::alignofEntry() << "\n";
         cout << "DO_ALIGN:     " << (DO_ALIGN ? "true" : "false") << "\n";
         cout << "SINGLE_ALIGN: " << (SINGLE_ALIGN ? "true" : "false") << "\n";
         cout << "ALIGNSIZE:    " << ALIGNSIZE << "\n";

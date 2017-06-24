@@ -722,8 +722,26 @@ void Read(Fd fd, void* buffer, size_t offset, size_t size, std::string const& fi
     }
 }
 
+void check_endian() COLD;
+void check_endian() {
+    uint32_t val = 0x01020304;
+    auto const* ptr = reinterpret_cast<char const*>(&val);
+    if (std::memcmp(ptr, "\x01\x02\x03\x04", 4) == 0) {
+        if (LSB_FIRST != 0)
+            throw_logic("Flawed endian.hpp. Did you cross compile ?");
+    } else if (std::memcmp(ptr, "\x04\x03\x02\x01", 4) == 0) {
+        if (LSB_FIRST != 1)
+            throw_logic("Flawed endian.hpp. Did you cross compile ?");
+    } else {
+        // We don't support PDP, so there
+        throw_logic("Flawed endian.hpp. Why did this even compile ?");
+    }
+}
+
 void init_system() {
     tzset();
+
+    check_endian();
 
     tid = 0;
     total_allocated_ = 0;

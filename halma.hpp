@@ -339,7 +339,6 @@ inline uint64_t army_hash(Coord const* base) {
 }
 
 using ArmyId = uint32_t;
-ArmyId const SYMMETRIC = 1;
 extern uint64_t cut;
 extern uint64_t use_cut;
 
@@ -365,14 +364,12 @@ class alignas(Align) Army {
     Army() {}
     inline Army(ArmySet const& armies, ArmyId id, ArmyId symmetry = 0) ALWAYS_INLINE;
     explicit inline Army(ArmyZconst army, ArmyId symmetry = 0) ALWAYS_INLINE;
-    explicit inline Army(Army const& army, ArmyId symmetry = 0) {
-        _import(army.begin(), begin(), symmetry);
-    }
 
     inline uint64_t hash() const PURE {
         return army_hash(begin());
     }
     NOINLINE void check(const char* file, int line) const;
+    // Returns 0 if army is symmetric, 1 if asymmetric
     inline int symmetry() const;
     inline Army& operator=(Army const& army) {
         _import(army.begin(), begin());
@@ -418,7 +415,7 @@ class alignas(Align) Army {
     static inline int ALIGNEDS() FUNCTIONAL {
         return SINGLE_ALIGN ? MAX_ARMY_ALIGNED : ARMY_ALIGNED;
     }
-  private:
+  protected:
     // Really only PURE but the value never changes
     static NOINLINE void sort(Coord* RESTRICT base);
     static NOINLINE void _import_symmetric(Coord const* RESTRICT from, Coord* RESTRICT to);
@@ -468,6 +465,31 @@ inline int cmp(Army const& left, Army const& right) {
                   reinterpret_cast<void const *>(right.begin()),
                   sizeof(left[0]) * ARMY);
 }
+
+// ArmySymmetric is just a plain Army.
+// But the copy constructor mirrors the source army while
+// the assignment operator doesn't
+class ArmySymmetric: public Army {
+  public:
+    explicit inline ArmySymmetric(Army const& army) {
+        _import(army.begin(), begin(), 1);
+    }
+    inline ArmySymmetric& operator=(ArmyPos const& army);
+};
+
+// ArmyUnsorted is much like a plain Army but not sorted or terminated
+// Notice that the copy constructor mirrors the source army
+class alignas(Align) ArmyUnsorted {
+  public:
+    explicit inline ArmyUnsorted(Army const& army) {
+        for (uint i=0; i<ARMY; ++i)
+            army_[i] = army[i].symmetric();
+    }
+    NOINLINE void check(const char* file, int line) const;
+    inline Coord const& operator[](ssize_t i) const PURE { return army_[i];}
+  private:
+    array<Coord, MAX_ARMY> army_;
+};
 
 class alignas(Align) ArmyPos {
   private:
@@ -564,6 +586,11 @@ inline int cmp(ArmyPos const& left, ArmyPos const& right) {
 }
 
 Army& Army::operator=(ArmyPos const& army) {
+    _import(army.begin(), begin());
+    return *this;
+}
+
+ArmySymmetric& ArmySymmetric::operator=(ArmyPos const& army) {
     _import(army.begin(), begin());
     return *this;
 }
@@ -1820,6 +1847,65 @@ class BoardSubsetRed: public BoardSubsetBase {
   private:
     bool _insert(ArmyId red_value);
     bool _find(ArmyId red_value) const PURE;
+};
+
+class BoardSubsetBlueBuilder {
+  private:
+    class Entry_ {
+      public:
+#if LSB_FIRST
+        // Little endian
+        ArmyId   red;
+        uint8_t  from;
+        Coord    to;
+        uint16_t zero;
+#else  // LSB_FIRST
+        // Big endian
+        uint16_t zero;
+        Coord    to;
+        uint8_t  from;
+        ArmyId   red;
+#endif // LSB_FIRST
+    };
+    class alignas(uint64_t) Entry: public Entry_ {};
+
+  public:
+    static inline size_t sizeofEntry() {
+        static_assert(sizeof(Entry) == sizeof(Entry_),
+                      "sizeof(Entry) != sizeof(Entry_)");
+        static_assert(sizeof(Entry) == sizeof(uint64_t),
+                      "sizeof(Entry) != sizeof(uint64_t)");
+        return sizeof(Entry);
+    }
+    static inline size_t alignofEntry() {
+        static_assert(alignof(Entry) == alignof(uint64_t),
+                      "alignof(Entry) != alignof(uint64_t)");
+        return alignof(Entry);
+    }
+    static size_t const INITIAL_SIZE = 32;
+    BoardSubsetBlueBuilder();
+    ~BoardSubsetBlueBuilder();
+    inline size_t allocated() { return end_ - armies_; }
+    inline size_t size()      { return ptr_ - armies_; }
+    inline void insert(uint from, Coord to, ArmyId red_id, int symmetry) {
+        auto ptr = ptr_;
+        if (ptr >= end_) {
+            resize();
+            ptr = ptr_;
+        }
+        ++ptr;
+        ptr->zero = 0;
+        ptr->from = from;
+        ptr->to   = to;
+        ptr->red  = red_id << 1 | symmetry;
+    }
+    void extract();
+  private:
+    void resize();
+
+    Entry* armies_;
+    Entry* end_;
+    Entry* ptr_;
 };
 
 class BoardSubsetRedBuilder {

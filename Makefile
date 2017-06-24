@@ -18,9 +18,14 @@ CXXFLAGS += -DCOMMIT="`git rev-parse HEAD`" -DCOMMIT_TIME="`git show -s --format
 
 all: halma
 
-halma.o fast_moves.o slow_moves.o: halma.hpp xxhash64.h system.hpp Makefile
+endian.o: endian.cpp Makefile
+
+endian.hpp: endian
+	./endian > endian.hpp
+
+halma.o fast_moves.o slow_moves.o: halma.hpp xxhash64.h system.hpp endian.hpp Makefile
 halma.o: pdqsort.h
-system.o: system.hpp Makefile
+system.o: system.hpp endian.hpp Makefile
 
 halma.o: halma.cpp
 fast_moves.o: fast_moves.cpp all_moves.cpp moves.cpp
@@ -28,6 +33,9 @@ slow_moves.o: slow_moves.cpp all_moves.cpp moves.cpp
 system.o: system.cpp git_time
 
 halma: halma.o fast_moves.o slow_moves.o system.o
+	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@
+
+endian: endian.o
 	$(CXX) $(LDFLAGS) -pthread $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 git_time: FORCE

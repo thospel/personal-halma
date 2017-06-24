@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "endian.hpp"
+
 // #define STATIC static
 #define STATIC
 
