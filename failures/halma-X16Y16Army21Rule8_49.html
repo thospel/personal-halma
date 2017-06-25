@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Size 16x16, Army 19, Ruleset 8: Failed after 2 moves</title>
+    <title>Size 16x16, Army 21, Ruleset 8: Failed after 2 moves</title>
     <style>
       span.blue { color: blue; }
       span.red  { color: red; }
@@ -17,23 +17,23 @@
     </style>
   </head>
   <body>
-    <h1>2 / 45 moves</h1>
+    <h1>2 / 49 moves</h1>
     <table class='parameters'>
       <tr class='x'><th>X</th><td>16</td></tr>
       <tr class='y'><th>Y</th><td>16</td></tr>
-      <tr class='army'><th>Army</th><td>19</td></tr>
+      <tr class='army'><th>Army</th><td>21</td></tr>
       <tr class='rule'><th>Rule</th><td>8-move</td></tr>
-      <tr class='lower_bound'><th>Bound</th><td> &ge; 45 moves</td></tr>
+      <tr class='lower_bound'><th>Bound</th><td> &ge; 49 moves</td></tr>
       <tr class='heuristics'><th>Heuristics</th><td>None</td></tr>
       <tr class='host'><th>Host</th><td>iffyiron</td></tr>
       <tr class='memory'><th>Main memory</th><td>16.802 GB (15.648 GiB)</td></tr>
       <tr class='swap'><th>Swap space</th><td>250.058 GB (232.885 GiB)</td></tr>
       <tr class='cpus'><th>Logical CPUs</th><td>8 x Intel(R) Xeon(R) CPU E3-1230 V2 @ 3.30GHz</td></tr>
       <tr class='threads'><th>Threads</th><td>8</td></tr>
-      <tr class='start_time'><th>Start</th><td>2017-06-25 20:46:03 +0200</td></tr>
-      <tr class='stop_time'><th>Stop</th><td>2017-06-25 20:46:03 +0200</td></tr>
-      <tr class='commit_id'><th>Commit id</th><td>f5ddb39f5bf479d8b33b72f86913dd7b85b06b3e</td></tr>
-      <tr class='commit_time'><th>Commit time</th><td>2017-06-24 16:50:01 +0200</td></tr>
+      <tr class='start_time'><th>Start</th><td>2017-07-11 15:04:08 +0200</td></tr>
+      <tr class='stop_time'><th>Stop</th><td>2017-07-11 15:04:08 +0200</td></tr>
+      <tr class='commit_id'><th>Commit id</th><td>fb62262a09b5ec8d7eac45fd1f5ff5af91a77a3c</td></tr>
+      <tr class='commit_time'><th>Commit time</th><td>2017-07-02 10:22:26 +0200</td></tr>
     </table>
     <h3>Solve (0 seconds)</h3>
     <table class='stats Solve'>
@@ -55,8 +55,6 @@
         <th>Late<br/>prunes</th>
         <th>Late<br/>prune<br/>ratio</th>
         <th>Army<br/>resize<br/>overflow</th>
-        <th>Army<br/>front<br/>inserts</th>
-        <th>Army<br/>front<br/>ratio</th>
         <th>Army inserts</th>
         <th>Army<br/>ratio</th>
         <th>Board inserts</th>
@@ -68,7 +66,7 @@
         <th>Army<br/>probes</th>
       </tr>
       <tr class='blue'>
-        <td class='available_moves'>44</td>
+        <td class='available_moves'>48</td>
         <td class='boards'>2</td>
         <td class='armies'>2</td>
         <td>2</td>
@@ -86,19 +84,17 @@
         <td>0%</td>
         <td>0</td>
         <td>2 / 4</td>
-        <td>50</td>
-        <td>2 / 2</td>
-        <td>100%</td>
+        <td>50%</td>
         <td>2 / 4</td>
         <td>50%</td>
         <td>0 / 4</td>
         <td>0%</td>
-        <td>2 / 2</td>
+        <td>4 / 4</td>
         <td>100%</td>
         <td>1.00</td>
       </tr>
       <tr class='red'>
-        <td class='available_moves'>43</td>
+        <td class='available_moves'>47</td>
         <td class='boards'>4</td>
         <td class='armies'>4</td>
         <td>2</td>
@@ -115,8 +111,6 @@
         <td>0</td>
         <td>0%</td>
         <td>0</td>
-        <td>0 / 4</td>
-        <td>0</td>
         <td>4 / 4</td>
         <td>100%</td>
         <td>4 / 4</td>
@@ -128,7 +122,7 @@
         <td>1.00</td>
       </tr>
       <tr class='blue'>
-        <td class='available_moves'>42</td>
+        <td class='available_moves'>46</td>
         <td class='boards'>0</td>
         <td class='armies'>0</td>
         <td>0</td>
@@ -145,8 +139,6 @@
         <td>0</td>
         <td>0%</td>
         <td>0</td>
-        <td>0 / 0</td>
-        <td></td>
         <td>0 / 0</td>
         <td></td>
         <td>0 / 0</td>
@@ -173,6 +165,7 @@
       <circle cx='60' cy='20' r='7' fill='turquoise' />
       <circle cx='80' cy='20' r='7' fill='turquoise' />
       <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='120' cy='20' r='7' fill='turquoise' />
       <circle cx='20' cy='40' r='7' fill='turquoise' />
       <circle cx='40' cy='40' r='7' fill='turquoise' />
       <circle cx='60' cy='40' r='7' fill='turquoise' />
@@ -187,6 +180,8 @@
       <circle cx='60' cy='80' r='7' fill='turquoise' />
       <circle cx='20' cy='100' r='7' fill='turquoise' />
       <circle cx='40' cy='100' r='7' fill='turquoise' />
+      <circle cx='20' cy='120' r='7' fill='turquoise' />
+      <circle cx='320' cy='220' r='7' fill='red' />
       <circle cx='300' cy='240' r='7' fill='red' />
       <circle cx='320' cy='240' r='7' fill='red' />
       <circle cx='280' cy='260' r='7' fill='red' />
@@ -201,6 +196,59 @@
       <circle cx='280' cy='300' r='7' fill='red' />
       <circle cx='300' cy='300' r='7' fill='red' />
       <circle cx='320' cy='300' r='7' fill='red' />
+      <circle cx='220' cy='320' r='7' fill='red' />
+      <circle cx='240' cy='320' r='7' fill='red' />
+      <circle cx='260' cy='320' r='7' fill='red' />
+      <circle cx='280' cy='320' r='7' fill='red' />
+      <circle cx='300' cy='320' r='7' fill='red' />
+      <circle cx='320' cy='320' r='7' fill='red' />
+    </svg>
+    <svg height='340' width='340'>
+      <defs>
+        <marker id='arrowhead' markerWidth='3' markerHeight='4'
+                refX='3' refY='2' orient='auto'>
+          <polygon points='0 0, 3 2, 0 4' />
+        </marker>
+      </defs>
+      <path d='M 10 10 L 10 330 M 30 10 L 30 330 M 50 10 L 50 330 M 70 10 L 70 330 M 90 10 L 90 330 M 110 10 L 110 330 M 130 10 L 130 330 M 150 10 L 150 330 M 170 10 L 170 330 M 190 10 L 190 330 M 210 10 L 210 330 M 230 10 L 230 330 M 250 10 L 250 330 M 270 10 L 270 330 M 290 10 L 290 330 M 310 10 L 310 330 M 330 10 L 330 330 M 10 10 L 330 10 M 10 30 L 330 30 M 10 50 L 330 50 M 10 70 L 330 70 M 10 90 L 330 90 M 10 110 L 330 110 M 10 130 L 330 130 M 10 150 L 330 150 M 10 170 L 330 170 M 10 190 L 330 190 M 10 210 L 330 210 M 10 230 L 330 230 M 10 250 L 330 250 M 10 270 L 330 270 M 10 290 L 330 290 M 10 310 L 330 310 M 10 330 L 330 330 '
+            stroke='black' />
+      <circle cx='20' cy='20' r='7' fill='turquoise' />
+      <circle cx='40' cy='20' r='7' fill='turquoise' />
+      <circle cx='60' cy='20' r='7' fill='turquoise' />
+      <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='120' cy='20' r='7' fill='turquoise' />
+      <circle cx='20' cy='40' r='7' fill='turquoise' />
+      <circle cx='40' cy='40' r='7' fill='turquoise' />
+      <circle cx='60' cy='40' r='7' fill='turquoise' />
+      <circle cx='80' cy='40' r='7' fill='turquoise' />
+      <circle cx='100' cy='40' r='7' fill='turquoise' />
+      <circle cx='20' cy='60' r='7' fill='turquoise' />
+      <circle cx='40' cy='60' r='7' fill='turquoise' />
+      <circle cx='60' cy='60' r='7' fill='turquoise' />
+      <circle cx='80' cy='60' r='7' fill='turquoise' />
+      <circle cx='120' cy='60' r='7' fill='turquoise' />
+      <circle cx='20' cy='80' r='7' fill='turquoise' />
+      <circle cx='40' cy='80' r='7' fill='turquoise' />
+      <circle cx='60' cy='80' r='7' fill='turquoise' />
+      <circle cx='20' cy='100' r='7' fill='turquoise' />
+      <circle cx='40' cy='100' r='7' fill='turquoise' />
+      <circle cx='20' cy='120' r='7' fill='turquoise' />
+      <circle cx='320' cy='220' r='7' fill='red' />
+      <circle cx='300' cy='240' r='7' fill='red' />
+      <circle cx='320' cy='240' r='7' fill='red' />
+      <circle cx='280' cy='260' r='7' fill='red' />
+      <circle cx='300' cy='260' r='7' fill='red' />
+      <circle cx='320' cy='260' r='7' fill='red' />
+      <circle cx='260' cy='280' r='7' fill='red' />
+      <circle cx='280' cy='280' r='7' fill='red' />
+      <circle cx='300' cy='280' r='7' fill='red' />
+      <circle cx='320' cy='280' r='7' fill='red' />
+      <circle cx='240' cy='300' r='7' fill='red' />
+      <circle cx='260' cy='300' r='7' fill='red' />
+      <circle cx='280' cy='300' r='7' fill='red' />
+      <circle cx='300' cy='300' r='7' fill='red' />
+      <circle cx='320' cy='300' r='7' fill='red' />
+      <circle cx='220' cy='320' r='7' fill='red' />
       <circle cx='240' cy='320' r='7' fill='red' />
       <circle cx='260' cy='320' r='7' fill='red' />
       <circle cx='280' cy='320' r='7' fill='red' />
@@ -221,6 +269,7 @@
       <circle cx='60' cy='20' r='7' fill='turquoise' />
       <circle cx='80' cy='20' r='7' fill='turquoise' />
       <circle cx='100' cy='20' r='7' fill='turquoise' />
+      <circle cx='120' cy='20' r='7' fill='turquoise' />
       <circle cx='20' cy='40' r='7' fill='turquoise' />
       <circle cx='40' cy='40' r='7' fill='turquoise' />
       <circle cx='80' cy='40' r='7' fill='turquoise' />
@@ -235,6 +284,9 @@
       <circle cx='100' cy='80' r='7' fill='turquoise' />
       <circle cx='20' cy='100' r='7' fill='turquoise' />
       <circle cx='40' cy='100' r='7' fill='turquoise' />
+      <circle cx='20' cy='120' r='7' fill='turquoise' />
+      <circle cx='320' cy='220' r='7' fill='red' />
+      <circle cx='260' cy='240' r='7' fill='red' />
       <circle cx='300' cy='240' r='7' fill='red' />
       <circle cx='320' cy='240' r='7' fill='red' />
       <circle cx='280' cy='260' r='7' fill='red' />
@@ -242,61 +294,13 @@
       <circle cx='320' cy='260' r='7' fill='red' />
       <circle cx='260' cy='280' r='7' fill='red' />
       <circle cx='280' cy='280' r='7' fill='red' />
-      <circle cx='300' cy='280' r='7' fill='red' />
       <circle cx='320' cy='280' r='7' fill='red' />
       <circle cx='240' cy='300' r='7' fill='red' />
       <circle cx='260' cy='300' r='7' fill='red' />
       <circle cx='280' cy='300' r='7' fill='red' />
       <circle cx='300' cy='300' r='7' fill='red' />
       <circle cx='320' cy='300' r='7' fill='red' />
-      <circle cx='240' cy='320' r='7' fill='red' />
-      <circle cx='260' cy='320' r='7' fill='red' />
-      <circle cx='280' cy='320' r='7' fill='red' />
-      <circle cx='300' cy='320' r='7' fill='red' />
-      <circle cx='320' cy='320' r='7' fill='red' />
-    </svg>
-    <svg height='340' width='340'>
-      <defs>
-        <marker id='arrowhead' markerWidth='3' markerHeight='4'
-                refX='3' refY='2' orient='auto'>
-          <polygon points='0 0, 3 2, 0 4' />
-        </marker>
-      </defs>
-      <path d='M 10 10 L 10 330 M 30 10 L 30 330 M 50 10 L 50 330 M 70 10 L 70 330 M 90 10 L 90 330 M 110 10 L 110 330 M 130 10 L 130 330 M 150 10 L 150 330 M 170 10 L 170 330 M 190 10 L 190 330 M 210 10 L 210 330 M 230 10 L 230 330 M 250 10 L 250 330 M 270 10 L 270 330 M 290 10 L 290 330 M 310 10 L 310 330 M 330 10 L 330 330 M 10 10 L 330 10 M 10 30 L 330 30 M 10 50 L 330 50 M 10 70 L 330 70 M 10 90 L 330 90 M 10 110 L 330 110 M 10 130 L 330 130 M 10 150 L 330 150 M 10 170 L 330 170 M 10 190 L 330 190 M 10 210 L 330 210 M 10 230 L 330 230 M 10 250 L 330 250 M 10 270 L 330 270 M 10 290 L 330 290 M 10 310 L 330 310 M 10 330 L 330 330 '
-            stroke='black' />
-      <circle cx='20' cy='20' r='7' fill='turquoise' />
-      <circle cx='40' cy='20' r='7' fill='turquoise' />
-      <circle cx='60' cy='20' r='7' fill='turquoise' />
-      <circle cx='100' cy='20' r='7' fill='turquoise' />
-      <circle cx='20' cy='40' r='7' fill='turquoise' />
-      <circle cx='40' cy='40' r='7' fill='turquoise' />
-      <circle cx='60' cy='40' r='7' fill='turquoise' />
-      <circle cx='80' cy='40' r='7' fill='turquoise' />
-      <circle cx='100' cy='40' r='7' fill='turquoise' />
-      <circle cx='20' cy='60' r='7' fill='turquoise' />
-      <circle cx='40' cy='60' r='7' fill='turquoise' />
-      <circle cx='60' cy='60' r='7' fill='turquoise' />
-      <circle cx='80' cy='60' r='7' fill='turquoise' />
-      <circle cx='120' cy='60' r='7' fill='turquoise' />
-      <circle cx='20' cy='80' r='7' fill='turquoise' />
-      <circle cx='40' cy='80' r='7' fill='turquoise' />
-      <circle cx='60' cy='80' r='7' fill='turquoise' />
-      <circle cx='20' cy='100' r='7' fill='turquoise' />
-      <circle cx='40' cy='100' r='7' fill='turquoise' />
-      <circle cx='280' cy='220' r='7' fill='red' />
-      <circle cx='320' cy='240' r='7' fill='red' />
-      <circle cx='280' cy='260' r='7' fill='red' />
-      <circle cx='300' cy='260' r='7' fill='red' />
-      <circle cx='320' cy='260' r='7' fill='red' />
-      <circle cx='260' cy='280' r='7' fill='red' />
-      <circle cx='280' cy='280' r='7' fill='red' />
-      <circle cx='300' cy='280' r='7' fill='red' />
-      <circle cx='320' cy='280' r='7' fill='red' />
-      <circle cx='240' cy='300' r='7' fill='red' />
-      <circle cx='260' cy='300' r='7' fill='red' />
-      <circle cx='280' cy='300' r='7' fill='red' />
-      <circle cx='300' cy='300' r='7' fill='red' />
-      <circle cx='320' cy='300' r='7' fill='red' />
+      <circle cx='220' cy='320' r='7' fill='red' />
       <circle cx='240' cy='320' r='7' fill='red' />
       <circle cx='260' cy='320' r='7' fill='red' />
       <circle cx='280' cy='320' r='7' fill='red' />

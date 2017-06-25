@@ -3952,6 +3952,8 @@ void backtrack(Board const& board, uint nr_moves, uint solution_moves,
             for (int i=1; i < nr_reachable; ++i)
                 image.set(reachable[i], EMPTY);
             image.set(soldier, blue_to_move ? BLUE : RED);
+            if (a == 0 && pass)
+                reachable[nr_reachable++] = soldier;
 
             // Slides
             auto slide_targets = soldier.slide_targets();
