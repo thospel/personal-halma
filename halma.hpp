@@ -2305,13 +2305,13 @@ class Svg {
   public:
     static uint const SCALE = 20;
 
-    static string const solution_file(uint nr_moves) FUNCTIONAL {
+    static string const solution_file(uint nr_moves) {
         return file("solutions", nr_moves);
     }
-    static string const attempts_file(uint nr_moves) FUNCTIONAL {
+    static string const attempts_file(uint nr_moves) {
         return file("attempts", nr_moves);
     }
-    static string const failures_file(uint nr_moves) FUNCTIONAL {
+    static string const failures_file(uint nr_moves) {
         return file("failures", nr_moves);
     }
     Svg(uint scale = SCALE);
@@ -2337,7 +2337,7 @@ class Svg {
     inline Svg& operator<<(T const& t) ALWAYS_INLINE;
 
   private:
-    static string const file(string const& prefix, uint nr_moves) FUNCTIONAL;
+    static string const file(string const& prefix, uint nr_moves);
 
     uint scale_;
     uint margin_;

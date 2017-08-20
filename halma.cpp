@@ -4024,7 +4024,9 @@ void my_main(int UNUSED argc, char const* const* argv) {
             case 'T': show_tables = true; break;
             case 'b': balance     = atoi(options.arg()); break;
             case 'e': example     =  1; break;
-            case 'C': closed_loop = false; // Intential drop through to pass
+            case 'C': closed_loop = false;
+              [[fallthrough]];
+              // Intential drop through to pass
             case 'P': pass        = false; break;
             case 'j': prune_jump  = true; break;
             case 'u': unidirectional_red  = true; break;
