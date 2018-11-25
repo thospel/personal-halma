@@ -3055,8 +3055,8 @@ void Svg::parameters(time_t start_time, time_t stop_time) {
     out_ <<
         "</td></tr>\n"
         "      <tr class='host'><th>Host</th><td>" << HOSTNAME << "</td></tr>\n"
-        "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp10(9) << " GB (" << SYSTEM_MEMORY / exp2(30) << " GiB)</td></tr>\n"
-        "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp10(9) << " GB (" << SYSTEM_SWAP / exp2(30) << " GiB)</td></tr>\n"
+        "      <tr class='memory'><th>Main memory</th><td>" << SYSTEM_MEMORY / exp10(9) << " GiB (" << SYSTEM_MEMORY / exp2(30) << " GiB)</td></tr>\n"
+        "      <tr class='swap'><th>Swap space</th><td>" << SYSTEM_SWAP / exp10(9) << " GiB (" << SYSTEM_SWAP / exp2(30) << " GiB)</td></tr>\n"
         "      <tr class='cpus'><th>Logical CPUs</th><td>" << CPUS << "</td></tr>\n"
         "      <tr class='threads'><th>Threads</th><td>" << nr_threads << "</td></tr>\n"
         "      <tr class='start_time'><th>Start</th><td>" << time_string(start_time) << "</td></tr>\n"
